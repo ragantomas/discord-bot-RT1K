@@ -20,8 +20,7 @@ function buildControlPanel(channel, room) {
             { name: '👑 Majiteľ', value: `<@${room.ownerId}>`, inline: true },
             { name: '🔊 Názov', value: `\`${channel.name}\``, inline: true },
             { name: '👥 Limit', value: limitText, inline: true },
-            { name: '🔒 Prístup', value: room.locked ? 'Zamknutá' : 'Odomknutá', inline: true },
-            { name: '👁️ Viditeľnosť', value: room.hidden ? 'Skrytá' : 'Viditeľná', inline: true }
+            { name: '🔒 Prístup', value: room.locked ? 'Zamknutá' : 'Odomknutá', inline: true }
         )
         .setFooter({ text: 'Ovládanie môže používať len aktuálny majiteľ miestnosti' });
 
@@ -40,40 +39,25 @@ function buildControlPanel(channel, room) {
             .setCustomId(`tv:lock:${channel.id}`)
             .setLabel(room.locked ? 'Odomknúť' : 'Zamknúť')
             .setEmoji(room.locked ? '🔓' : '🔒')
-            .setStyle(room.locked ? ButtonStyle.Danger : ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`tv:hide:${channel.id}`)
-            .setLabel(room.hidden ? 'Zobraziť' : 'Skryť')
-            .setEmoji(room.hidden ? '👁️' : '🙈')
-            .setStyle(room.hidden ? ButtonStyle.Danger : ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`tv:kick:${channel.id}`)
-            .setLabel('Kick')
-            .setEmoji('👢')
-            .setStyle(ButtonStyle.Danger)
+            .setStyle(room.locked ? ButtonStyle.Success : ButtonStyle.Secondary)
     );
 
     const row2 = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`tv:permit:${channel.id}`)
-            .setLabel('Povoliť')
-            .setEmoji('✅')
+            .setLabel('Povoliť vstup')
+            .setEmoji('🔑')
             .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
-            .setCustomId(`tv:reject:${channel.id}`)
-            .setLabel('Zablokovať')
-            .setEmoji('🚫')
+            .setCustomId(`tv:kick:${channel.id}`)
+            .setLabel('Kick')
+            .setEmoji('👢')
             .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-            .setCustomId(`tv:transfer:${channel.id}`)
-            .setLabel('Odovzdať')
-            .setEmoji('👑')
-            .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`tv:limit5:${channel.id}`)
-            .setLabel('5-Stack')
-            .setEmoji('🎮')
-            .setStyle(channel.userLimit === 5 ? ButtonStyle.Success : ButtonStyle.Secondary)
+            .setCustomId(`tv:reject:${channel.id}`)
+            .setLabel('Zablokovať vstup')
+            .setEmoji('🔨')
+            .setStyle(ButtonStyle.Danger)
     );
 
     return { embeds: [embed], components: [row1, row2] };
@@ -157,41 +141,6 @@ async function handleButtonAction(interaction, action, channel, room) {
         );
     }
 
-    if (action === 'hide') {
-        await interaction.deferReply({ ephemeral: true });
-        room.hidden = !room.hidden;
-
-        await channel.permissionOverwrites.edit(room.ownerId, {
-            ViewChannel: true,
-            Connect: true
-        });
-        await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
-            ViewChannel: room.hidden ? false : null
-        });
-
-        setTempRoom(channel.id, room);
-        await refreshControlPanel(channel, room);
-
-        return interaction.editReply(
-            room.hidden
-                ? '🙈 Miestnosť bola **skrytá** pre `@everyone`.'
-                : '👁️ Miestnosť je opäť **viditeľná** pre `@everyone`.'
-        );
-    }
-
-    if (action === 'limit5') {
-        await interaction.deferReply({ ephemeral: true });
-        const newLimit = channel.userLimit === 5 ? 0 : 5;
-        await channel.setUserLimit(newLimit);
-        await refreshControlPanel(channel, room);
-
-        return interaction.editReply(
-            newLimit === 5
-                ? '🎮 Limit miestnosti bol nastavený na **5 hráčov**.'
-                : '👥 Limit miestnosti bol zrušený (**bez limitu**).'
-        );
-    }
-
     if (action === 'kick') {
         return interaction.reply(
             buildUserSelectReply(
@@ -207,7 +156,7 @@ async function handleButtonAction(interaction, action, channel, room) {
             buildUserSelectReply(
                 `tv:permit_select:${channel.id}`,
                 'Vyber hráča, ktorému povolíš vstup',
-                '✅ Vyber hráča, ktorému chceš povoliť zobrazenie a pripojenie do miestnosti:'
+                '🔑 Vyber hráča, ktorému povolíš vstup aj do zamknutej miestnosti:'
             )
         );
     }
@@ -217,17 +166,7 @@ async function handleButtonAction(interaction, action, channel, room) {
             buildUserSelectReply(
                 `tv:reject_select:${channel.id}`,
                 'Vyber hráča na zablokovanie',
-                '🚫 Vyber hráča, ktorému chceš zakázať vstup do miestnosti:'
-            )
-        );
-    }
-
-    if (action === 'transfer') {
-        return interaction.reply(
-            buildUserSelectReply(
-                `tv:transfer_select:${channel.id}`,
-                'Vyber nového majiteľa miestnosti',
-                '👑 Vyber hráča v miestnosti, ktorému chceš odovzdať vlastníctvo:'
+                '🔨 Vyber hráča, ktorému chceš zakázať vstup do miestnosti:'
             )
         );
     }
@@ -284,7 +223,7 @@ async function handleModalAction(interaction, action, channel, room) {
     }
 }
 
-async function handleUserSelectAction(interaction, action, channel, room) {
+async function handleUserSelectAction(interaction, action, channel) {
     const targetId = interaction.values[0];
 
     if (action === 'kick_select') {
@@ -313,7 +252,7 @@ async function handleUserSelectAction(interaction, action, channel, room) {
             Connect: true
         });
         return interaction.update({
-            content: `✅ Hráč <@${targetId}> má teraz povolený vstup do miestnosti.`,
+            content: `🔑 Hráč <@${targetId}> má teraz povolený vstup aj do zamknutej miestnosti.`,
             components: []
         });
     }
@@ -337,46 +276,7 @@ async function handleUserSelectAction(interaction, action, channel, room) {
         }
 
         return interaction.update({
-            content: `🚫 Hráčovi <@${targetId}> bol zablokovaný vstup do miestnosti.`,
-            components: []
-        });
-    }
-
-    if (action === 'transfer_select') {
-        if (targetId === interaction.user.id) {
-            return interaction.update({ content: 'Už si majiteľom tejto miestnosti.', components: [] });
-        }
-
-        const targetMember = channel.members.get(targetId);
-        if (!targetMember) {
-            return interaction.update({
-                content: `<@${targetId}> musí byť momentálne pripojený v tejto miestnosti.`,
-                components: []
-            });
-        }
-
-        if (targetMember.user.bot) {
-            return interaction.update({
-                content: 'Vlastníctvo nemôžeš odovzdať botovi.',
-                components: []
-            });
-        }
-
-        const oldOwnerId = room.ownerId;
-        room.ownerId = targetId;
-        setTempRoom(channel.id, room);
-
-        await channel.permissionOverwrites.edit(targetId, {
-            ViewChannel: true,
-            Connect: true,
-            SendMessages: true
-        });
-
-        await refreshControlPanel(channel, room);
-        await channel.send(`👑 <@${oldOwnerId}> odovzdal vlastníctvo miestnosti hráčovi <@${targetId}>!`).catch(() => null);
-
-        return interaction.update({
-            content: `👑 Vlastníctvo miestnosti bolo odovzdané hráčovi <@${targetId}>.`,
+            content: `🔨 Hráčovi <@${targetId}> bol zablokovaný vstup do miestnosti.`,
             components: []
         });
     }
@@ -412,7 +312,7 @@ async function handleTempVoiceInteraction(interaction) {
     }
 
     if (interaction.isUserSelectMenu()) {
-        return handleUserSelectAction(interaction, action, channel, room);
+        return handleUserSelectAction(interaction, action, channel);
     }
 }
 

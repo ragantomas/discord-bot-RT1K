@@ -113,8 +113,7 @@ async function createTempRoom(member, guildConfig) {
         channelId: newChannel.id,
         ownerId: member.id,
         panelMessageId: null,
-        locked: false,
-        hidden: false
+        locked: false
     };
 
     setTempRoom(newChannel.id, room);
