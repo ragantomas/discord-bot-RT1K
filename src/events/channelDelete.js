@@ -16,11 +16,15 @@ module.exports = {
         if (!channel.guildId) return;
 
         const current = loadSettings();
+        const tvMatchesTrigger = (current.tempVoice?.setups || []).some(s => s.triggerChannelId === channel.id);
+        const tvMatchesCategory = (current.tempVoice?.setups || []).some(s => s.categoryId === channel.id);
+        const pbMatches = (current.patchBot?.channelIds || []).includes(channel.id);
+
         const needsUpdate =
             current.allowedChannelId === channel.id ||
-            current.tempVoice?.triggerChannelId === channel.id ||
-            current.tempVoice?.categoryId === channel.id ||
-            current.patchBot?.channelId === channel.id ||
+            tvMatchesTrigger ||
+            tvMatchesCategory ||
+            pbMatches ||
             current.csStatus?.channelId === channel.id;
 
         if (!needsUpdate) return;
@@ -30,20 +34,29 @@ module.exports = {
                 settings.allowedChannelId = null;
                 console.warn('Povolený kanál pre príkazy bota bol zmazaný a resetovaný na všetky kanály.');
             }
-            if (settings.tempVoice.triggerChannelId === channel.id) {
-                settings.tempVoice.triggerChannelId = null;
-                settings.tempVoice.enabled = false;
-                console.warn('Spúšťací TempVoice kanál bol zmazaný.');
+
+            if (Array.isArray(settings.tempVoice?.setups)) {
+                for (const setup of settings.tempVoice.setups) {
+                    if (setup.triggerChannelId === channel.id) {
+                        setup.triggerChannelId = null;
+                        setup.enabled = false;
+                        console.warn(`Spúšťací TempVoice kanál (${setup.id}) bol zmazaný.`);
+                    }
+                    if (setup.categoryId === channel.id) {
+                        setup.categoryId = null;
+                        console.warn(`Kategória pre TempVoice (${setup.id}) bola zmazaná.`);
+                    }
+                }
             }
-            if (settings.tempVoice.categoryId === channel.id) {
-                settings.tempVoice.categoryId = null;
-                console.warn('Kategória pre TempVoice bola zmazaná.');
+
+            if (Array.isArray(settings.patchBot?.channelIds) && settings.patchBot.channelIds.includes(channel.id)) {
+                settings.patchBot.channelIds = settings.patchBot.channelIds.filter(id => id !== channel.id);
+                if (settings.patchBot.channelIds.length === 0) {
+                    settings.patchBot.enabled = false;
+                }
+                console.warn(`Kanál pre CS2 PatchBota (${channel.id}) bol zmazaný.`);
             }
-            if (settings.patchBot.channelId === channel.id) {
-                settings.patchBot.channelId = null;
-                settings.patchBot.enabled = false;
-                console.warn('Kanál pre CS2 PatchBota bol zmazaný.');
-            }
+
             if (settings.csStatus.channelId === channel.id) {
                 settings.csStatus.channelId = null;
                 settings.csStatus.messageId = null;

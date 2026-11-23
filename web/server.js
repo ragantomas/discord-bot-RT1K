@@ -7,6 +7,8 @@ const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { OWNER_ID, DB_FILE, SETTINGS_FILE } = require('../src/config');
 const { loadUsers, saveUsers, usersFileExists } = require('../src/storage/usersStore');
 const {
+    uniqueStringIds,
+    getDefaultTempVoiceSetup,
     loadSettings,
     updateSettings,
     settingsFileExists,
@@ -31,7 +33,6 @@ const { fetchCs2News } = require('../src/services/steamNews');
 const { sendPatchToChannel } = require('../src/services/patchBot');
 const { validateAssignableRole } = require('../src/services/joinRoles');
 const { parseIntervalSeconds, updateGuildStatusMessage } = require('../src/services/csStatus');
-const { hasAnyBackupFile, sendBackupToOwner } = require('../src/services/backup');
 
 const SESSION_COOKIE = 'rt1k_session';
 const OAUTH_STATE_COOKIE = 'rt1k_oauth_state';
@@ -127,7 +128,6 @@ function parseColorValue(input) {
 }
 
 function startWebServer(client) {
-    // Inicializuje / zmigruje settings.json hneď pri štarte
     loadSettings();
 
     const app = express();
@@ -308,7 +308,6 @@ function startWebServer(client) {
         return next();
     }
 
-    // Všetky ostatné /api/* endpointy vyžadujú prihlásenie + oprávnenú rolu
     app.use('/api', requireAuth);
 
     // --- Prehľad & Metadata ---
@@ -320,6 +319,21 @@ function startWebServer(client) {
         const activeTempRoomsCount = Object.values(settings.tempVoice.rooms || {})
             .filter(r => r && r.guildId === guild.id)
             .length;
+
+        const tvActive = Boolean(
+            settings.tempVoice.enabled &&
+            (settings.tempVoice.setups || []).some(s => s.enabled && s.triggerChannelId)
+        );
+
+        const pbActive = Boolean(
+            settings.patchBot.enabled &&
+            (settings.patchBot.channelIds || []).length > 0
+        );
+
+        const jrActive = Boolean(
+            settings.joinRoles.enabled &&
+            ((settings.joinRoles.memberRoleIds || []).length > 0 || (settings.joinRoles.botRoleIds || []).length > 0)
+        );
 
         return res.json({
             bot: {
@@ -340,9 +354,9 @@ function startWebServer(client) {
                 activeTempRoomsCount
             },
             modules: {
-                tempVoiceEnabled: Boolean(settings.tempVoice.enabled && settings.tempVoice.triggerChannelId),
-                patchBotEnabled: Boolean(settings.patchBot.enabled && settings.patchBot.channelId),
-                joinRolesEnabled: Boolean(settings.joinRoles.enabled && (settings.joinRoles.memberRoleId || settings.joinRoles.botRoleId)),
+                tempVoiceEnabled: tvActive,
+                patchBotEnabled: pbActive,
+                joinRolesEnabled: jrActive,
                 csStatusEnabled: Boolean(settings.csStatus.enabled && settings.csStatus.channelId)
             },
             steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim())
@@ -444,7 +458,7 @@ function startWebServer(client) {
                     username: member?.user?.username || 'Neznámy na serveri',
                     inGuild: Boolean(member),
                     avatarUrl: member?.displayAvatarURL({ size: 64 })
-                        || `https://cdn.discordapp.com/embed/avatars/0.png`,
+                        || 'https://cdn.discordapp.com/embed/avatars/0.png',
                     leetifyUrl: `https://leetify.com/app/profile/${data.steamId}`
                 };
             })
@@ -624,55 +638,90 @@ function startWebServer(client) {
         return res.json({ ok: true, settings: updated });
     });
 
-    // --- TempVoice ---
+    // --- TempVoice (viacero nezávislých konfigurácií, vypnutie nič nemaže) ---
     app.put('/api/settings/tempvoice', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
-        const current = getTempVoiceSettings();
 
-        const enabled = Boolean(body.enabled);
-        const createTriggerChannel = Boolean(body.createTriggerChannel);
-        const deleteTriggerChannel = Boolean(body.deleteTriggerChannel);
+        const moduleEnabled = Boolean(body.enabled);
+        const rawSetups = Array.isArray(body.setups) ? body.setups : [];
 
-        const triggerName = String(body.triggerName ?? current.triggerName ?? '').trim();
-        const roomNameTemplate = String(body.roomNameTemplate ?? current.roomNameTemplate ?? '').trim();
-        const bitrateKbps = Number(body.bitrateKbps ?? current.bitrateKbps ?? 64);
-        const userLimit = Number(body.userLimit ?? current.userLimit ?? 0);
-        const categoryId = body.categoryId ? String(body.categoryId).trim() : null;
-        let triggerChannelId = body.triggerChannelId ? String(body.triggerChannelId).trim() : null;
+        const normalizedSetups = [];
+        const usedTriggerIds = new Set();
 
-        if (!triggerName || triggerName.length > 100) {
-            return res.status(400).json({ error: 'Názov spúšťacieho kanála musí mať 1 až 100 znakov.' });
-        }
-        if (!roomNameTemplate || roomNameTemplate.length > 100) {
-            return res.status(400).json({ error: 'Šablóna názvu miestnosti musí mať 1 až 100 znakov.' });
-        }
-        if (!Number.isFinite(bitrateKbps) || bitrateKbps < 8 || bitrateKbps > 384) {
-            return res.status(400).json({ error: 'Bitrate musí byť v rozsahu 8 až 384 kbps.' });
-        }
-        if (!Number.isFinite(userLimit) || userLimit < 0 || userLimit > 99) {
-            return res.status(400).json({ error: 'Limit hráčov musí byť v rozsahu 0 až 99.' });
-        }
+        for (let i = 0; i < rawSetups.length; i++) {
+            const raw = rawSetups[i] || {};
+            const def = getDefaultTempVoiceSetup(`tv_${i + 1}`);
+            const setupId = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : def.id;
+            const setupEnabled = Boolean(raw.enabled);
+            const createTriggerChannel = Boolean(raw.createTriggerChannel);
 
-        if (categoryId) {
-            const cat = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
-            if (!cat || cat.type !== ChannelType.GuildCategory) {
-                return res.status(400).json({ error: 'Vybraná kategória sa na serveri nenašla.' });
+            const triggerName = String(raw.triggerName ?? def.triggerName).trim();
+            const roomNameTemplate = String(raw.roomNameTemplate ?? def.roomNameTemplate).trim();
+            const bitrateKbps = Number(raw.bitrateKbps ?? def.bitrateKbps);
+            const userLimit = Number(raw.userLimit ?? def.userLimit);
+            const categoryId = raw.categoryId ? String(raw.categoryId).trim() : null;
+            let triggerChannelId = raw.triggerChannelId ? String(raw.triggerChannelId).trim() : null;
+
+            if (!triggerName || triggerName.length > 100) {
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Názov spúšťacieho kanála musí mať 1 až 100 znakov.` });
             }
-        }
+            if (!roomNameTemplate || roomNameTemplate.length > 100) {
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Šablóna názvu miestnosti musí mať 1 až 100 znakov.` });
+            }
+            if (!Number.isFinite(bitrateKbps) || bitrateKbps < 8 || bitrateKbps > 384) {
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Bitrate musí byť v rozsahu 8 až 384 kbps.` });
+            }
+            if (!Number.isFinite(userLimit) || userLimit < 0 || userLimit > 99) {
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Limit hráčov musí byť v rozsahu 0 až 99.` });
+            }
 
-        if (!enabled) {
-            if (deleteTriggerChannel && current.triggerChannelId) {
-                const oldTrigger = guild.channels.cache.get(current.triggerChannelId)
-                    || await guild.channels.fetch(current.triggerChannelId).catch(() => null);
-                if (oldTrigger) {
-                    await oldTrigger.delete('TempVoice vypnutý cez dashboard').catch(() => null);
+            if (categoryId) {
+                const cat = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
+                if (!cat || cat.type !== ChannelType.GuildCategory) {
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraná kategória sa na serveri nenašla.` });
                 }
-                triggerChannelId = null;
             }
 
-            const saved = updateTempVoiceSettings({
-                enabled: false,
+            if (createTriggerChannel) {
+                try {
+                    const created = await guild.channels.create({
+                        name: triggerName,
+                        type: ChannelType.GuildVoice,
+                        parent: categoryId || undefined
+                    });
+                    triggerChannelId = created.id;
+                } catch (err) {
+                    console.error('Chyba pri vytváraní TempVoice trigger kanála:', err);
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Nepodarilo sa vytvoriť spúšťací VC (skontroluj právo Manage Channels).` });
+                }
+            } else if (moduleEnabled && setupEnabled) {
+                if (!triggerChannelId) {
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vyber spúšťací hlasový kanál alebo zaškrtni vytvorenie nového.` });
+                }
+                const triggerChannel = guild.channels.cache.get(triggerChannelId)
+                    || await guild.channels.fetch(triggerChannelId).catch(() => null);
+                if (!triggerChannel || triggerChannel.type !== ChannelType.GuildVoice) {
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraný spúšťací hlasový kanál neexistuje.` });
+                }
+                if (triggerChannel.name !== triggerName) {
+                    await triggerChannel.setName(triggerName).catch(() => null);
+                }
+                if ((triggerChannel.parentId || null) !== categoryId) {
+                    await triggerChannel.setParent(categoryId, { lockPermissions: false }).catch(() => null);
+                }
+            }
+
+            if (triggerChannelId) {
+                if (usedTriggerIds.has(triggerChannelId)) {
+                    return res.status(400).json({ error: 'Dve TempVoice konfigurácie nemôžu používať rovnaký spúšťací hlasový kanál.' });
+                }
+                usedTriggerIds.add(triggerChannelId);
+            }
+
+            normalizedSetups.push({
+                id: setupId,
+                enabled: setupEnabled,
                 triggerChannelId,
                 categoryId,
                 triggerName,
@@ -680,47 +729,11 @@ function startWebServer(client) {
                 bitrateKbps: Math.round(bitrateKbps),
                 userLimit: Math.round(userLimit)
             });
-
-            return res.json({ ok: true, tempVoice: saved });
-        }
-
-        if (createTriggerChannel) {
-            try {
-                const created = await guild.channels.create({
-                    name: triggerName,
-                    type: ChannelType.GuildVoice,
-                    parent: categoryId || undefined
-                });
-                triggerChannelId = created.id;
-            } catch (err) {
-                console.error('Chyba pri vytváraní TempVoice trigger kanála:', err);
-                return res.status(400).json({ error: 'Nepodarilo sa vytvoriť spúšťací hlasový kanál (skontroluj právo Manage Channels).' });
-            }
-        } else {
-            if (!triggerChannelId) {
-                return res.status(400).json({ error: 'Vyber existujúci spúšťací VC alebo použi možnosť vytvoriť nový kanál.' });
-            }
-            const triggerChannel = guild.channels.cache.get(triggerChannelId)
-                || await guild.channels.fetch(triggerChannelId).catch(() => null);
-            if (!triggerChannel || triggerChannel.type !== ChannelType.GuildVoice) {
-                return res.status(400).json({ error: 'Vybraný spúšťací hlasový kanál neexistuje.' });
-            }
-            if (triggerChannel.name !== triggerName) {
-                await triggerChannel.setName(triggerName).catch(() => null);
-            }
-            if ((triggerChannel.parentId || null) !== categoryId) {
-                await triggerChannel.setParent(categoryId, { lockPermissions: false }).catch(() => null);
-            }
         }
 
         const saved = updateTempVoiceSettings({
-            enabled: true,
-            triggerChannelId,
-            categoryId,
-            triggerName,
-            roomNameTemplate,
-            bitrateKbps: Math.round(bitrateKbps),
-            userLimit: Math.round(userLimit)
+            enabled: moduleEnabled,
+            setups: normalizedSetups
         });
 
         return res.json({ ok: true, tempVoice: saved });
@@ -774,14 +787,14 @@ function startWebServer(client) {
         return res.json({ ok: true });
     });
 
-    // --- CS2 PatchBot ---
+    // --- CS2 PatchBot (viacero kanálov, vypnutie nič nemaže) ---
     app.put('/api/settings/patchbot', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
         const current = getPatchBotSettings();
 
         const enabled = Boolean(body.enabled);
-        const channelId = body.channelId ? String(body.channelId).trim() : null;
+        const channelIds = uniqueStringIds(body.channelIds);
         const roleId = body.roleId ? String(body.roleId).trim() : null;
         const mode = body.mode === 'patchnotes' ? 'patchnotes' : 'all';
 
@@ -792,15 +805,16 @@ function startWebServer(client) {
             }
         }
 
-        if (enabled) {
-            if (!channelId) {
-                return res.status(400).json({ error: 'Pre zapnutie CS2 PatchBota vyber cieľový kanál.' });
-            }
+        if (enabled && channelIds.length === 0) {
+            return res.status(400).json({ error: 'Pre zapnutie CS2 PatchBota vyber aspoň jeden cieľový kanál.' });
+        }
+
+        for (const channelId of channelIds) {
             const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
             if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: 'Vybraný kanál pre PatchBota neexistuje alebo nie je textový.' });
+                return res.status(400).json({ error: `Kanál s ID ${channelId} neexistuje alebo nie je textový.` });
             }
-            if (!hasChannelPermissions(guild, channel, [
+            if (enabled && !hasChannelPermissions(guild, channel, [
                 PermissionFlagsBits.ViewChannel,
                 PermissionFlagsBits.SendMessages,
                 PermissionFlagsBits.EmbedLinks
@@ -823,7 +837,7 @@ function startWebServer(client) {
 
         const saved = updatePatchBotSettings({
             enabled,
-            channelId,
+            channelIds,
             roleId,
             mode,
             postedGids
@@ -835,25 +849,32 @@ function startWebServer(client) {
     app.post('/api/patchbot/latest', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const config = getPatchBotSettings();
+        const channelIds = Array.isArray(config.channelIds) ? config.channelIds : [];
 
-        if (!config.channelId) {
-            return res.status(400).json({ error: 'Najprv nastav kanál pre CS2 PatchBota.' });
+        if (channelIds.length === 0) {
+            return res.status(400).json({ error: 'Najprv pridaj aspoň jeden kanál pre CS2 PatchBota.' });
         }
 
-        const channel = guild.channels.cache.get(config.channelId)
-            || await guild.channels.fetch(config.channelId).catch(() => null);
-        if (!channel || !channel.isTextBased()) {
-            return res.status(400).json({ error: 'Nastavený kanál pre PatchBota sa nenašiel.' });
+        const validChannels = [];
+        for (const channelId of channelIds) {
+            const channel = guild.channels.cache.get(channelId)
+                || await guild.channels.fetch(channelId).catch(() => null);
+            if (!channel || !channel.isTextBased()) continue;
+
+            if (!hasChannelPermissions(guild, channel, [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks
+            ])) {
+                return res.status(400).json({
+                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                });
+            }
+            validChannels.push(channel);
         }
 
-        if (!hasChannelPermissions(guild, channel, [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.EmbedLinks
-        ])) {
-            return res.status(400).json({
-                error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
-            });
+        if (validChannels.length === 0) {
+            return res.status(400).json({ error: 'Žiadny z nastavených kanálov sa nenašiel.' });
         }
 
         const items = await fetchCs2News({ mode: config.mode || 'all', count: 1 });
@@ -867,42 +888,48 @@ function startWebServer(client) {
         const latestItem = items[0];
         const withPing = Boolean(req.body?.withPing);
 
-        await sendPatchToChannel(channel, latestItem, withPing ? config.roleId : null);
+        let sentCount = 0;
+        for (const channel of validChannels) {
+            await sendPatchToChannel(channel, latestItem, withPing ? config.roleId : null);
+            sentCount++;
+        }
+
         let updatedPatchBot = config;
-        if (latestItem.gid) {
+        if (latestItem.gid && sentCount > 0) {
             updatedPatchBot = markPatchGidsPosted([String(latestItem.gid)], latestItem);
         }
 
         return res.json({
             ok: true,
             title: latestItem.title,
+            sentCount,
             patchBot: updatedPatchBot
         });
     });
 
-    // --- Join Roles ---
+    // --- Join Roles (viacero rolí pre hráčov aj botov, vypnutie nič nemaže) ---
     app.put('/api/settings/joinroles', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
 
         const enabled = Boolean(body.enabled);
-        const memberRoleId = body.memberRoleId ? String(body.memberRoleId).trim() : null;
-        const botRoleId = body.botRoleId ? String(body.botRoleId).trim() : null;
+        const memberRoleIds = uniqueStringIds(body.memberRoleIds);
+        const botRoleIds = uniqueStringIds(body.botRoleIds);
 
-        if (enabled && !memberRoleId && !botRoleId) {
+        if (enabled && memberRoleIds.length === 0 && botRoleIds.length === 0) {
             return res.status(400).json({ error: 'Pre zapnutie Join Roles vyber aspoň jednu rolu (pre hráčov alebo pre botov).' });
         }
 
-        if (memberRoleId) {
-            const role = guild.roles.cache.get(memberRoleId) || await guild.roles.fetch(memberRoleId).catch(() => null);
+        for (const roleId of memberRoleIds) {
+            const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             const check = validateAssignableRole(guild, role);
             if (!check.ok) {
                 return res.status(400).json({ error: check.reason });
             }
         }
 
-        if (botRoleId) {
-            const role = guild.roles.cache.get(botRoleId) || await guild.roles.fetch(botRoleId).catch(() => null);
+        for (const roleId of botRoleIds) {
+            const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             const check = validateAssignableRole(guild, role);
             if (!check.ok) {
                 return res.status(400).json({ error: check.reason });
@@ -911,14 +938,14 @@ function startWebServer(client) {
 
         const saved = updateJoinRolesSettings({
             enabled,
-            memberRoleId,
-            botRoleId
+            memberRoleIds,
+            botRoleIds
         });
 
         return res.json({ ok: true, joinRoles: saved });
     });
 
-    // --- CS2 / Steam Status ---
+    // --- CS2 / Steam Status (vypnutie nič nemaže) ---
     app.put('/api/settings/csstatus', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -926,7 +953,6 @@ function startWebServer(client) {
 
         const enabled = Boolean(body.enabled);
         const channelId = body.channelId ? String(body.channelId).trim() : null;
-        const deleteMessage = Boolean(body.deleteMessage);
 
         let intervalSeconds = current.intervalSeconds;
         if (body.interval !== undefined && body.interval !== null && String(body.interval).trim() !== '') {
@@ -937,63 +963,42 @@ function startWebServer(client) {
             intervalSeconds = parsed.seconds;
         }
 
-        if (!enabled) {
-            let messageId = current.messageId;
-            if (deleteMessage && current.channelId && current.messageId) {
-                const oldChannel = guild.channels.cache.get(current.channelId)
-                    || await guild.channels.fetch(current.channelId).catch(() => null);
-                if (oldChannel && oldChannel.isTextBased()) {
-                    const oldMsg = await oldChannel.messages.fetch(current.messageId).catch(() => null);
-                    if (oldMsg) {
-                        await oldMsg.delete().catch(() => null);
-                    }
-                }
-                messageId = null;
+        if (channelId) {
+            const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+            if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
+                return res.status(400).json({ error: 'Vybraný kanál pre stav serverov neexistuje alebo nie je textový.' });
             }
-
-            const saved = updateCsStatusSettings({
-                enabled: false,
-                channelId,
-                messageId,
-                intervalSeconds
-            });
-            return res.json({ ok: true, csStatus: saved });
-        }
-
-        if (!channelId) {
+            if (enabled && !hasChannelPermissions(guild, channel, [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks,
+                PermissionFlagsBits.ReadMessageHistory
+            ])) {
+                return res.status(400).json({
+                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy, Vkladať odkazy a Čítať históriu správ.`
+                });
+            }
+        } else if (enabled) {
             return res.status(400).json({ error: 'Pre zapnutie stavu serverov vyber cieľový kanál.' });
         }
 
-        const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-        if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-            return res.status(400).json({ error: 'Vybraný kanál pre stav serverov neexistuje alebo nie je textový.' });
-        }
-
-        if (!hasChannelPermissions(guild, channel, [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.EmbedLinks,
-            PermissionFlagsBits.ReadMessageHistory
-        ])) {
-            return res.status(400).json({
-                error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy, Vkladať odkazy a Čítať históriu správ.`
-            });
-        }
-
         const channelChanged = current.channelId !== channelId;
-        updateCsStatusSettings({
-            enabled: true,
+        const saved = updateCsStatusSettings({
+            enabled,
             channelId,
             messageId: channelChanged ? null : current.messageId,
             intervalSeconds
         });
 
-        const refreshResult = await updateGuildStatusMessage(client, { forceNewMessage: channelChanged });
-        if (!refreshResult.ok) {
-            return res.status(500).json({ error: 'Nastavenia sa uložili, ale nepodarilo sa odoslať embed správu do kanála.' });
+        if (enabled && channelId) {
+            const refreshResult = await updateGuildStatusMessage(client, { forceNewMessage: channelChanged });
+            if (!refreshResult.ok) {
+                return res.status(500).json({ error: 'Nastavenia sa uložili, ale nepodarilo sa odoslať embed správu do kanála.' });
+            }
+            return res.json({ ok: true, csStatus: getCsStatusSettings() });
         }
 
-        return res.json({ ok: true, csStatus: getCsStatusSettings() });
+        return res.json({ ok: true, csStatus: saved });
     });
 
     app.post('/api/csstatus/refresh', async (req, res) => {
@@ -1010,7 +1015,7 @@ function startWebServer(client) {
         return res.json({ ok: true, csStatus: getCsStatusSettings() });
     });
 
-    // --- Zálohy ---
+    // --- Zálohy (iba stiahnutie do prehliadača) ---
     app.get('/api/backup/download/:target', (req, res) => {
         const target = req.params.target;
 
@@ -1028,21 +1033,19 @@ function startWebServer(client) {
             return res.download(SETTINGS_FILE, 'settings.json');
         }
 
+        if (target === 'all') {
+            const payload = {
+                exportedAt: new Date().toISOString(),
+                users: loadUsers(),
+                settings: loadSettings()
+            };
+            const dateTag = new Date().toISOString().slice(0, 10);
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="backup-bot-${dateTag}.json"`);
+            return res.send(JSON.stringify(payload, null, 2));
+        }
+
         return res.status(400).json({ error: 'Neznámy súbor na stiahnutie.' });
-    });
-
-    app.post('/api/backup/send-dm', async (req, res) => {
-        if (!hasAnyBackupFile()) {
-            return res.status(404).json({ error: 'Zatiaľ neexistuje žiadny databázový súbor.' });
-        }
-
-        try {
-            await sendBackupToOwner(client, 'Manuálna záloha z dashboardu');
-            return res.json({ ok: true });
-        } catch (err) {
-            console.error('Chyba pri posielaní zálohy majiteľovi do DM:', err);
-            return res.status(500).json({ error: 'Nepodarilo sa poslať DM majiteľovi bota (skontroluj nastavenia súkromných správ).' });
-        }
     });
 
     // SPA fallback (mimo /api a /auth)

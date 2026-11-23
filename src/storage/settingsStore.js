@@ -14,6 +14,32 @@ const {
 
 const MAX_POSTED_GIDS = 50;
 
+function uniqueStringIds(list) {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const item of list) {
+        const val = item ? String(item).trim() : '';
+        if (!val || seen.has(val)) continue;
+        seen.add(val);
+        out.push(val);
+    }
+    return out;
+}
+
+function getDefaultTempVoiceSetup(id = 'default') {
+    return {
+        id,
+        enabled: false,
+        triggerChannelId: null,
+        categoryId: null,
+        triggerName: TEMPVOICE_DEFAULTS.triggerName,
+        roomNameTemplate: TEMPVOICE_DEFAULTS.roomNameTemplate,
+        bitrateKbps: TEMPVOICE_DEFAULTS.bitrateKbps,
+        userLimit: TEMPVOICE_DEFAULTS.userLimit
+    };
+}
+
 function getDefaultSettings() {
     return {
         dashboardRoleId: null,
@@ -22,17 +48,12 @@ function getDefaultSettings() {
         rankRoles: RANK_ROLES.map(r => ({ ...r })),
         tempVoice: {
             enabled: false,
-            triggerChannelId: null,
-            categoryId: null,
-            triggerName: TEMPVOICE_DEFAULTS.triggerName,
-            roomNameTemplate: TEMPVOICE_DEFAULTS.roomNameTemplate,
-            bitrateKbps: TEMPVOICE_DEFAULTS.bitrateKbps,
-            userLimit: TEMPVOICE_DEFAULTS.userLimit,
+            setups: [],
             rooms: {}
         },
         patchBot: {
             enabled: false,
-            channelId: null,
+            channelIds: [],
             roleId: null,
             mode: PATCHBOT_DEFAULTS.mode,
             postedGids: [],
@@ -41,8 +62,8 @@ function getDefaultSettings() {
         },
         joinRoles: {
             enabled: false,
-            memberRoleId: null,
-            botRoleId: null
+            memberRoleIds: [],
+            botRoleIds: []
         },
         csStatus: {
             enabled: false,
@@ -72,6 +93,30 @@ function normalizeRankRoles(rankRoles) {
     return cleaned.length > 0 ? cleaned : RANK_ROLES.map(r => ({ ...r }));
 }
 
+function normalizeTempVoiceSetup(rawSetup, index = 0) {
+    const def = getDefaultTempVoiceSetup(`tv_${index + 1}`);
+    const src = rawSetup && typeof rawSetup === 'object' ? rawSetup : {};
+
+    return {
+        id: typeof src.id === 'string' && src.id.trim() ? src.id.trim() : def.id,
+        enabled: typeof src.enabled === 'boolean' ? src.enabled : Boolean(src.triggerChannelId),
+        triggerChannelId: src.triggerChannelId ? String(src.triggerChannelId).trim() : null,
+        categoryId: src.categoryId ? String(src.categoryId).trim() : null,
+        triggerName: typeof src.triggerName === 'string' && src.triggerName.trim()
+            ? src.triggerName.trim().slice(0, 100)
+            : def.triggerName,
+        roomNameTemplate: typeof src.roomNameTemplate === 'string' && src.roomNameTemplate.trim()
+            ? src.roomNameTemplate.trim().slice(0, 100)
+            : def.roomNameTemplate,
+        bitrateKbps: typeof src.bitrateKbps === 'number' && Number.isFinite(src.bitrateKbps)
+            ? Math.min(Math.max(Math.round(src.bitrateKbps), 8), 384)
+            : def.bitrateKbps,
+        userLimit: typeof src.userLimit === 'number' && Number.isFinite(src.userLimit)
+            ? Math.min(Math.max(Math.round(src.userLimit), 0), 99)
+            : def.userLimit
+    };
+}
+
 function normalizeSettings(raw) {
     const defaults = getDefaultSettings();
     const src = raw && typeof raw === 'object' ? raw : {};
@@ -79,7 +124,39 @@ function normalizeSettings(raw) {
     const tv = src.tempVoice && typeof src.tempVoice === 'object' ? src.tempVoice : {};
     const pb = src.patchBot && typeof src.patchBot === 'object' ? src.patchBot : {};
     const jr = src.joinRoles && typeof src.joinRoles === 'object' ? src.joinRoles : {};
-    const cs = src.csStatus && typeof src.csStatus === 'object' ? src.csStatus : {};
+    const cs = src.csStatus && typeof csStatusValid(src.csStatus) ? src.csStatus : {};
+
+    // TempVoice: migrácia starého jednotného objektu na pole setups[]
+    let rawSetups = Array.isArray(tv.setups) ? tv.setups : null;
+    if (!rawSetups && (tv.triggerChannelId || tv.categoryId || tv.triggerName || tv.roomNameTemplate)) {
+        rawSetups = [{
+            id: 'default',
+            enabled: typeof tv.enabled === 'boolean' ? tv.enabled : Boolean(tv.triggerChannelId),
+            triggerChannelId: tv.triggerChannelId || null,
+            categoryId: tv.categoryId || null,
+            triggerName: tv.triggerName,
+            roomNameTemplate: tv.roomNameTemplate,
+            bitrateKbps: tv.bitrateKbps,
+            userLimit: tv.userLimit
+        }];
+    }
+    const normalizedSetups = Array.isArray(rawSetups)
+        ? rawSetups.map((s, idx) => normalizeTempVoiceSetup(s, idx))
+        : [];
+
+    // PatchBot: migrácia channelId -> channelIds[]
+    const patchChannelIds = Array.isArray(pb.channelIds)
+        ? uniqueStringIds(pb.channelIds)
+        : uniqueStringIds(pb.channelId ? [pb.channelId] : []);
+
+    // Join Roles: migrácia memberRoleId / botRoleId -> polia
+    const memberRoleIds = Array.isArray(jr.memberRoleIds)
+        ? uniqueStringIds(jr.memberRoleIds)
+        : uniqueStringIds(jr.memberRoleId ? [jr.memberRoleId] : []);
+
+    const botRoleIds = Array.isArray(jr.botRoleIds)
+        ? uniqueStringIds(jr.botRoleIds)
+        : uniqueStringIds(jr.botRoleId ? [jr.botRoleId] : []);
 
     let intervalSeconds = CSSTATUS_DEFAULTS.intervalSeconds;
     if (typeof cs.intervalSeconds === 'number') {
@@ -100,26 +177,15 @@ function normalizeSettings(raw) {
         unrankedRoleId: src.unrankedRoleId || defaults.unrankedRoleId,
         rankRoles: normalizeRankRoles(src.rankRoles),
         tempVoice: {
-            enabled: typeof tv.enabled === 'boolean' ? tv.enabled : Boolean(tv.triggerChannelId),
-            triggerChannelId: tv.triggerChannelId || null,
-            categoryId: tv.categoryId || null,
-            triggerName: typeof tv.triggerName === 'string' && tv.triggerName.trim()
-                ? tv.triggerName.trim()
-                : defaults.tempVoice.triggerName,
-            roomNameTemplate: typeof tv.roomNameTemplate === 'string' && tv.roomNameTemplate.trim()
-                ? tv.roomNameTemplate.trim()
-                : defaults.tempVoice.roomNameTemplate,
-            bitrateKbps: typeof tv.bitrateKbps === 'number'
-                ? Math.min(Math.max(Math.round(tv.bitrateKbps), 8), 384)
-                : defaults.tempVoice.bitrateKbps,
-            userLimit: typeof tv.userLimit === 'number'
-                ? Math.min(Math.max(Math.round(tv.userLimit), 0), 99)
-                : defaults.tempVoice.userLimit,
+            enabled: typeof tv.enabled === 'boolean'
+                ? tv.enabled
+                : normalizedSetups.some(s => s.enabled && s.triggerChannelId),
+            setups: normalizedSetups,
             rooms: tv.rooms && typeof tv.rooms === 'object' ? tv.rooms : {}
         },
         patchBot: {
-            enabled: typeof pb.enabled === 'boolean' ? pb.enabled : Boolean(pb.channelId),
-            channelId: pb.channelId || null,
+            enabled: typeof pb.enabled === 'boolean' ? pb.enabled : patchChannelIds.length > 0,
+            channelIds: patchChannelIds,
             roleId: pb.roleId || null,
             mode: pb.mode === 'patchnotes' ? 'patchnotes' : 'all',
             postedGids: Array.isArray(pb.postedGids)
@@ -131,9 +197,9 @@ function normalizeSettings(raw) {
         joinRoles: {
             enabled: typeof jr.enabled === 'boolean'
                 ? jr.enabled
-                : Boolean(jr.memberRoleId || jr.botRoleId),
-            memberRoleId: jr.memberRoleId || null,
-            botRoleId: jr.botRoleId || null
+                : (memberRoleIds.length > 0 || botRoleIds.length > 0),
+            memberRoleIds,
+            botRoleIds
         },
         csStatus: {
             enabled: typeof cs.enabled === 'boolean' ? cs.enabled : Boolean(cs.channelId),
@@ -143,6 +209,10 @@ function normalizeSettings(raw) {
             lastUpdatedAt: typeof cs.lastUpdatedAt === 'number' ? cs.lastUpdatedAt : 0
         }
     };
+}
+
+function csStatusValid(val) {
+    return val && typeof val === 'object';
 }
 
 function readJsonSafe(filePath) {
@@ -161,11 +231,12 @@ function buildMigratedSettings() {
     if (legacyTv) {
         const firstGuild = Object.values(legacyTv.guilds || {})[0];
         if (firstGuild && typeof firstGuild === 'object') {
-            migrated.tempVoice = {
-                ...migrated.tempVoice,
-                ...firstGuild,
-                enabled: Boolean(firstGuild.triggerChannelId)
-            };
+            migrated.tempVoice.enabled = Boolean(firstGuild.triggerChannelId);
+            migrated.tempVoice.setups = [normalizeTempVoiceSetup({
+                id: 'default',
+                enabled: Boolean(firstGuild.triggerChannelId),
+                ...firstGuild
+            }, 0)];
         }
         if (legacyTv.rooms && typeof legacyTv.rooms === 'object') {
             migrated.tempVoice.rooms = legacyTv.rooms;
@@ -179,6 +250,7 @@ function buildMigratedSettings() {
             migrated.patchBot = {
                 ...migrated.patchBot,
                 ...firstGuild,
+                channelIds: firstGuild.channelId ? [firstGuild.channelId] : [],
                 enabled: Boolean(firstGuild.channelId)
             };
         }
@@ -189,8 +261,9 @@ function buildMigratedSettings() {
         const firstGuild = Object.values(legacyJr.guilds || {})[0];
         if (firstGuild && typeof firstGuild === 'object') {
             migrated.joinRoles = {
-                ...migrated.joinRoles,
-                ...firstGuild
+                enabled: typeof firstGuild.enabled === 'boolean' ? firstGuild.enabled : false,
+                memberRoleIds: firstGuild.memberRoleId ? [firstGuild.memberRoleId] : [],
+                botRoleIds: firstGuild.botRoleId ? [firstGuild.botRoleId] : []
             };
         }
     }
@@ -351,9 +424,12 @@ function updateCsStatusSettings(patch) {
 }
 
 module.exports = {
+    uniqueStringIds,
+    getDefaultTempVoiceSetup,
     getDefaultSettings,
     normalizeSettings,
     normalizeRankRoles,
+    normalizeTempVoiceSetup,
     settingsFileExists,
     loadSettings,
     saveSettings,

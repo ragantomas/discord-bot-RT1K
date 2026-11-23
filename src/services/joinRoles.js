@@ -40,27 +40,37 @@ async function assignJoinRole(member) {
     const config = getJoinRolesSettings();
     if (!config || !config.enabled) return false;
 
-    const roleId = member.user.bot ? config.botRoleId : config.memberRoleId;
-    if (!roleId) return false;
+    const roleIds = member.user.bot
+        ? (config.botRoleIds || [])
+        : (config.memberRoleIds || []);
 
-    const role = member.guild.roles.cache.get(roleId)
-        || await member.guild.roles.fetch(roleId).catch(() => null);
+    if (roleIds.length === 0) return false;
 
-    if (!role) {
-        console.warn(`Join rola (${roleId}) na serveri ${member.guild.id} už neexistuje.`);
-        return false;
+    const rolesToAdd = [];
+    for (const roleId of roleIds) {
+        const role = member.guild.roles.cache.get(roleId)
+            || await member.guild.roles.fetch(roleId).catch(() => null);
+
+        if (!role) {
+            console.warn(`Join rola (${roleId}) na serveri ${member.guild.id} už neexistuje.`);
+            continue;
+        }
+
+        if (member.roles.cache.has(role.id)) continue;
+
+        if (!role.editable) {
+            console.warn(`Bot nemôže priradiť join rolu ${role.name} (${role.id}) na serveri ${member.guild.id}.`);
+            continue;
+        }
+
+        rolesToAdd.push(role);
     }
 
-    if (member.roles.cache.has(role.id)) return true;
-
-    if (!role.editable) {
-        console.warn(`Bot nemôže priradiť join rolu ${role.name} (${role.id}) na serveri ${member.guild.id} (chýba Manage Roles alebo je rola nad rolou bota).`);
-        return false;
-    }
+    if (rolesToAdd.length === 0) return true;
 
     await member.roles.add(
-        role,
-        member.user.bot ? 'Automatická join rola pre bota' : 'Automatická join rola pre člena'
+        rolesToAdd,
+        member.user.bot ? 'Automatické join role pre bota' : 'Automatické join role pre člena'
     );
     return true;
 }

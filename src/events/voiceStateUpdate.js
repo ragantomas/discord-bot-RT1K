@@ -14,11 +14,17 @@ module.exports = {
             });
         }
 
-        // 2. Potom skontroluj pripojenie do spúšťacieho VC
+        // 2. Potom skontroluj pripojenie do niektorého spúšťacieho VC
         if (newState.channelId && newState.member && !newState.member.user.bot) {
             const tvConfig = getTempVoiceSettings();
-            if (tvConfig?.enabled && tvConfig.triggerChannelId && tvConfig.triggerChannelId === newState.channelId) {
-                await createTempRoom(newState.member, tvConfig).catch(err => {
+            if (!tvConfig?.enabled) return;
+
+            const matchingSetup = (tvConfig.setups || []).find(
+                setup => setup.enabled && setup.triggerChannelId === newState.channelId
+            );
+
+            if (matchingSetup) {
+                await createTempRoom(newState.member, matchingSetup).catch(err => {
                     console.error('Chyba pri vytváraní TempVoice miestnosti:', err);
                 });
             }

@@ -75,14 +75,21 @@ async function sendPatchToChannel(channel, item, roleId = null) {
 
 async function checkAndPostUpdates(client) {
     const config = getPatchBotSettings();
-    if (!config?.enabled || !config.channelId) return;
+    const channelIds = Array.isArray(config?.channelIds) ? config.channelIds : [];
+    if (!config?.enabled || channelIds.length === 0) return;
 
     const guild = client.guilds.cache.first();
     if (!guild) return;
 
-    const channel = guild.channels.cache.get(config.channelId)
-        || await guild.channels.fetch(config.channelId).catch(() => null);
-    if (!channel || !channel.isTextBased()) return;
+    const channels = [];
+    for (const channelId of channelIds) {
+        const ch = guild.channels.cache.get(channelId)
+            || await guild.channels.fetch(channelId).catch(() => null);
+        if (ch && ch.isTextBased()) {
+            channels.push(ch);
+        }
+    }
+    if (channels.length === 0) return;
 
     const mode = config.mode || 'all';
     const items = await fetchCs2News({ mode, count: 10 });
@@ -104,11 +111,17 @@ async function checkAndPostUpdates(client) {
         .sort((a, b) => (a.date || 0) - (b.date || 0));
 
     for (const item of unseenItems) {
-        try {
-            await sendPatchToChannel(channel, item, config.roleId || null);
+        let sentAny = false;
+        for (const channel of channels) {
+            try {
+                await sendPatchToChannel(channel, item, config.roleId || null);
+                sentAny = true;
+            } catch (err) {
+                console.error(`Chyba pri posielaní CS2 updatu do kanála ${channel.id}:`, err);
+            }
+        }
+        if (sentAny) {
             markPatchGidsPosted([String(item.gid)], item);
-        } catch (err) {
-            console.error(`Chyba pri posielaní CS2 updatu na server ${guild.id}:`, err);
         }
     }
 }

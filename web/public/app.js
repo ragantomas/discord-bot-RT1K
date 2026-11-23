@@ -8,7 +8,11 @@ const state = {
     memberFilter: '',
     settings: null,
     steamApiKeyConfigured: false,
-    tempRooms: []
+    tempRooms: [],
+    tvDraftSetups: [],
+    pbDraftChannelIds: [],
+    jrDraftMemberRoleIds: [],
+    jrDraftBotRoleIds: []
 };
 
 const SECTION_TITLES = {
@@ -54,16 +58,28 @@ function formatIntervalLabel(seconds) {
     return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 }
 
-function formatIntervalInputValue(seconds) {
-    if (!seconds || seconds < 60) return `${seconds || 30}s`;
-    if (seconds % 60 === 0) return `${seconds / 60}m`;
-    return `${seconds}s`;
+function splitIntervalParts(seconds) {
+    const sec = Number(seconds) || 300;
+    if (sec >= 60 && sec % 60 === 0) {
+        return { value: sec / 60, unit: 'm' };
+    }
+    return { value: sec, unit: 's' };
 }
 
 function formatRelativeTimestamp(unixSeconds) {
     if (!unixSeconds) return 'Zatiaľ žiadny';
-    const d = new Date(unixSeconds * 1000);
-    return d.toLocaleString('sk-SK');
+    return new Date(unixSeconds * 1000).toLocaleString('sk-SK');
+}
+
+function syncDraftsFromSettings() {
+    const s = state.settings || {};
+    state.tvDraftSetups = (s.tempVoice?.setups || []).map(item => ({
+        ...item,
+        createTriggerChannel: false
+    }));
+    state.pbDraftChannelIds = [...(s.patchBot?.channelIds || [])];
+    state.jrDraftMemberRoleIds = [...(s.joinRoles?.memberRoleIds || [])];
+    state.jrDraftBotRoleIds = [...(s.joinRoles?.botRoleIds || [])];
 }
 
 function showToast(message, type = 'success') {
@@ -244,6 +260,15 @@ function buildMemberOptions(filterText = '') {
         .join('');
 }
 
+function renderAddButtonHtml(id, label) {
+    return `
+        <button id="${escapeHtml(id)}" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-slate-700 hover:border-brand/70 bg-bg-elevated/50 hover:bg-brand/10 text-slate-300 hover:text-white text-sm font-medium transition">
+            <i data-lucide="plus" class="w-4 h-4 text-brand"></i>
+            <span>${escapeHtml(label)}</span>
+        </button>
+    `;
+}
+
 // --- RENDERERS ---
 
 function renderOverview() {
@@ -304,17 +329,17 @@ function renderOverview() {
             <div class="card p-6">
                 <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
                     <i data-lucide="zap" class="w-4 h-4 text-brand-gold"></i>
-                    <span>Rýchle akcie & Záloha dát</span>
+                    <span>Rýchle akcie & Stiahnutie záloh</span>
                 </h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button id="ov-update-all" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-medium transition">
                         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                         <span>Aktualizovať všetky ranky</span>
                     </button>
-                    <button id="ov-send-backup-dm" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-100 text-sm font-medium transition">
-                        <i data-lucide="send" class="w-4 h-4"></i>
-                        <span>Poslať zálohu do DM</span>
-                    </button>
+                    <a href="/api/backup/download/all" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-200 text-sm font-medium transition">
+                        <i data-lucide="archive" class="w-4 h-4"></i>
+                        <span>Stiahnuť kompletnú zálohu</span>
+                    </a>
                     <a href="/api/backup/download/users" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-200 text-sm font-medium transition">
                         <i data-lucide="download" class="w-4 h-4"></i>
                         <span>Stiahnuť users.json</span>
@@ -366,19 +391,6 @@ function renderOverview() {
         }
     });
 
-    document.getElementById('ov-send-backup-dm').addEventListener('click', async e => {
-        const btn = e.currentTarget;
-        await setButtonLoading(btn, true, 'Posielam...');
-        try {
-            await apiFetch('/api/backup/send-dm', { method: 'POST' });
-            showToast('Záloha bola úspešne odoslaná majiteľovi do DM.');
-        } catch (err) {
-            showToast(err.message, 'error');
-        } finally {
-            await setButtonLoading(btn, false);
-        }
-    });
-
     refreshIcons();
 }
 
@@ -393,7 +405,7 @@ function renderPlayersTableRows() {
         : state.players;
 
     if (list.length === 0) {
-        return `<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-400">Žiadni prepojení hráči nezodpovedajú hľadaniu.</td></tr>`;
+        return `<tr><td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">Žiadni prepojení hráči nezodpovedajú hľadaniu.</td></tr>`;
     }
 
     return list.map(p => {
@@ -682,10 +694,116 @@ function attachTempVoiceRoomListeners() {
     });
 }
 
+function readTempVoiceDraftFromDom() {
+    const cards = document.querySelectorAll('#tv-setups-list .tv-setup-card');
+    if (cards.length === 0) return;
+
+    state.tvDraftSetups = [...cards].map((card, idx) => ({
+        id: card.dataset.setupId || `tv_${idx + 1}`,
+        enabled: card.querySelector('.tv-setup-enabled').checked,
+        triggerChannelId: card.querySelector('.tv-setup-trigger').value || null,
+        createTriggerChannel: card.querySelector('.tv-setup-create').checked,
+        categoryId: card.querySelector('.tv-setup-category').value || null,
+        triggerName: card.querySelector('.tv-setup-trigger-name').value,
+        roomNameTemplate: card.querySelector('.tv-setup-template').value,
+        userLimit: Number(card.querySelector('.tv-setup-limit').value),
+        bitrateKbps: Number(card.querySelector('.tv-setup-bitrate').value)
+    }));
+}
+
+function buildTempVoiceSetupCardsHtml() {
+    const maxBitrate = state.meta?.maxBitrateKbps || 96;
+    if (state.tvDraftSetups.length === 0) {
+        return `<div class="p-6 rounded-xl bg-bg-elevated/60 border border-slate-800 text-center text-sm text-slate-400">Zatiaľ nemáš žiadny TempVoice kanál. Klikni na <strong>Pridať TempVoice</strong> nižšie.</div>`;
+    }
+
+    return state.tvDraftSetups.map((setup, idx) => `
+        <div class="tv-setup-card p-5 rounded-2xl bg-bg-elevated/70 border border-slate-800 space-y-4" data-setup-id="${escapeHtml(setup.id)}">
+            <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+                <div class="flex items-center gap-3">
+                    <span class="w-7 h-7 rounded-lg bg-brand/15 text-brand text-xs font-bold flex items-center justify-center">#${idx + 1}</span>
+                    <div>
+                        <div class="text-sm font-semibold text-white">TempVoice konfigurácia #${idx + 1}</div>
+                        <div class="text-xs text-slate-400">Nezávislý spúšťací VC a šablóna miestností</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label class="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" class="tv-setup-enabled w-4 h-4 accent-brand rounded cursor-pointer" ${setup.enabled ? 'checked' : ''} />
+                        <span>Aktívny</span>
+                    </label>
+                    <button type="button" data-tv-remove="${idx}" title="Odstrániť túto konfiguráciu" class="p-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Spúšťací hlasový kanál (Trigger VC)</label>
+                    <select class="tv-setup-trigger input-field">
+                        ${buildVoiceChannelOptions(setup.triggerChannelId)}
+                    </select>
+                    <label class="inline-flex items-center gap-2 text-xs text-slate-300 mt-1.5 cursor-pointer">
+                        <input type="checkbox" class="tv-setup-create accent-brand rounded" ${setup.createTriggerChannel ? 'checked' : ''} />
+                        <span>Vytvoriť nový spúšťací kanál na serveri</span>
+                    </label>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Kategória</label>
+                    <select class="tv-setup-category input-field">
+                        ${buildCategoryOptions(setup.categoryId)}
+                    </select>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Názov spúšťacieho kanála</label>
+                    <input type="text" maxlength="100" required class="tv-setup-trigger-name input-field" value="${escapeHtml(setup.triggerName || '➕ Vytvoriť miestnosť')}" />
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Šablóna názvu (<code class="text-slate-300">{user}</code>, <code class="text-slate-300">{username}</code>)</label>
+                    <input type="text" maxlength="100" required class="tv-setup-template input-field" value="${escapeHtml(setup.roomNameTemplate || '🎮 {user}')}" />
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Predvolený limit hráčov (0–99, 0 = bez limitu)</label>
+                    <input type="number" min="0" max="99" required class="tv-setup-limit input-field" value="${Number(setup.userLimit ?? 0)}" />
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Bitrate v kbps (8–384, limit servera: ${maxBitrate} kbps)</label>
+                    <input type="number" min="8" max="384" required class="tv-setup-bitrate input-field" value="${Number(setup.bitrateKbps ?? 64)}" />
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function attachTempVoiceSetupListeners() {
+    document.querySelectorAll('[data-tv-remove]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const idx = Number(btn.dataset.tvRemove);
+            const ok = await confirmAction({
+                title: 'Odstrániť TempVoice konfiguráciu?',
+                message: `Odstráni sa konfigurácia #${idx + 1} zo zoznamu (kanál na Discorde ostane zachovaný).`,
+                confirmLabel: 'Odstrániť'
+            });
+            if (!ok) return;
+
+            readTempVoiceDraftFromDom();
+            state.tvDraftSetups.splice(idx, 1);
+            document.getElementById('tv-setups-list').innerHTML = buildTempVoiceSetupCardsHtml();
+            attachTempVoiceSetupListeners();
+            refreshIcons();
+        });
+    });
+}
+
 function renderTempVoice() {
     const container = document.getElementById('section-tempvoice');
     const tv = state.settings?.tempVoice || {};
-    const maxBitrate = state.meta?.maxBitrateKbps || 96;
 
     container.innerHTML = `
         <div class="card p-6">
@@ -697,58 +815,21 @@ function renderTempVoice() {
             <form id="tv-settings-form" class="space-y-5">
                 <div class="flex items-center justify-between p-4 rounded-xl bg-bg-elevated border border-slate-800">
                     <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť TempVoice systém</div>
-                        <div class="text-xs text-slate-400">Po pripojení do spúšťacieho VC bot vytvorí hráčovi vlastnú dočasnú miestnosť.</div>
+                        <div class="text-sm font-semibold text-white">Zapnúť TempVoice modul</div>
+                        <div class="text-xs text-slate-400">Deaktivácia iba pozastaví vytváranie nových miestností — všetky nastavenia aj kanály ostanú zachované.</div>
                     </div>
-                    <input id="tv-enabled" type="checkbox" class="w-5 h-5 accent-brand rounded cursor-pointer" ${tv.enabled ? 'checked' : ''} />
+                    <input id="tv-global-enabled" type="checkbox" class="w-5 h-5 accent-brand rounded cursor-pointer" ${tv.enabled ? 'checked' : ''} />
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Spúšťací hlasový kanál (Trigger VC)</label>
-                        <select id="tv-trigger-channel" class="input-field">
-                            ${buildVoiceChannelOptions(tv.triggerChannelId)}
-                        </select>
-                        <label class="inline-flex items-center gap-2 text-xs text-slate-300 mt-1.5 cursor-pointer">
-                            <input id="tv-create-trigger" type="checkbox" class="accent-brand rounded" />
-                            <span>Vytvoriť nový spúšťací kanál na serveri</span>
-                        </label>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Kategória</label>
-                        <select id="tv-category" class="input-field">
-                            ${buildCategoryOptions(tv.categoryId)}
-                        </select>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Názov spúšťacieho kanála</label>
-                        <input id="tv-trigger-name" type="text" maxlength="100" required class="input-field" value="${escapeHtml(tv.triggerName || '➕ Vytvoriť miestnosť')}" />
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Šablóna názvu novej roomky (<code class="text-slate-300">{user}</code>, <code class="text-slate-300">{username}</code>)</label>
-                        <input id="tv-room-template" type="text" maxlength="100" required class="input-field" value="${escapeHtml(tv.roomNameTemplate || '🎮 {user}')}" />
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Predvolený limit hráčov (0–99, 0 = bez limitu)</label>
-                        <input id="tv-limit" type="number" min="0" max="99" required class="input-field" value="${Number(tv.userLimit ?? 0)}" />
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Bitrate v kbps (8–384, limit tohto servera: ${maxBitrate} kbps)</label>
-                        <input id="tv-bitrate" type="number" min="8" max="384" required class="input-field" value="${Number(tv.bitrateKbps ?? 64)}" />
-                    </div>
+                <div id="tv-setups-list" class="space-y-4">
+                    ${buildTempVoiceSetupCardsHtml()}
                 </div>
 
-                <label id="tv-delete-trigger-wrap" class="${tv.enabled ? 'hidden' : 'inline-flex'} items-center gap-2 text-xs text-red-300 cursor-pointer">
-                    <input id="tv-delete-trigger" type="checkbox" class="accent-red-500 rounded" />
-                    <span>Pri vypnutí zmazať aj spúšťací hlasový kanál zo servera</span>
-                </label>
+                <div>
+                    ${renderAddButtonHtml('tv-add-setup-btn', 'Pridať TempVoice')}
+                </div>
 
-                <div class="flex justify-end">
+                <div class="flex justify-end pt-2">
                     <button id="tv-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
                         <span>Uložiť TempVoice nastavenia</span>
@@ -772,33 +853,39 @@ function renderTempVoice() {
         </div>
     `;
 
-    const enabledEl = document.getElementById('tv-enabled');
-    const delWrap = document.getElementById('tv-delete-trigger-wrap');
-    enabledEl.addEventListener('change', () => {
-        delWrap.classList.toggle('hidden', enabledEl.checked);
-        delWrap.classList.toggle('inline-flex', !enabledEl.checked);
+    document.getElementById('tv-add-setup-btn').addEventListener('click', () => {
+        readTempVoiceDraftFromDom();
+        state.tvDraftSetups.push({
+            id: `tv_${Date.now()}`,
+            enabled: true,
+            triggerChannelId: null,
+            createTriggerChannel: false,
+            categoryId: null,
+            triggerName: '➕ Vytvoriť miestnosť',
+            roomNameTemplate: '🎮 {user}',
+            bitrateKbps: 64,
+            userLimit: 0
+        });
+        document.getElementById('tv-setups-list').innerHTML = buildTempVoiceSetupCardsHtml();
+        attachTempVoiceSetupListeners();
+        refreshIcons();
     });
 
     document.getElementById('tv-settings-form').addEventListener('submit', async e => {
         e.preventDefault();
+        readTempVoiceDraftFromDom();
         const btn = document.getElementById('tv-save-btn');
         await setButtonLoading(btn, true, 'Ukladám...');
         try {
             const res = await apiFetch('/api/settings/tempvoice', {
                 method: 'PUT',
                 body: JSON.stringify({
-                    enabled: document.getElementById('tv-enabled').checked,
-                    triggerChannelId: document.getElementById('tv-trigger-channel').value || null,
-                    createTriggerChannel: document.getElementById('tv-create-trigger').checked,
-                    deleteTriggerChannel: document.getElementById('tv-delete-trigger').checked,
-                    categoryId: document.getElementById('tv-category').value || null,
-                    triggerName: document.getElementById('tv-trigger-name').value.trim(),
-                    roomNameTemplate: document.getElementById('tv-room-template').value.trim(),
-                    userLimit: Number(document.getElementById('tv-limit').value),
-                    bitrateKbps: Number(document.getElementById('tv-bitrate').value)
+                    enabled: document.getElementById('tv-global-enabled').checked,
+                    setups: state.tvDraftSetups
                 })
             });
             state.settings.tempVoice = res.tempVoice;
+            syncDraftsFromSettings();
             await refreshMetaAndOverview();
             renderTempVoice();
             showToast('Nastavenia TempVoice boli uložené.');
@@ -822,8 +909,45 @@ function renderTempVoice() {
         }
     });
 
+    attachTempVoiceSetupListeners();
     attachTempVoiceRoomListeners();
     refreshIcons();
+}
+
+function readPatchBotDraftFromDom() {
+    const selects = document.querySelectorAll('#pb-channels-list .pb-channel-select');
+    if (selects.length > 0) {
+        state.pbDraftChannelIds = [...selects].map(s => s.value);
+    }
+}
+
+function buildPatchBotChannelRowsHtml() {
+    if (state.pbDraftChannelIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-2">Zatiaľ nie je pridaný žiadny kanál. Pridaj kanál tlačidlom nižšie.</p>`;
+    }
+
+    return state.pbDraftChannelIds.map((channelId, idx) => `
+        <div class="flex items-center gap-2">
+            <select class="pb-channel-select input-field flex-1">
+                ${buildTextChannelOptions(channelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
+            </select>
+            <button type="button" data-pb-remove-channel="${idx}" title="Odobrať kanál" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function attachPatchBotChannelListeners() {
+    document.querySelectorAll('[data-pb-remove-channel]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readPatchBotDraftFromDom();
+            state.pbDraftChannelIds.splice(Number(btn.dataset.pbRemoveChannel), 1);
+            document.getElementById('pb-channels-list').innerHTML = buildPatchBotChannelRowsHtml();
+            attachPatchBotChannelListeners();
+            refreshIcons();
+        });
+    });
 }
 
 function renderPatchBot() {
@@ -841,19 +965,22 @@ function renderPatchBot() {
                 <div class="flex items-center justify-between p-4 rounded-xl bg-bg-elevated border border-slate-800">
                     <div>
                         <div class="text-sm font-semibold text-white">Zapnúť CS2 PatchBota</div>
-                        <div class="text-xs text-slate-400">Kontroluje nové CS2 updaty každých 5 minút cez Steam News API.</div>
+                        <div class="text-xs text-slate-400">Kontroluje nové CS2 updaty každých 5 minút. Pri vypnutí ostanú nastavenia zachované.</div>
                     </div>
                     <input id="pb-enabled" type="checkbox" class="w-5 h-5 accent-brand rounded cursor-pointer" ${pb.enabled ? 'checked' : ''} />
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Kanál pre CS2 updaty</label>
-                        <select id="pb-channel" class="input-field">
-                            ${buildTextChannelOptions(pb.channelId)}
-                        </select>
+                <div class="space-y-2.5">
+                    <label class="text-xs font-medium text-slate-400 block">Cieľové kanály pre CS2 updaty</label>
+                    <div id="pb-channels-list" class="space-y-2">
+                        ${buildPatchBotChannelRowsHtml()}
                     </div>
+                    <div class="pt-1">
+                        ${renderAddButtonHtml('pb-add-channel-btn', 'Pridať kanál')}
+                    </div>
+                </div>
 
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
                         <label class="text-xs font-medium text-slate-400">Typ správ</label>
                         <select id="pb-mode" class="input-field">
@@ -886,7 +1013,7 @@ function renderPatchBot() {
 
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-2">Otestovať / poslať najnovší CS2 príspevok</h3>
-            <p class="text-xs text-slate-400 mb-4">Okamžite stiahne najnovší príspevok podľa zvoleného režimu a odošle ho do nastaveného kanála.</p>
+            <p class="text-xs text-slate-400 mb-4">Okamžite stiahne najnovší príspevok podľa zvoleného režimu a odošle ho do všetkých nastavených kanálov.</p>
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <label class="inline-flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                     <input id="pb-test-ping" type="checkbox" class="accent-brand rounded" />
@@ -900,8 +1027,17 @@ function renderPatchBot() {
         </div>
     `;
 
+    document.getElementById('pb-add-channel-btn').addEventListener('click', () => {
+        readPatchBotDraftFromDom();
+        state.pbDraftChannelIds.push('');
+        document.getElementById('pb-channels-list').innerHTML = buildPatchBotChannelRowsHtml();
+        attachPatchBotChannelListeners();
+        refreshIcons();
+    });
+
     document.getElementById('pb-form').addEventListener('submit', async e => {
         e.preventDefault();
+        readPatchBotDraftFromDom();
         const btn = document.getElementById('pb-save-btn');
         await setButtonLoading(btn, true, 'Ukladám...');
         try {
@@ -909,12 +1045,13 @@ function renderPatchBot() {
                 method: 'PUT',
                 body: JSON.stringify({
                     enabled: document.getElementById('pb-enabled').checked,
-                    channelId: document.getElementById('pb-channel').value || null,
+                    channelIds: state.pbDraftChannelIds.filter(Boolean),
                     mode: document.getElementById('pb-mode').value,
                     roleId: document.getElementById('pb-role').value || null
                 })
             });
             state.settings.patchBot = res.patchBot;
+            syncDraftsFromSettings();
             await refreshOverviewOnly();
             renderPatchBot();
             showToast('Nastavenia CS2 PatchBota uložené.');
@@ -935,8 +1072,9 @@ function renderPatchBot() {
                 body: JSON.stringify({ withPing })
             });
             state.settings.patchBot = res.patchBot;
+            syncDraftsFromSettings();
             renderPatchBot();
-            showToast(`Odoslané: ${res.title}`);
+            showToast(`Odoslané do ${res.sentCount} kanálov: ${res.title}`);
         } catch (err) {
             showToast(err.message, 'error');
         } finally {
@@ -944,7 +1082,66 @@ function renderPatchBot() {
         }
     });
 
+    attachPatchBotChannelListeners();
     refreshIcons();
+}
+
+function readJoinRolesDraftFromDom() {
+    const memberSelects = document.querySelectorAll('#jr-member-list .jr-member-select');
+    const botSelects = document.querySelectorAll('#jr-bot-list .jr-bot-select');
+    if (memberSelects.length > 0 || document.getElementById('jr-member-list')) {
+        state.jrDraftMemberRoleIds = [...memberSelects].map(s => s.value);
+    }
+    if (botSelects.length > 0 || document.getElementById('jr-bot-list')) {
+        state.jrDraftBotRoleIds = [...botSelects].map(s => s.value);
+    }
+}
+
+function buildJoinRoleRowsHtml(roleIds, selectClass, removeAttr) {
+    if (roleIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-2">Zatiaľ žiadna rola. Pridaj rolu tlačidlom nižšie.</p>`;
+    }
+
+    return roleIds.map((roleId, idx) => `
+        <div class="flex items-center gap-2">
+            <select class="${selectClass} input-field flex-1">
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber rolu —', onlyAssignable: true })}
+            </select>
+            <button type="button" ${removeAttr}="${idx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function attachJoinRoleRowListeners() {
+    document.querySelectorAll('[data-jr-remove-member]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readJoinRolesDraftFromDom();
+            state.jrDraftMemberRoleIds.splice(Number(btn.dataset.jrRemoveMember), 1);
+            document.getElementById('jr-member-list').innerHTML = buildJoinRoleRowsHtml(
+                state.jrDraftMemberRoleIds,
+                'jr-member-select',
+                'data-jr-remove-member'
+            );
+            attachJoinRoleRowListeners();
+            refreshIcons();
+        });
+    });
+
+    document.querySelectorAll('[data-jr-remove-bot]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readJoinRolesDraftFromDom();
+            state.jrDraftBotRoleIds.splice(Number(btn.dataset.jrRemoveBot), 1);
+            document.getElementById('jr-bot-list').innerHTML = buildJoinRoleRowsHtml(
+                state.jrDraftBotRoleIds,
+                'jr-bot-select',
+                'data-jr-remove-bot'
+            );
+            attachJoinRoleRowListeners();
+            refreshIcons();
+        });
+    });
 }
 
 function renderJoinRoles() {
@@ -962,30 +1159,38 @@ function renderJoinRoles() {
                 <div class="flex items-center justify-between p-4 rounded-xl bg-bg-elevated border border-slate-800">
                     <div>
                         <div class="text-sm font-semibold text-white">Zapnúť automatické Join Roles</div>
-                        <div class="text-xs text-slate-400">Noví členovia a boti dostanú zvolenú rolu automaticky po vstupe na server.</div>
+                        <div class="text-xs text-slate-400">Noví členovia a boti dostanú vybrané role po vstupe na server. Pri vypnutí sa nič nevymaže.</div>
                     </div>
                     <input id="jr-enabled" type="checkbox" class="w-5 h-5 accent-brand rounded cursor-pointer" ${jr.enabled ? 'checked' : ''} />
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Rola pre bežných hráčov</label>
-                        <select id="jr-member-role" class="input-field">
-                            ${buildRoleOptions(jr.memberRoleId, { allowNone: true, noneLabel: '— Nepriadeľovať —', onlyAssignable: true })}
-                        </select>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                        <div class="flex items-center gap-2 text-sm font-semibold text-white">
+                            <i data-lucide="user" class="w-4 h-4 text-brand"></i>
+                            <span>Role pre bežných hráčov</span>
+                        </div>
+                        <div id="jr-member-list" class="space-y-2">
+                            ${buildJoinRoleRowsHtml(state.jrDraftMemberRoleIds, 'jr-member-select', 'data-jr-remove-member')}
+                        </div>
+                        ${renderAddButtonHtml('jr-add-member-btn', 'Pridať rolu pre hráčov')}
                     </div>
 
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Rola pre botov</label>
-                        <select id="jr-bot-role" class="input-field">
-                            ${buildRoleOptions(jr.botRoleId, { allowNone: true, noneLabel: '— Nepriadeľovať —', onlyAssignable: true })}
-                        </select>
+                    <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                        <div class="flex items-center gap-2 text-sm font-semibold text-white">
+                            <i data-lucide="bot" class="w-4 h-4 text-sky-400"></i>
+                            <span>Role pre botov</span>
+                        </div>
+                        <div id="jr-bot-list" class="space-y-2">
+                            ${buildJoinRoleRowsHtml(state.jrDraftBotRoleIds, 'jr-bot-select', 'data-jr-remove-bot')}
+                        </div>
+                        ${renderAddButtonHtml('jr-add-bot-btn', 'Pridať rolu pre botov')}
                     </div>
                 </div>
 
                 <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
                     <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-amber-400"></i>
-                    <span>Rola bota musí byť v nastaveniach rolí Discord servera umiestnená <strong>vyššie</strong> ako vybrané join role.</span>
+                    <span>Rola bota musí byť v nastaveniach rolí Discord servera umiestnená <strong>vyššie</strong> ako všetky vybrané join role.</span>
                 </div>
 
                 <div class="flex justify-end">
@@ -998,8 +1203,33 @@ function renderJoinRoles() {
         </div>
     `;
 
+    document.getElementById('jr-add-member-btn').addEventListener('click', () => {
+        readJoinRolesDraftFromDom();
+        state.jrDraftMemberRoleIds.push('');
+        document.getElementById('jr-member-list').innerHTML = buildJoinRoleRowsHtml(
+            state.jrDraftMemberRoleIds,
+            'jr-member-select',
+            'data-jr-remove-member'
+        );
+        attachJoinRoleRowListeners();
+        refreshIcons();
+    });
+
+    document.getElementById('jr-add-bot-btn').addEventListener('click', () => {
+        readJoinRolesDraftFromDom();
+        state.jrDraftBotRoleIds.push('');
+        document.getElementById('jr-bot-list').innerHTML = buildJoinRoleRowsHtml(
+            state.jrDraftBotRoleIds,
+            'jr-bot-select',
+            'data-jr-remove-bot'
+        );
+        attachJoinRoleRowListeners();
+        refreshIcons();
+    });
+
     document.getElementById('jr-form').addEventListener('submit', async e => {
         e.preventDefault();
+        readJoinRolesDraftFromDom();
         const btn = document.getElementById('jr-save-btn');
         await setButtonLoading(btn, true, 'Ukladám...');
         try {
@@ -1007,11 +1237,12 @@ function renderJoinRoles() {
                 method: 'PUT',
                 body: JSON.stringify({
                     enabled: document.getElementById('jr-enabled').checked,
-                    memberRoleId: document.getElementById('jr-member-role').value || null,
-                    botRoleId: document.getElementById('jr-bot-role').value || null
+                    memberRoleIds: state.jrDraftMemberRoleIds.filter(Boolean),
+                    botRoleIds: state.jrDraftBotRoleIds.filter(Boolean)
                 })
             });
             state.settings.joinRoles = res.joinRoles;
+            syncDraftsFromSettings();
             await refreshOverviewOnly();
             renderJoinRoles();
             showToast('Nastavenia Join Roles boli uložené.');
@@ -1022,6 +1253,7 @@ function renderJoinRoles() {
         }
     });
 
+    attachJoinRoleRowListeners();
     refreshIcons();
 }
 
@@ -1032,6 +1264,8 @@ function renderCsStatus() {
     const messageLink = cs.channelId && cs.messageId && guildId
         ? `https://discord.com/channels/${guildId}/${cs.channelId}/${cs.messageId}`
         : null;
+
+    const parts = splitIntervalParts(cs.intervalSeconds);
 
     container.innerHTML = `
         <div class="card p-6">
@@ -1044,7 +1278,7 @@ function renderCsStatus() {
                 <div class="flex items-center justify-between p-4 rounded-xl bg-bg-elevated border border-slate-800">
                     <div>
                         <div class="text-sm font-semibold text-white">Zapnúť automatický embed so stavom serverov</div>
-                        <div class="text-xs text-slate-400">Upravuje jednu embed správu v určenom kanáli bez posielania nových správ.</div>
+                        <div class="text-xs text-slate-400">Upravuje jednu embed správu v určenom kanáli. Pri vypnutí ostane všetko zachované.</div>
                     </div>
                     <input id="cs-enabled" type="checkbox" class="w-5 h-5 accent-brand rounded cursor-pointer" ${cs.enabled ? 'checked' : ''} />
                 </div>
@@ -1058,20 +1292,16 @@ function renderCsStatus() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Interval obnovy (30s až 60m)</label>
-                        <input id="cs-interval" type="text" maxlength="10" required class="input-field" value="${escapeHtml(formatIntervalInputValue(cs.intervalSeconds))}" placeholder="napr. 30s, 1m, 5m, 60m" />
-                        <div class="flex flex-wrap gap-1.5 pt-1">
-                            ${['30s', '1m', '5m', '15m', '60m'].map(preset => `
-                                <button type="button" data-cs-preset="${preset}" class="px-2.5 py-1 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs text-slate-300 transition">${preset}</button>
-                            `).join('')}
+                        <label class="text-xs font-medium text-slate-400">Interval obnovy (30 s až 60 min)</label>
+                        <div class="flex items-center gap-2">
+                            <input id="cs-interval-num" type="number" min="1" max="3600" required class="input-field flex-1" value="${parts.value}" />
+                            <select id="cs-interval-unit" class="input-field w-36">
+                                <option value="s" ${parts.unit === 's' ? 'selected' : ''}>Sekúnd</option>
+                                <option value="m" ${parts.unit === 'm' ? 'selected' : ''}>Minút</option>
+                            </select>
                         </div>
                     </div>
                 </div>
-
-                <label id="cs-delete-msg-wrap" class="${cs.enabled ? 'hidden' : 'inline-flex'} items-center gap-2 text-xs text-red-300 cursor-pointer">
-                    <input id="cs-delete-msg" type="checkbox" class="accent-red-500 rounded" />
-                    <span>Pri vypnutí zmazať aj existujúcu embed správu z kanála</span>
-                </label>
 
                 <div class="p-4 rounded-xl bg-bg-elevated border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-300">
                     <div class="space-y-1">
@@ -1095,28 +1325,22 @@ function renderCsStatus() {
                 <div class="flex justify-end">
                     <button id="cs-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť a aktualizovať embed</span>
+                        <span>Uložiť nastavenia</span>
                     </button>
                 </div>
             </form>
         </div>
     `;
 
-    const enabledEl = document.getElementById('cs-enabled');
-    const delWrap = document.getElementById('cs-delete-msg-wrap');
-    enabledEl.addEventListener('change', () => {
-        delWrap.classList.toggle('hidden', enabledEl.checked);
-        delWrap.classList.toggle('inline-flex', !enabledEl.checked);
-    });
-
-    container.querySelectorAll('[data-cs-preset]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.getElementById('cs-interval').value = btn.dataset.csPreset;
-        });
-    });
-
     document.getElementById('cs-form').addEventListener('submit', async e => {
         e.preventDefault();
+        const num = Number(document.getElementById('cs-interval-num').value);
+        const unit = document.getElementById('cs-interval-unit').value;
+        if (!Number.isInteger(num) || num <= 0) {
+            showToast('Zadaj platné celé číslo pre interval.', 'error');
+            return;
+        }
+
         const btn = document.getElementById('cs-save-btn');
         await setButtonLoading(btn, true, 'Ukladám...');
         try {
@@ -1125,8 +1349,7 @@ function renderCsStatus() {
                 body: JSON.stringify({
                     enabled: document.getElementById('cs-enabled').checked,
                     channelId: document.getElementById('cs-channel').value || null,
-                    interval: document.getElementById('cs-interval').value.trim(),
-                    deleteMessage: document.getElementById('cs-delete-msg').checked
+                    interval: `${num}${unit}`
                 })
             });
             state.settings.csStatus = res.csStatus;
@@ -1388,6 +1611,7 @@ function switchSection(section) {
         document.getElementById(`section-${key}`).classList.toggle('hidden', key !== section);
     });
 
+    syncDraftsFromSettings();
     renderActiveSection();
     closeMobileSidebar();
 }
@@ -1418,7 +1642,7 @@ async function bootstrap() {
             const botNameEl = document.getElementById('login-bot-name');
             const botAvatarEl = document.getElementById('login-bot-avatar');
             const botFallbackEl = document.getElementById('login-bot-fallback');
-            botNameEl.textContent = auth.bot?.username || 'CS2 Discord Bot';
+            botNameEl.textContent = auth.bot?.username || 'BOT Gaben';
 
             if (auth.bot?.avatarUrl) {
                 botAvatarEl.src = auth.bot.avatarUrl;
@@ -1456,8 +1680,7 @@ async function bootstrap() {
             return;
         }
 
-        // Používateľ prihlásený aj oprávnený -> načítaj všetky dáta dashboardu
-        document.getElementById('nav-bot-name').textContent = auth.bot?.username || 'CS2 Bot';
+        document.getElementById('nav-bot-name').textContent = auth.bot?.username || 'BOT Gaben';
         document.getElementById('nav-guild-name').textContent = auth.guild?.name || 'Discord server';
         if (auth.bot?.avatarUrl) document.getElementById('nav-bot-avatar').src = auth.bot.avatarUrl;
         document.getElementById('header-user-avatar').src = auth.user?.avatarUrl || '';
@@ -1477,6 +1700,7 @@ async function bootstrap() {
         state.settings = settingsRes.settings;
         state.steamApiKeyConfigured = Boolean(settingsRes.steamApiKeyConfigured);
         state.tempRooms = roomsRes.rooms || [];
+        syncDraftsFromSettings();
 
         const badge = document.getElementById('header-bot-badge');
         badge.innerHTML = `<span class="w-2 h-2 rounded-full ${overview.bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>${overview.bot.online ? `Online (${overview.bot.ping} ms)` : 'Offline'}`;

@@ -7,11 +7,14 @@ module.exports = {
         if (!role?.guild?.id) return;
 
         const current = loadSettings();
+        const hasMemberRole = (current.joinRoles?.memberRoleIds || []).includes(role.id);
+        const hasBotRole = (current.joinRoles?.botRoleIds || []).includes(role.id);
+
         const needsUpdate =
             current.dashboardRoleId === role.id ||
             current.patchBot?.roleId === role.id ||
-            current.joinRoles?.memberRoleId === role.id ||
-            current.joinRoles?.botRoleId === role.id;
+            hasMemberRole ||
+            hasBotRole;
 
         if (!needsUpdate) return;
 
@@ -24,12 +27,12 @@ module.exports = {
                 settings.patchBot.roleId = null;
                 console.warn(`Ping rola pre CS2 PatchBota (${role.id}) bola zmazaná.`);
             }
-            if (settings.joinRoles.memberRoleId === role.id) {
-                settings.joinRoles.memberRoleId = null;
+            if (hasMemberRole) {
+                settings.joinRoles.memberRoleIds = settings.joinRoles.memberRoleIds.filter(id => id !== role.id);
                 console.warn(`Join rola pre hráčov (${role.id}) bola zmazaná.`);
             }
-            if (settings.joinRoles.botRoleId === role.id) {
-                settings.joinRoles.botRoleId = null;
+            if (hasBotRole) {
+                settings.joinRoles.botRoleIds = settings.joinRoles.botRoleIds.filter(id => id !== role.id);
                 console.warn(`Join rola pre botov (${role.id}) bola zmazaná.`);
             }
         });
