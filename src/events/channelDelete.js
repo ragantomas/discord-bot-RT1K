@@ -9,6 +9,10 @@ const {
     getPatchGuildConfig,
     setPatchGuildConfig
 } = require('../storage/patchBotStore');
+const {
+    getCsStatusGuildConfig,
+    setCsStatusGuildConfig
+} = require('../storage/csStatusStore');
 
 module.exports = {
     name: Events.ChannelDelete,
@@ -30,6 +34,14 @@ module.exports = {
                 patchConfig.channelId = null;
                 setPatchGuildConfig(channel.guildId, patchConfig);
                 console.warn(`Kanál pre CS2 PatchBota na serveri ${channel.guildId} bol zmazaný.`);
+            }
+
+            const csStatusConfig = getCsStatusGuildConfig(channel.guildId);
+            if (csStatusConfig?.channelId === channel.id) {
+                csStatusConfig.channelId = null;
+                csStatusConfig.messageId = null;
+                setCsStatusGuildConfig(channel.guildId, csStatusConfig);
+                console.warn(`Kanál pre CS2/Steam stav serverov na serveri ${channel.guildId} bol zmazaný.`);
             }
         }
     }

@@ -1,8 +1,9 @@
-const { OWNER_ID, DB_FILE, TEMPVOICE_DB_FILE, PATCHBOT_DB_FILE, JOINROLES_DB_FILE } = require('../config');
+const { OWNER_ID, DB_FILE, TEMPVOICE_DB_FILE, PATCHBOT_DB_FILE, JOINROLES_DB_FILE, CSSTATUS_DB_FILE } = require('../config');
 const { usersFileExists } = require('../storage/usersStore');
 const { tempVoiceFileExists } = require('../storage/tempVoiceStore');
 const { patchBotFileExists } = require('../storage/patchBotStore');
 const { joinRolesFileExists } = require('../storage/joinRolesStore');
+const { csStatusFileExists } = require('../storage/csStatusStore');
 
 function getExistingBackupFiles() {
     const files = [];
@@ -17,6 +18,9 @@ function getExistingBackupFiles() {
     }
     if (joinRolesFileExists()) {
         files.push({ attachment: JOINROLES_DB_FILE, name: 'joinroles.json' });
+    }
+    if (csStatusFileExists()) {
+        files.push({ attachment: CSSTATUS_DB_FILE, name: 'csstatus.json' });
     }
     return files;
 }

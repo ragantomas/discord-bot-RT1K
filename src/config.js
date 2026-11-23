@@ -19,12 +19,18 @@ const DB_FILE = path.join(__dirname, '..', 'users.json');
 const TEMPVOICE_DB_FILE = path.join(__dirname, '..', 'tempvoice.json');
 const PATCHBOT_DB_FILE = path.join(__dirname, '..', 'patchbot.json');
 const JOINROLES_DB_FILE = path.join(__dirname, '..', 'joinroles.json');
+const CSSTATUS_DB_FILE = path.join(__dirname, '..', 'csstatus.json');
 
 const CS2_APP_ID = 730;
+const CS2_ICON_URL = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/730/8dbc71957312bbd3baea65848b545be9eae2a355.jpg';
 
 const PATCHBOT_DEFAULTS = {
     mode: 'all',
     roleId: null
+};
+
+const CSSTATUS_DEFAULTS = {
+    intervalMinutes: 5
 };
 
 const TEMPVOICE_DEFAULTS = {
@@ -38,7 +44,8 @@ const INTERVALS = {
     RANK_UPDATE_MS: 1 * 60 * 60 * 1000,
     RANK_UPDATE_DELAY_MS: 2000,
     DAILY_BACKUP_MS: 24 * 60 * 60 * 1000,
-    PATCH_CHECK_MS: 5 * 60 * 1000
+    PATCH_CHECK_MS: 5 * 60 * 1000,
+    CS_STATUS_TICK_MS: 60 * 1000
 };
 
 module.exports = {
@@ -47,11 +54,14 @@ module.exports = {
     RANK_ROLES,
     ALL_RANK_ROLE_IDS,
     CS2_APP_ID,
+    CS2_ICON_URL,
     DB_FILE,
     TEMPVOICE_DB_FILE,
     PATCHBOT_DB_FILE,
     JOINROLES_DB_FILE,
+    CSSTATUS_DB_FILE,
     PATCHBOT_DEFAULTS,
+    CSSTATUS_DEFAULTS,
     TEMPVOICE_DEFAULTS,
     INTERVALS
 };

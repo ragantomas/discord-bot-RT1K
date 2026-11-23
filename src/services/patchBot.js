@@ -1,4 +1,5 @@
 const { EmbedBuilder, ChannelType } = require('discord.js');
+const { CS2_ICON_URL } = require('../config');
 const {
     getAllPatchGuildConfigs,
     markGidsPosted
@@ -14,8 +15,6 @@ const MODE_LABELS = {
     all: 'Všetky oficiálne CS2 oznámenia',
     patchnotes: 'Len Patch Notes (Release Notes)'
 };
-
-const CS2_ICON_URL = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/730/8dbc71957312bbd3baea65848b545be9eae2a355.jpg';
 
 function isPatchNoteItem(item) {
     return (Array.isArray(item?.tags) && item.tags.includes('patchnotes'))
