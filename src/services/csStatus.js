@@ -238,12 +238,6 @@ function buildCsStatusMessagePayload(snapshot) {
         });
     }
 
-    embed.addFields({
-        name: '🔗 Zdroj',
-        value: '[Steam Web API](https://developer.valvesoftware.com/wiki/Steam_Web_API) • [Steam Status (steamstat.us)](https://steamstat.us/)',
-        inline: false
-    });
-
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setLabel('Otvoriť na webe')
