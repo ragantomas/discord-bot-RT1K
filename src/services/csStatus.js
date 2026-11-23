@@ -306,13 +306,63 @@ async function updateGuildStatusMessage(client, guildId, { snapshot = null, forc
     };
 }
 
+function getConfigIntervalSeconds(config) {
+    const min = CSSTATUS_DEFAULTS.minIntervalSeconds;
+    const max = CSSTATUS_DEFAULTS.maxIntervalSeconds;
+
+    if (typeof config?.intervalSeconds === 'number') {
+        return Math.min(Math.max(Math.round(config.intervalSeconds), min), max);
+    }
+
+    if (typeof config?.intervalMinutes === 'number') {
+        return Math.min(Math.max(Math.round(config.intervalMinutes * 60), min), max);
+    }
+
+    return CSSTATUS_DEFAULTS.intervalSeconds;
+}
+
+function parseIntervalSeconds(input) {
+    const trimmed = String(input || '').trim();
+    const match = trimmed.match(/^(\d+)\s*(s|sec|sek|m|min)$/i);
+
+    if (!match) {
+        return {
+            ok: false,
+            error: 'Zadaj interval s jednotkou `s` alebo `m`, napr. `30s`, `1m`, `5m`, `60m` (rozsah `30s` – `60m`).'
+        };
+    }
+
+    const num = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    const seconds = unit.startsWith('m') ? num * 60 : num;
+
+    if (seconds < CSSTATUS_DEFAULTS.minIntervalSeconds || seconds > CSSTATUS_DEFAULTS.maxIntervalSeconds) {
+        return {
+            ok: false,
+            error: 'Interval musí byť v rozsahu od `30s` do `60m`.'
+        };
+    }
+
+    return { ok: true, seconds };
+}
+
+function formatInterval(seconds) {
+    if (seconds < 60) {
+        return `${seconds} s`;
+    }
+    if (seconds % 60 === 0) {
+        return `${seconds / 60} min`;
+    }
+    return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
+}
+
 async function updateDueStatusMessages(client) {
     const configs = getAllCsStatusGuildConfigs();
     const now = Date.now();
 
     const dueEntries = Object.entries(configs).filter(([, cfg]) => {
         if (!cfg?.channelId) return false;
-        const intervalMs = (cfg.intervalMinutes || CSSTATUS_DEFAULTS.intervalMinutes) * 60 * 1000;
+        const intervalMs = getConfigIntervalSeconds(cfg) * 1000;
         return now - (cfg.lastUpdatedAt || 0) >= intervalMs;
     });
 
@@ -334,6 +384,9 @@ module.exports = {
     formatProbeStatus,
     formatValveState,
     extractEuDatacenters,
+    getConfigIntervalSeconds,
+    parseIntervalSeconds,
+    formatInterval,
     buildCsStatusMessagePayload,
     updateGuildStatusMessage,
     updateDueStatusMessages

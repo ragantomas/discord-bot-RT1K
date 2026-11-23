@@ -4,13 +4,17 @@ const {
     ChannelType,
     EmbedBuilder
 } = require('discord.js');
-const { CSSTATUS_DEFAULTS } = require('../../config');
 const {
     getCsStatusGuildConfig,
     setCsStatusGuildConfig,
     deleteCsStatusGuildConfig
 } = require('../../storage/csStatusStore');
-const { updateGuildStatusMessage } = require('../../services/csStatus');
+const {
+    updateGuildStatusMessage,
+    getConfigIntervalSeconds,
+    parseIntervalSeconds,
+    formatInterval
+} = require('../../services/csStatus');
 
 function hasStatusChannelPerms(guild, channel) {
     const me = guild.members.me;
@@ -47,7 +51,7 @@ function buildConfigSummaryFields(guild, config) {
         },
         {
             name: '⏱️ Interval',
-            value: `Každých ${config.intervalMinutes || CSSTATUS_DEFAULTS.intervalMinutes} min`,
+            value: `Každých ${formatInterval(getConfigIntervalSeconds(config))}`,
             inline: true
         },
         {
@@ -82,11 +86,10 @@ module.exports = {
                         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
                         .setRequired(true)
                 )
-                .addIntegerOption(opt =>
+                .addStringOption(opt =>
                     opt.setName('interval')
-                        .setDescription('Interval aktualizácie v minútach (2–60, predvolene 5)')
-                        .setMinValue(2)
-                        .setMaxValue(60)
+                        .setDescription('Interval aktualizácie od 30s do 60m (napr. 30s, 1m, 5m, 60m)')
+                        .setMaxLength(10)
                         .setRequired(false)
                 )
         )
@@ -99,11 +102,10 @@ module.exports = {
                         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
                         .setRequired(false)
                 )
-                .addIntegerOption(opt =>
+                .addStringOption(opt =>
                     opt.setName('interval')
-                        .setDescription('Nový interval aktualizácie v minútach (2–60)')
-                        .setMinValue(2)
-                        .setMaxValue(60)
+                        .setDescription('Interval aktualizácie od 30s do 60m (napr. 30s, 1m, 5m, 60m)')
+                        .setMaxLength(10)
                         .setRequired(false)
                 )
         )
@@ -132,7 +134,7 @@ module.exports = {
 
         if (subcommand === 'setup') {
             const channel = interaction.options.getChannel('kanal');
-            const intervalInput = interaction.options.getInteger('interval');
+            const intervalInput = interaction.options.getString('interval');
 
             if (!hasStatusChannelPerms(guild, channel)) {
                 return interaction.reply({
@@ -141,16 +143,25 @@ module.exports = {
                 });
             }
 
+            const existingConfig = getCsStatusGuildConfig(guild.id);
+            let intervalSeconds = getConfigIntervalSeconds(existingConfig);
+
+            if (intervalInput !== null) {
+                const parsed = parseIntervalSeconds(intervalInput);
+                if (!parsed.ok) {
+                    return interaction.reply({ content: parsed.error, ephemeral: true });
+                }
+                intervalSeconds = parsed.seconds;
+            }
+
             await interaction.deferReply({ ephemeral: true });
 
-            const existingConfig = getCsStatusGuildConfig(guild.id);
             const channelChanged = existingConfig?.channelId !== channel.id;
-            const intervalMinutes = intervalInput ?? existingConfig?.intervalMinutes ?? CSSTATUS_DEFAULTS.intervalMinutes;
 
             setCsStatusGuildConfig(guild.id, {
                 channelId: channel.id,
                 messageId: channelChanged ? null : (existingConfig?.messageId || null),
-                intervalMinutes,
+                intervalSeconds,
                 lastUpdatedAt: 0
             });
 
@@ -182,7 +193,7 @@ module.exports = {
             }
 
             const channelInput = interaction.options.getChannel('kanal');
-            const intervalInput = interaction.options.getInteger('interval');
+            const intervalInput = interaction.options.getString('interval');
 
             if (channelInput === null && intervalInput === null) {
                 return interaction.reply({
@@ -198,6 +209,15 @@ module.exports = {
                 });
             }
 
+            let intervalSeconds = getConfigIntervalSeconds(existingConfig);
+            if (intervalInput !== null) {
+                const parsed = parseIntervalSeconds(intervalInput);
+                if (!parsed.ok) {
+                    return interaction.reply({ content: parsed.error, ephemeral: true });
+                }
+                intervalSeconds = parsed.seconds;
+            }
+
             await interaction.deferReply({ ephemeral: true });
 
             const channelChanged = Boolean(channelInput && channelInput.id !== existingConfig.channelId);
@@ -205,8 +225,9 @@ module.exports = {
                 ...existingConfig,
                 channelId: channelInput ? channelInput.id : existingConfig.channelId,
                 messageId: channelChanged ? null : existingConfig.messageId,
-                intervalMinutes: intervalInput ?? existingConfig.intervalMinutes ?? CSSTATUS_DEFAULTS.intervalMinutes
+                intervalSeconds
             };
+            delete updatedConfig.intervalMinutes;
 
             setCsStatusGuildConfig(guild.id, updatedConfig);
 

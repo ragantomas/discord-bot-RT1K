@@ -30,7 +30,9 @@ const PATCHBOT_DEFAULTS = {
 };
 
 const CSSTATUS_DEFAULTS = {
-    intervalMinutes: 5
+    intervalSeconds: 300,
+    minIntervalSeconds: 30,
+    maxIntervalSeconds: 3600
 };
 
 const TEMPVOICE_DEFAULTS = {
@@ -45,7 +47,7 @@ const INTERVALS = {
     RANK_UPDATE_DELAY_MS: 2000,
     DAILY_BACKUP_MS: 24 * 60 * 60 * 1000,
     PATCH_CHECK_MS: 5 * 60 * 1000,
-    CS_STATUS_TICK_MS: 60 * 1000
+    CS_STATUS_TICK_MS: 10 * 1000
 };
 
 module.exports = {
