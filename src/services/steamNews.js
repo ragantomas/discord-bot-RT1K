@@ -54,22 +54,61 @@ function resolveSteamImageUrl(rawUrl) {
     return /^https?:\/\//i.test(normalized) ? normalized : null;
 }
 
+const SPECIAL_UPPER_TOKENS = new Map([
+    'UI', 'HUD', 'CS2', 'CS:GO', 'FPS', 'VAC', 'VR', 'AI', 'GSI', 'HDR',
+    'DX11', 'GOTV', 'CSTV', 'XP', 'API', 'SDK', 'PGL', 'ESL', 'IEM', 'BLAST',
+    'AWP', 'AK-47', 'M4A4', 'M4A1-S', 'MP9', 'MP7', 'MP5-SD', 'P90', 'P250',
+    'CZ75-Auto', 'USP-S', 'SSG', 'SG', 'AUG', 'MAC-10', 'MAG-7', 'XM1014', 'R8'
+].map(token => [token.toUpperCase(), token]));
+
+function formatSectionTitle(rawTitle) {
+    return rawTitle
+        .trim()
+        .split(/\s+/)
+        .map(word => {
+            const exact = SPECIAL_UPPER_TOKENS.get(word.toUpperCase());
+            if (exact) return exact;
+
+            if (word.includes('-')) {
+                return word
+                    .split('-')
+                    .map(seg => {
+                        if (!seg) return seg;
+                        const segExact = SPECIAL_UPPER_TOKENS.get(seg.toUpperCase());
+                        if (segExact) return segExact;
+                        return seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase();
+                    })
+                    .join('-');
+            }
+
+            return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+        })
+        .join(' ');
+}
+
 function extractFirstImageUrl(contents) {
     if (!contents || typeof contents !== 'string') return null;
 
-    const bbMatch = contents.match(/\[img\]([^\[]+?)\[\/img\]/i);
-    if (bbMatch) {
-        const url = resolveSteamImageUrl(bbMatch[1]);
-        if (url) return url;
+    const candidates = [];
+    const patterns = [
+        /\[img\]([^\[]+?)\[\/img\]/gi,
+        /<img[^>]+src=["']([^"']+)["']/gi,
+        /\[video\b[^\]]*\bposter=["']([^"']+)["'][^\]]*\]/gi
+    ];
+
+    for (const pattern of patterns) {
+        for (const match of contents.matchAll(pattern)) {
+            const url = resolveSteamImageUrl(match[1]);
+            if (url) {
+                candidates.push({ index: match.index ?? 0, url });
+                break;
+            }
+        }
     }
 
-    const htmlMatch = contents.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (htmlMatch) {
-        const url = resolveSteamImageUrl(htmlMatch[1]);
-        if (url) return url;
-    }
-
-    return null;
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => a.index - b.index);
+    return candidates[0].url;
 }
 
 function decodeHtmlEntities(text) {
@@ -82,15 +121,128 @@ function decodeHtmlEntities(text) {
         .replace(/&nbsp;/gi, ' ');
 }
 
+function isPlainSubheading(line) {
+    if (!line || line.length > 60) return false;
+    if (line.startsWith('- ') || /^\*\*.*\*\*$/.test(line)) return false;
+    if (/[.!?,]$/.test(line)) return false;
+    if (/https?:\/\//i.test(line)) return false;
+    return true;
+}
+
+function formatLinesLikePatchBot(rawText) {
+    const rawLines = rawText.split('\n').map(line => line.trim());
+
+    // 1. Prvý priechod: rozpoznanie sekcií [ SECTION ], odrážok a nadpisov
+    const classified = rawLines.map(line => {
+        if (!line) return { type: 'blank', text: '' };
+
+        const sectionMatch = line.match(/^\*{0,2}\[\s*([^\[\]]+?)\s*\]\*{0,2}$/);
+        if (sectionMatch) {
+            return { type: 'section', text: `**${formatSectionTitle(sectionMatch[1])}**` };
+        }
+
+        if (line.startsWith('- ')) {
+            return { type: 'bullet', text: line };
+        }
+
+        if (/^\*\*.+\*\*$/.test(line)) {
+            return { type: 'heading', text: line };
+        }
+
+        return { type: 'text', text: line };
+    });
+
+    // 2. Rozpoznanie krátkych podnadpisov (napr. "Cobblestone", "Inferno") pred odrážkami
+    for (let i = 0; i < classified.length; i++) {
+        if (classified[i].type !== 'text') continue;
+
+        let nextNonBlank = null;
+        for (let j = i + 1; j < classified.length; j++) {
+            if (classified[j].type !== 'blank') {
+                nextNonBlank = classified[j];
+                break;
+            }
+        }
+
+        if (nextNonBlank?.type === 'bullet' && isPlainSubheading(classified[i].text)) {
+            classified[i] = { type: 'subheading', text: `**${classified[i].text}**` };
+        }
+    }
+
+    // 3. Druhý priechod: čisté medzery medzi sekciami, podnadpismi a odrážkami
+    const output = [];
+    let pendingBlank = false;
+    let lastType = null;
+
+    for (let i = 0; i < classified.length; i++) {
+        const item = classified[i];
+
+        if (item.type === 'blank') {
+            if (lastType !== null) pendingBlank = true;
+            continue;
+        }
+
+        let nextNonBlankType = null;
+        for (let j = i + 1; j < classified.length; j++) {
+            if (classified[j].type !== 'blank') {
+                nextNonBlankType = classified[j].type;
+                break;
+            }
+        }
+
+        let addBlankBefore = false;
+
+        if (lastType !== null) {
+            if (item.type === 'section') {
+                addBlankBefore = true;
+            } else if (item.type === 'subheading') {
+                addBlankBefore = lastType === 'bullet' || lastType === 'text';
+            } else if (item.type === 'heading') {
+                addBlankBefore = true;
+            } else if (item.type === 'bullet') {
+                addBlankBefore = false;
+            } else if (pendingBlank) {
+                const tightHeadingToBody = (lastType === 'section' || lastType === 'subheading' || lastType === 'heading')
+                    && (item.type === 'bullet' || item.type === 'subheading');
+                addBlankBefore = !tightHeadingToBody;
+            }
+        }
+
+        if (addBlankBefore && output.length > 0 && output[output.length - 1] !== '') {
+            output.push('');
+        }
+
+        output.push(item.text);
+        lastType = item.type;
+        pendingBlank = false;
+
+        // Potlačí prázdny riadok hneď po nadpise, ak nasleduje odrážka alebo podnadpis
+        if ((item.type === 'section' || item.type === 'subheading' || item.type === 'heading')
+            && (nextNonBlankType === 'bullet' || nextNonBlankType === 'subheading')) {
+            pendingBlank = false;
+        }
+    }
+
+    return output
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 function formatSteamContentsToMarkdown(contents) {
     if (!contents || typeof contents !== 'string') return '';
 
     let text = contents.replace(/\r\n/g, '\n');
 
-    // YouTube náhľady a obrázky (obrázok sa zobrazí samostatne v embede)
+    // Valve v príspevkoch escapuje hranaté zátvorky ako \[ MAPS ]
+    text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+
+    // YouTube náhľady, videá a obrázky (obrázok sa zobrazí samostatne v embede)
     text = text.replace(/\[previewyoutube=([^;\]]+)[^\]]*\]\[\/previewyoutube\]/gi, (_, videoId) => {
         return `https://youtu.be/${videoId.trim()}`;
     });
+    text = text.replace(/\[video\b[^\]]*\][\s\S]*?\[\/video\]/gi, '');
+    text = text.replace(/\[video\b[^\]]*\]/gi, '');
     text = text.replace(/\[img\][\s\S]*?\[\/img\]/gi, '');
     text = text.replace(/<img[^>]*>/gi, '');
 
@@ -107,8 +259,8 @@ function formatSteamContentsToMarkdown(contents) {
     });
 
     // Nadpisy
-    text = text.replace(/\[h[1-3]\]([\s\S]*?)\[\/h[1-3]\]/gi, '\n### $1\n');
-    text = text.replace(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi, '\n### $1\n');
+    text = text.replace(/\[h[1-3]\]([\s\S]*?)\[\/h[1-3]\]/gi, '\n\n**$1**\n');
+    text = text.replace(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/gi, '\n\n**$1**\n');
 
     // Základné formátovanie textu
     text = text.replace(/\[b\]([\s\S]*?)\[\/b\]/gi, '**$1**');
@@ -122,32 +274,29 @@ function formatSteamContentsToMarkdown(contents) {
     text = text.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, '`$1`');
     text = text.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`');
 
-    // Zoznamy a oddeľovače
+    // Zoznamy, odseky a oddeľovače
+    text = text.replace(/\[\*\]\s*(?:\[p\]|<p[^>]*>)/gi, '\n- ');
+    text = text.replace(/(?:\[\/p\]|<\/p>)\s*\[\/\*\]/gi, '\n');
+    text = text.replace(/\[\*\]\s*/gi, '\n- ');
+    text = text.replace(/\[\/\*\]/gi, '\n');
+    text = text.replace(/<li[^>]*>\s*/gi, '\n- ');
+    text = text.replace(/<\/li>/gi, '\n');
     text = text.replace(/\[\/?(?:list|olist)\]/gi, '\n');
     text = text.replace(/<\/?(?:ul|ol)[^>]*>/gi, '\n');
-    text = text.replace(/\[\*\]/gi, '\n• ');
-    text = text.replace(/\[\/\*\]/gi, '');
-    text = text.replace(/<li[^>]*>/gi, '\n• ');
-    text = text.replace(/<\/li>/gi, '');
 
     text = text.replace(/\[hr\]\[\/hr\]/gi, '\n───\n');
     text = text.replace(/<hr[^>]*>/gi, '\n───\n');
     text = text.replace(/<br\s*\/?>/gi, '\n');
-    text = text.replace(/<\/p>/gi, '\n');
-    text = text.replace(/<p[^>]*>/gi, '');
+    text = text.replace(/\[p\]|<p[^>]*>/gi, '\n');
+    text = text.replace(/\[\/p\]|<\/p>/gi, '\n');
 
     // Odstránenie zvyšných HTML a BBCode značiek bez rozbitia Markdown odkazov [text](url)
     text = text.replace(/<[^>]+>/g, '');
-    text = text.replace(/\[\/?(?:quote|spoiler|table|tr|td|th|noparse|p|expand|dynamiclink|carousel)[^\]]*\]/gi, '');
+    text = text.replace(/\[\/?(?:quote|spoiler|table|tr|td|th|noparse|p|expand|dynamiclink|carousel|video)[^\]]*\]/gi, '');
 
     text = decodeHtmlEntities(text);
 
-    return text
-        .split('\n')
-        .map(line => line.trimEnd())
-        .join('\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
+    return formatLinesLikePatchBot(text);
 }
 
 function truncateForEmbed(text, maxLength = 3800, readMoreUrl = null) {

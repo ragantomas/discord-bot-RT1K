@@ -15,6 +15,8 @@ const MODE_LABELS = {
     patchnotes: 'Len Patch Notes (Release Notes)'
 };
 
+const CS2_ICON_URL = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/730/8dbc71957312bbd3baea65848b545be9eae2a355.jpg';
+
 function isPatchNoteItem(item) {
     return (Array.isArray(item?.tags) && item.tags.includes('patchnotes'))
         || /^Release Notes/i.test(item?.title || '');
@@ -27,8 +29,10 @@ function buildPatchMessagePayload(item, roleId = null, guildId = null) {
 
     const patchNote = isPatchNoteItem(item);
     const embed = new EmbedBuilder()
+        .setAuthor({ name: 'Counter-Strike 2' })
         .setTitle((item?.title || 'Counter-Strike 2 Update').slice(0, 256))
         .setColor(patchNote ? 0xF5A623 : 0x5865F2)
+        .setThumbnail(CS2_ICON_URL)
         .setDescription(description)
         .setFooter({ text: patchNote ? 'CS2 Patch Notes • Steam' : 'CS2 Oznámenie • Steam' });
 
