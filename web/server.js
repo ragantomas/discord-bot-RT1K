@@ -1295,7 +1295,7 @@ function startWebServer(client) {
             restored.push('users');
         }
 
-        updateBotStatus(client);
+        updateBotStatus(client, { force: true });
         addActivityLog({
             level: 'warn',
             category: 'dashboard',

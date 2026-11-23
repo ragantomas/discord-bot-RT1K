@@ -12,7 +12,11 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildVoiceStates
     ],
-    partials: [Partials.Message]
+    partials: [Partials.Message],
+    presence: {
+        activities: [],
+        status: 'online'
+    }
 });
 
 loadCommands(client);

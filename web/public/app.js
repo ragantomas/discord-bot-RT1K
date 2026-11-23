@@ -2403,7 +2403,7 @@ function renderSettings() {
 
                 <div class="space-y-2">
                     <label for="set-status-text" class="text-xs font-medium text-slate-400">Text statusu</label>
-                    <input id="set-status-text" type="text" maxlength="128" class="input-field" value="${escapeHtml(statusText)}" placeholder="Napr. 🎮 Sleduje {players} CS2 hráčov | {members} členov" />
+                    <input id="set-status-text" type="text" maxlength="128" class="input-field" value="${escapeHtml(statusText)}" />
                 </div>
 
                 <div class="space-y-2">

@@ -9,7 +9,7 @@ module.exports = {
     once: true,
     async execute(client) {
         console.log(`Bot je online ako ${client.user.tag}!`);
-        updateBotStatus(client);
+        updateBotStatus(client, { force: true });
 
         await registerCommands(client);
         await cleanupTempRoomsOnStartup(client);

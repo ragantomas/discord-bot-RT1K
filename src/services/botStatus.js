@@ -90,7 +90,7 @@ function updateBotStatus(client, { force = false } = {}) {
 
     if (!template) {
         if (force || lastAppliedState !== '') {
-            client.user.setPresence({ activities: [] });
+            client.user.setPresence({ activities: [], status: 'online', afk: false });
             lastAppliedState = '';
         }
         return;
@@ -99,7 +99,7 @@ function updateBotStatus(client, { force = false } = {}) {
     const resolved = resolveBotStatusText(template, client).trim().slice(0, 128);
     if (!resolved) {
         if (force || lastAppliedState !== '') {
-            client.user.setPresence({ activities: [] });
+            client.user.setPresence({ activities: [], status: 'online', afk: false });
             lastAppliedState = '';
         }
         return;
