@@ -5,7 +5,7 @@ const {
 } = require('../storage/joinRolesStore');
 
 module.exports = {
-    name: Events.RoleDelete,
+    name: Events.GuildRoleDelete,
     execute(role) {
         if (!role?.guild?.id) return;
 
