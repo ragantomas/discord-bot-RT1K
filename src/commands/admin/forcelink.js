@@ -34,13 +34,14 @@ module.exports = {
             return interaction.editReply('Nepodarilo sa nájsť Steam64 ID. Zadaj platné 17-miestne ID, Steam link (aj `/id/...`) alebo Leetify link.');
         }
 
+        const result = await updateMemberRank(targetMember, steamId);
+        if (result.error) return interaction.editReply(result.error);
+
         const users = loadUsers();
-        users[targetUser.id] = { steamId, elo: null };
+        users[targetUser.id] = { steamId, elo: result.elo };
         saveUsers(users);
         updateBotStatus(interaction.client);
 
-        const result = await updateMemberRank(targetMember, steamId, users);
-        if (result.error) return interaction.editReply(result.error);
         if (result.elo === null) {
             return interaction.editReply(`Účet pre <@${targetUser.id}> bol prepojený (priradená rola **Unranked**).`);
         }
