@@ -5,7 +5,6 @@ const state = {
     meta: null,
     players: [],
     playerSearch: '',
-    memberFilter: '',
     settings: null,
     steamApiKeyConfigured: false,
     tempRooms: [],
@@ -254,19 +253,26 @@ function buildCategoryOptions(selectedId) {
     return html;
 }
 
-function buildMemberOptions(filterText = '') {
+function buildMemberDropdownItemsHtml(query = '') {
     const members = state.meta?.members || [];
-    const q = filterText.trim().toLowerCase();
+    const q = query.trim().toLowerCase();
     const filtered = q
         ? members.filter(m => m.displayName.toLowerCase().includes(q) || m.username.toLowerCase().includes(q) || m.id.includes(q))
         : members;
 
     if (filtered.length === 0) {
-        return '<option value="">Žiadny člen nevyhovuje filtru</option>';
+        return '<div class="px-3.5 py-3 text-xs text-slate-400 text-center">Žiadny člen nevyhovuje hľadaniu.</div>';
     }
-    return filtered
-        .map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.displayName)} (@${escapeHtml(m.username)})</option>`)
-        .join('');
+
+    return filtered.slice(0, 60).map(m => `
+        <button type="button" data-member-pick="${escapeHtml(m.id)}" data-member-label="${escapeHtml(`${m.displayName} (@${m.username})`)}" class="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-bg-hover transition">
+            <img src="${escapeHtml(m.avatarUrl)}" alt="" class="w-7 h-7 rounded-full object-cover bg-bg-base shrink-0" />
+            <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium text-white truncate">${escapeHtml(m.displayName)}</div>
+                <div class="text-xs text-slate-400 truncate">@${escapeHtml(m.username)}</div>
+            </div>
+        </button>
+    `).join('');
 }
 
 function renderAddButtonHtml(id, label) {
@@ -515,17 +521,21 @@ function renderPlayers() {
             <form id="force-link-form" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                 <div class="md:col-span-5 space-y-1.5">
                     <label class="text-xs font-medium text-slate-400">Člen servera</label>
-                    <input id="fl-member-filter" type="text" placeholder="Filtrovať člena podľa mena..." class="input-field mb-1.5 text-xs py-1.5" value="${escapeHtml(state.memberFilter)}" />
-                    <select id="fl-user-id" class="input-field">
-                        ${buildMemberOptions(state.memberFilter)}
-                    </select>
+                    <div id="fl-member-combobox" class="relative">
+                        <input id="fl-user-id" type="hidden" value="" />
+                        <input id="fl-member-input" type="text" autocomplete="off" placeholder="Vyber alebo vyhľadaj člena..." class="input-field pr-9" />
+                        <button id="fl-member-clear" type="button" title="Vymazať výber" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-white hover:bg-bg-hover transition">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <div id="fl-member-dropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 z-30 max-h-64 overflow-y-auto rounded-xl bg-bg-surface border border-slate-700 shadow-2xl divide-y divide-slate-800/70"></div>
+                    </div>
                 </div>
                 <div class="md:col-span-5 space-y-1.5">
                     <label class="text-xs font-medium text-slate-400">Steam64 ID, Steam link alebo Leetify URL</label>
                     <input id="fl-profile" type="text" required placeholder="https://steamcommunity.com/id/... alebo 7656119..." class="input-field" />
                 </div>
                 <div class="md:col-span-2">
-                    <button id="fl-submit-btn" type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
+                    <button id="fl-submit-btn" type="submit" class="w-full h-[42px] inline-flex items-center justify-center gap-2 px-4 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="plus" class="w-4 h-4"></i>
                         <span>Prepojiť</span>
                     </button>
@@ -566,16 +576,61 @@ function renderPlayers() {
         </div>
     `;
 
-    document.getElementById('fl-member-filter').addEventListener('input', e => {
-        state.memberFilter = e.target.value;
-        document.getElementById('fl-user-id').innerHTML = buildMemberOptions(state.memberFilter);
+    const memberInput = document.getElementById('fl-member-input');
+    const memberHidden = document.getElementById('fl-user-id');
+    const memberClear = document.getElementById('fl-member-clear');
+    const memberDropdown = document.getElementById('fl-member-dropdown');
+
+    function openMemberDropdown(query = '') {
+        memberDropdown.innerHTML = buildMemberDropdownItemsHtml(query);
+        memberDropdown.classList.remove('hidden');
+        memberDropdown.querySelectorAll('[data-member-pick]').forEach(item => {
+            item.addEventListener('click', () => {
+                memberHidden.value = item.dataset.memberPick;
+                memberInput.value = item.dataset.memberLabel;
+                memberClear.classList.remove('hidden');
+                memberDropdown.classList.add('hidden');
+            });
+        });
+    }
+
+    memberInput.addEventListener('focus', () => {
+        const query = memberHidden.value ? '' : memberInput.value;
+        openMemberDropdown(query);
+    });
+
+    memberInput.addEventListener('input', () => {
+        memberHidden.value = '';
+        memberClear.classList.toggle('hidden', !memberInput.value);
+        openMemberDropdown(memberInput.value);
+    });
+
+    memberInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            memberDropdown.classList.add('hidden');
+        }
+    });
+
+    memberClear.addEventListener('click', () => {
+        memberHidden.value = '';
+        memberInput.value = '';
+        memberClear.classList.add('hidden');
+        openMemberDropdown('');
+        memberInput.focus();
     });
 
     document.getElementById('force-link-form').addEventListener('submit', async e => {
         e.preventDefault();
-        const userId = document.getElementById('fl-user-id').value;
+        const userId = memberHidden.value;
         const profile = document.getElementById('fl-profile').value.trim();
         const btn = document.getElementById('fl-submit-btn');
+
+        if (!userId) {
+            showToast('Najprv vyber člena servera zo zoznamu.', 'error');
+            memberInput.focus();
+            openMemberDropdown(memberInput.value);
+            return;
+        }
 
         await setButtonLoading(btn, true, 'Prepájam...');
         try {
@@ -585,6 +640,9 @@ function renderPlayers() {
             });
             const eloText = typeof res.elo === 'number' ? res.elo.toLocaleString('sk-SK') : 'Unranked';
             showToast(`Účet prepojený (${eloText}).`);
+            memberHidden.value = '';
+            memberInput.value = '';
+            memberClear.classList.add('hidden');
             document.getElementById('fl-profile').value = '';
             await refreshOverviewAndPlayers();
         } catch (err) {
@@ -1868,6 +1926,12 @@ async function bootstrap() {
         showToast('Nepodarilo sa načítať dashboard.', 'error');
     }
 }
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('#fl-member-combobox')) {
+        document.getElementById('fl-member-dropdown')?.classList.add('hidden');
+    }
+});
 
 document.addEventListener('visibilitychange', () => {
     if (!document.hidden && state.auth?.authorized) {
