@@ -5,6 +5,10 @@ const {
     getTempRoom,
     deleteTempRoom
 } = require('../storage/tempVoiceStore');
+const {
+    getPatchGuildConfig,
+    setPatchGuildConfig
+} = require('../storage/patchBotStore');
 
 module.exports = {
     name: Events.ChannelDelete,
@@ -19,6 +23,13 @@ module.exports = {
                 guildConfig.triggerChannelId = null;
                 setGuildConfig(channel.guildId, guildConfig);
                 console.warn(`Spúšťací TempVoice kanál na serveri ${channel.guildId} bol zmazaný.`);
+            }
+
+            const patchConfig = getPatchGuildConfig(channel.guildId);
+            if (patchConfig?.channelId === channel.id) {
+                patchConfig.channelId = null;
+                setPatchGuildConfig(channel.guildId, patchConfig);
+                console.warn(`Kanál pre CS2 PatchBota na serveri ${channel.guildId} bol zmazaný.`);
             }
         }
     }

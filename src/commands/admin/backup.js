@@ -12,12 +12,12 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         if (!hasAnyBackupFile()) {
-            return interaction.editReply('Zatiaľ neexistuje žiadny databázový súbor (`users.json` ani `tempvoice.json`).');
+            return interaction.editReply('Zatiaľ neexistuje žiadny databázový súbor.');
         }
 
         try {
             await sendBackupToUser(interaction.user, 'Manuálna záloha');
-            return interaction.editReply('✅ Záloha dostupných databázových súborov (`users.json` / `tempvoice.json`) ti bola poslaná do DM.');
+            return interaction.editReply('✅ Záloha databázových súborov ti bola poslaná do DM.');
         } catch (err) {
             console.error(err);
             return interaction.editReply('❌ Nepodarilo sa ti poslať DM. Skontroluj, či máš povolené súkromné správy z tohto servera.');

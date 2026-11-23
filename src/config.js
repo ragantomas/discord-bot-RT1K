@@ -17,6 +17,14 @@ const ALL_RANK_ROLE_IDS = [...RANK_ROLES.map(r => r.roleId), UNRANKED_ROLE_ID];
 
 const DB_FILE = path.join(__dirname, '..', 'users.json');
 const TEMPVOICE_DB_FILE = path.join(__dirname, '..', 'tempvoice.json');
+const PATCHBOT_DB_FILE = path.join(__dirname, '..', 'patchbot.json');
+
+const CS2_APP_ID = 730;
+
+const PATCHBOT_DEFAULTS = {
+    mode: 'all',
+    roleId: null
+};
 
 const TEMPVOICE_DEFAULTS = {
     triggerName: '➕ Vytvoriť miestnosť',
@@ -28,7 +36,8 @@ const TEMPVOICE_DEFAULTS = {
 const INTERVALS = {
     RANK_UPDATE_MS: 1 * 60 * 60 * 1000,
     RANK_UPDATE_DELAY_MS: 2000,
-    DAILY_BACKUP_MS: 24 * 60 * 60 * 1000
+    DAILY_BACKUP_MS: 24 * 60 * 60 * 1000,
+    PATCH_CHECK_MS: 5 * 60 * 1000
 };
 
 module.exports = {
@@ -36,8 +45,11 @@ module.exports = {
     UNRANKED_ROLE_ID,
     RANK_ROLES,
     ALL_RANK_ROLE_IDS,
+    CS2_APP_ID,
     DB_FILE,
     TEMPVOICE_DB_FILE,
+    PATCHBOT_DB_FILE,
+    PATCHBOT_DEFAULTS,
     TEMPVOICE_DEFAULTS,
     INTERVALS
 };
