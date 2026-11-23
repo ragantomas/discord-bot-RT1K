@@ -44,6 +44,21 @@ function resolvePrimaryGuild(client) {
     return client.guilds.cache.first() || null;
 }
 
+function pickSlovakPlural(count, formsStr) {
+    const parts = String(formsStr || '').split('|');
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0];
+
+    const n = Math.abs(Math.round(Number(count) || 0));
+    if (parts.length === 2) {
+        return n === 1 ? parts[0] : parts[1];
+    }
+
+    if (n === 1) return parts[0];
+    if (n >= 2 && n <= 4) return parts[1];
+    return parts[2];
+}
+
 function resolveBotStatusText(template, client) {
     const raw = typeof template === 'string' ? template : '';
     if (!raw) return '';
@@ -52,13 +67,22 @@ function resolveBotStatusText(template, client) {
     const users = loadUsers();
     const userEntries = Object.values(users);
 
-    const players = String(userEntries.length);
-    const members = String(guild?.memberCount ?? 0);
+    const playersCount = userEntries.length;
+    const membersCount = guild?.memberCount ?? 0;
 
     const roomsMap = getAllTempRooms() || {};
     const activeRoomsCount = guild
         ? Object.values(roomsMap).filter(r => r && r.guildId === guild.id && guild.channels.cache.has(r.channelId)).length
         : Object.keys(roomsMap).length;
+
+    const pluralCounts = {
+        players: playersCount,
+        members: membersCount,
+        rooms: activeRoomsCount
+    };
+
+    const players = String(playersCount);
+    const members = String(membersCount);
     const rooms = String(activeRoomsCount);
 
     const topEloVal = userEntries.reduce(
@@ -74,6 +98,9 @@ function resolveBotStatusText(template, client) {
     const uptime = formatCompactUptime(client?.uptime || 0);
 
     return raw
+        .replace(/\{(players|members|rooms):([^{}]+)\}/gi, (_, key, formsStr) => (
+            pickSlovakPlural(pluralCounts[key.toLowerCase()], formsStr)
+        ))
         .replace(/\{players\}/gi, players)
         .replace(/\{members\}/gi, members)
         .replace(/\{rooms\}/gi, rooms)
@@ -119,6 +146,7 @@ module.exports = {
     BOT_STATUS_VARIABLES,
     formatCompactUptime,
     formatNumberWithSpaces,
+    pickSlovakPlural,
     resolveBotStatusText,
     updateBotStatus
 };

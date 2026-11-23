@@ -883,14 +883,38 @@ function formatCompactUptime(ms) {
     return `${days}d ${hours}h`;
 }
 
+function pickSlovakPlural(count, formsStr) {
+    const parts = String(formsStr || '').split('|');
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0];
+
+    const n = Math.abs(Math.round(Number(count) || 0));
+    if (parts.length === 2) {
+        return n === 1 ? parts[0] : parts[1];
+    }
+
+    if (n === 1) return parts[0];
+    if (n >= 2 && n <= 4) return parts[1];
+    return parts[2];
+}
+
 function resolveBotStatusPreview(template) {
     const raw = typeof template === 'string' ? template.trim() : '';
     if (!raw) return '';
 
     const ov = state.overview || {};
-    const players = String(ov.stats?.linkedPlayersCount ?? state.players?.length ?? 0);
-    const members = String(ov.guild?.memberCount ?? 0);
-    const rooms = String(ov.stats?.activeTempRoomsCount ?? state.tempRooms?.length ?? 0);
+    const playersCount = Number(ov.stats?.linkedPlayersCount ?? state.players?.length ?? 0);
+    const membersCount = Number(ov.guild?.memberCount ?? 0);
+    const roomsCount = Number(ov.stats?.activeTempRoomsCount ?? state.tempRooms?.length ?? 0);
+    const pluralCounts = {
+        players: playersCount,
+        members: membersCount,
+        rooms: roomsCount
+    };
+
+    const players = String(playersCount);
+    const members = String(membersCount);
+    const rooms = String(roomsCount);
     const topEloNum = Number(ov.stats?.topElo ?? 0);
     const topElo = topEloNum > 0
         ? Math.round(topEloNum).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -899,6 +923,9 @@ function resolveBotStatusPreview(template) {
     const uptime = formatCompactUptime(ov.bot?.uptimeMs ?? 0);
 
     return raw
+        .replace(/\{(players|members|rooms):([^{}]+)\}/gi, (_, key, formsStr) => (
+            pickSlovakPlural(pluralCounts[key.toLowerCase()], formsStr)
+        ))
         .replace(/\{players\}/gi, players)
         .replace(/\{members\}/gi, members)
         .replace(/\{rooms\}/gi, rooms)
@@ -2555,6 +2582,9 @@ function renderSettings() {
                             </button>
                         `).join('')}
                     </div>
+                    <p class="text-xs text-slate-400">
+                        Skloňovanie podľa čísla: <code class="text-sky-300">{players:hráča|hráčov}</code> (1 / ostatné) alebo <code class="text-sky-300">{rooms:miestnosť|miestnosti|miestností}</code> (1 / 2–4 / 0, 5+).
+                    </p>
                 </div>
 
                 <div class="rounded-xl bg-bg-elevated/70 border border-slate-800 px-3.5 py-2.5 flex items-center justify-between gap-3">
