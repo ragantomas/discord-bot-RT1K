@@ -73,9 +73,7 @@ function getDefaultSettings() {
             lastUpdatedAt: 0
         },
         botStatus: {
-            mode: 'auto',
-            customText: '',
-            activityType: 'Custom'
+            text: ''
         },
         rankFeed: {
             enabled: false,
@@ -153,7 +151,9 @@ function normalizeSettings(raw) {
     const rf = src.rankFeed && typeof src.rankFeed === 'object' ? src.rankFeed : {};
     const al = src.adminLog && typeof src.adminLog === 'object' ? src.adminLog : {};
     const alEvents = al.events && typeof al.events === 'object' ? al.events : {};
-    const allowedActivityTypes = new Set(['Custom', 'Playing', 'Watching', 'Listening', 'Competing']);
+    const rawBotStatusText = typeof bs.text === 'string'
+        ? bs.text
+        : (bs.mode === 'custom' && typeof bs.customText === 'string' ? bs.customText : '');
 
     // TempVoice: migrácia starého jednotného objektu na pole setups[]
     let rawSetups = Array.isArray(tv.setups) ? tv.setups : null;
@@ -238,9 +238,7 @@ function normalizeSettings(raw) {
             lastUpdatedAt: typeof cs.lastUpdatedAt === 'number' ? cs.lastUpdatedAt : 0
         },
         botStatus: {
-            mode: bs.mode === 'custom' ? 'custom' : 'auto',
-            customText: typeof bs.customText === 'string' ? bs.customText.trim().slice(0, 128) : '',
-            activityType: allowedActivityTypes.has(bs.activityType) ? bs.activityType : 'Custom'
+            text: rawBotStatusText.trim().slice(0, 128)
         },
         rankFeed: {
             enabled: typeof rf.enabled === 'boolean' ? rf.enabled : false,
@@ -528,6 +526,53 @@ function addAnnouncementHistory(entry) {
     }).announcementsHistory;
 }
 
+function removeAnnouncementHistory(channelId, messageId) {
+    const targetMsgId = String(messageId || '').trim();
+    const targetChanId = channelId ? String(channelId).trim() : null;
+    if (!targetMsgId) return getAnnouncementsHistory();
+
+    return updateSettings(s => {
+        s.announcementsHistory = (s.announcementsHistory || []).filter(
+            item => !(item.messageId === targetMsgId && (!targetChanId || item.channelId === targetChanId))
+        );
+    }).announcementsHistory;
+}
+
+function removeAnnouncementsByIds(messageIds) {
+    const idSet = new Set([...(messageIds || [])].map(id => String(id)));
+    if (idSet.size === 0) return getAnnouncementsHistory();
+
+    const current = loadSettings().announcementsHistory || [];
+    const filtered = current.filter(item => !idSet.has(item.messageId));
+    if (filtered.length === current.length) return current;
+
+    return updateSettings(s => {
+        s.announcementsHistory = (s.announcementsHistory || []).filter(item => !idSet.has(item.messageId));
+    }).announcementsHistory;
+}
+
+function removeAnnouncementsByChannel(channelId) {
+    const targetChanId = String(channelId || '').trim();
+    if (!targetChanId) return getAnnouncementsHistory();
+
+    const current = loadSettings().announcementsHistory || [];
+    const filtered = current.filter(item => item.channelId !== targetChanId);
+    if (filtered.length === current.length) return current;
+
+    return updateSettings(s => {
+        s.announcementsHistory = (s.announcementsHistory || []).filter(item => item.channelId !== targetChanId);
+    }).announcementsHistory;
+}
+
+function setAnnouncementsHistory(entries) {
+    const normalized = Array.isArray(entries)
+        ? entries.filter(item => item && item.channelId && item.messageId).slice(0, 15)
+        : [];
+    return updateSettings(s => {
+        s.announcementsHistory = normalized;
+    }).announcementsHistory;
+}
+
 module.exports = {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -561,5 +606,9 @@ module.exports = {
     getAdminLogSettings,
     updateAdminLogSettings,
     getAnnouncementsHistory,
-    addAnnouncementHistory
+    addAnnouncementHistory,
+    removeAnnouncementHistory,
+    removeAnnouncementsByIds,
+    removeAnnouncementsByChannel,
+    setAnnouncementsHistory
 };

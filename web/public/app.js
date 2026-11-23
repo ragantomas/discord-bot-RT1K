@@ -44,6 +44,14 @@ const OAUTH_ERRORS = {
 };
 
 const LIVE_POLL_MS = 5000;
+const BOT_STATUS_VARIABLES = [
+    { token: '{players}', label: 'Prepojení hráči' },
+    { token: '{members}', label: 'Členovia servera' },
+    { token: '{rooms}', label: 'Aktívne TempVoice' },
+    { token: '{top_elo}', label: 'Najvyššie Elo' },
+    { token: '{ping}', label: 'Ping bota' },
+    { token: '{uptime}', label: 'Uptime bota' }
+];
 let livePollTimer = null;
 let uptimeTickTimer = null;
 let isLivePolling = false;
@@ -855,10 +863,110 @@ function updateAnnouncementPreview() {
     `;
 }
 
+function formatCompactUptime(ms) {
+    const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+    if (totalSeconds < 60) return '<1m';
+
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    if (totalMinutes < 60) return `${totalMinutes}m`;
+
+    const totalHours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (totalHours < 24) return `${totalHours}h ${minutes}m`;
+
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+    return `${days}d ${hours}h`;
+}
+
+function resolveBotStatusPreview(template) {
+    const raw = typeof template === 'string' ? template.trim() : '';
+    if (!raw) return '';
+
+    const ov = state.overview || {};
+    const players = String(ov.stats?.linkedPlayersCount ?? state.players?.length ?? 0);
+    const members = String(ov.guild?.memberCount ?? 0);
+    const rooms = String(ov.stats?.activeTempRoomsCount ?? state.tempRooms?.length ?? 0);
+    const topEloNum = Number(ov.stats?.topElo ?? 0);
+    const topElo = topEloNum > 0
+        ? Math.round(topEloNum).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+        : '0';
+    const ping = `${Number(ov.bot?.ping ?? 0)}ms`;
+    const uptime = formatCompactUptime(ov.bot?.uptimeMs ?? 0);
+
+    return raw
+        .replace(/\{players\}/gi, players)
+        .replace(/\{members\}/gi, members)
+        .replace(/\{rooms\}/gi, rooms)
+        .replace(/\{top_elo\}/gi, topElo)
+        .replace(/\{ping\}/gi, ping)
+        .replace(/\{uptime\}/gi, uptime);
+}
+
+function renderAnnouncementsHistoryBlock() {
+    const host = document.getElementById('ann-history-container');
+    if (!host) return;
+
+    const history = state.announcementsHistory || [];
+    const editing = state.editingAnnouncement;
+
+    if (history.length === 0) {
+        host.innerHTML = '';
+        return;
+    }
+
+    host.innerHTML = `
+        <div class="p-3.5 rounded-xl bg-bg-elevated/70 border border-slate-800 space-y-1.5">
+            <label class="text-xs font-medium text-slate-400">Načítať a upraviť posledné oznámenie (voliteľné)</label>
+            <select id="ann-history-select" class="input-field">
+                <option value="">— Vytvoriť nové oznámenie —</option>
+                ${history.map((h, i) => `
+                    <option value="${i}" ${editing && editing.messageId === h.messageId ? 'selected' : ''}>
+                        #${escapeHtml(h.channelName || h.channelId)} — ${escapeHtml(h.title || h.content || 'Bez nadpisu')}
+                    </option>
+                `).join('')}
+            </select>
+        </div>
+    `;
+
+    const histSelect = document.getElementById('ann-history-select');
+    if (histSelect) {
+        histSelect.addEventListener('change', () => {
+            const idx = histSelect.value;
+            state.editingAnnouncement = idx === '' ? null : state.announcementsHistory[Number(idx)] || null;
+            renderAnnouncements();
+        });
+    }
+}
+
+async function refreshAnnouncementsHistory() {
+    try {
+        const res = await apiFetch('/api/announcements/history');
+        const nextHistory = Array.isArray(res.history) ? res.history : [];
+        state.announcementsHistory = nextHistory;
+
+        if (state.editingAnnouncement && !nextHistory.some(
+            h => h.channelId === state.editingAnnouncement.channelId && h.messageId === state.editingAnnouncement.messageId
+        )) {
+            state.editingAnnouncement = null;
+            showToast('Upravované oznámenie bolo zmazané na Discorde.', 'info');
+            if (state.activeSection === 'announcements') {
+                renderAnnouncements();
+            }
+            return;
+        }
+
+        if (state.activeSection === 'announcements') {
+            renderAnnouncementsHistoryBlock();
+        }
+    } catch {
+        // Ignorujeme dočasný výpadok pri synchronizácii histórie
+    }
+}
+
 function renderAnnouncements() {
     const container = document.getElementById('section-announcements');
     const editing = state.editingAnnouncement;
-    const history = state.announcementsHistory || [];
 
     container.innerHTML = `
         <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
@@ -875,19 +983,7 @@ function renderAnnouncements() {
                     ` : ''}
                 </div>
 
-                ${history.length > 0 ? `
-                    <div class="p-3.5 rounded-xl bg-bg-elevated/70 border border-slate-800 space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Načítať a upraviť posledné oznámenie (voliteľné)</label>
-                        <select id="ann-history-select" class="input-field">
-                            <option value="">— Vytvoriť nové oznámenie —</option>
-                            ${history.map((h, i) => `
-                                <option value="${i}" ${editing && editing.messageId === h.messageId ? 'selected' : ''}>
-                                    #${escapeHtml(h.channelName || h.channelId)} — ${escapeHtml(h.title || h.content || 'Bez nadpisu')}
-                                </option>
-                            `).join('')}
-                        </select>
-                    </div>
-                ` : ''}
+                <div id="ann-history-container"></div>
 
                 <form id="ann-form" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -984,14 +1080,7 @@ function renderAnnouncements() {
             }
         });
 
-    const histSelect = document.getElementById('ann-history-select');
-    if (histSelect) {
-        histSelect.addEventListener('change', () => {
-            const idx = histSelect.value;
-            state.editingAnnouncement = idx === '' ? null : state.announcementsHistory[Number(idx)] || null;
-            renderAnnouncements();
-        });
-    }
+    renderAnnouncementsHistoryBlock();
 
     const cancelEditBtn = document.getElementById('ann-cancel-edit');
     if (cancelEditBtn) {
@@ -1033,6 +1122,9 @@ function renderAnnouncements() {
             showToast(editing ? 'Oznámenie bolo upravené.' : 'Oznámenie bolo odoslané do kanála.');
         } catch (err) {
             showToast(err.message, 'error');
+            if (editing) {
+                refreshAnnouncementsHistory();
+            }
         } finally {
             await setButtonLoading(btn, false);
         }
@@ -2269,7 +2361,8 @@ function renderAdminLog() {
 function renderSettings() {
     const container = document.getElementById('section-settings');
     const s = state.settings || {};
-    const bs = s.botStatus || { mode: 'auto', customText: '', activityType: 'Custom' };
+    const statusText = typeof s.botStatus?.text === 'string' ? s.botStatus.text : '';
+    const statusPreview = resolveBotStatusPreview(statusText);
     const rankRoles = Array.isArray(s.rankRoles) ? s.rankRoles : [];
 
     container.innerHTML = `
@@ -2299,36 +2392,37 @@ function renderSettings() {
                 </div>
             </div>
 
-            <div class="card p-6 space-y-5">
-                <h3 class="text-base font-semibold text-white flex items-center gap-2">
-                    <i data-lucide="sparkles" class="w-4 h-4 text-sky-400"></i>
-                    <span>Status / aktivita bota na Discorde</span>
-                </h3>
+            <div class="card p-6 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-sky-400"></i>
+                        <span>Status / aktivita bota na Discorde</span>
+                    </h3>
+                    <span class="text-xs text-slate-400">Nechaj prázdne, ak nechceš mať nastavený žiadny status.</span>
+                </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Režim statusu</label>
-                        <select id="set-status-mode" class="input-field">
-                            <option value="auto" ${bs.mode !== 'custom' ? 'selected' : ''}>Automaticky (Sleduje X CS2 hráčov)</option>
-                            <option value="custom" ${bs.mode === 'custom' ? 'selected' : ''}>Vlastný text statusu</option>
-                        </select>
-                    </div>
+                <div class="space-y-2">
+                    <label for="set-status-text" class="text-xs font-medium text-slate-400">Text statusu</label>
+                    <input id="set-status-text" type="text" maxlength="128" class="input-field" value="${escapeHtml(statusText)}" placeholder="Napr. 🎮 Sleduje {players} CS2 hráčov | {members} členov" />
+                </div>
 
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Typ aktivity</label>
-                        <select id="set-status-type" class="input-field" ${bs.mode !== 'custom' ? 'disabled' : ''}>
-                            <option value="Custom" ${bs.activityType === 'Custom' ? 'selected' : ''}>Vlastný status (Custom)</option>
-                            <option value="Playing" ${bs.activityType === 'Playing' ? 'selected' : ''}>Playing</option>
-                            <option value="Watching" ${bs.activityType === 'Watching' ? 'selected' : ''}>Watching</option>
-                            <option value="Listening" ${bs.activityType === 'Listening' ? 'selected' : ''}>Listening</option>
-                            <option value="Competing" ${bs.activityType === 'Competing' ? 'selected' : ''}>Competing</option>
-                        </select>
+                <div class="space-y-2">
+                    <p class="text-xs font-medium text-slate-400">Kliknutím vložíš dynamickú premennú:</p>
+                    <div class="flex flex-wrap gap-2">
+                        ${BOT_STATUS_VARIABLES.map(v => `
+                            <button type="button" class="status-var-chip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700/80 hover:border-brand/60 text-xs transition" data-var="${escapeHtml(v.token)}">
+                                <code class="text-sky-300 font-semibold">${escapeHtml(v.token)}</code>
+                                <span class="text-slate-400">${escapeHtml(v.label)}</span>
+                            </button>
+                        `).join('')}
                     </div>
+                </div>
 
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Vlastný text</label>
-                        <input id="set-status-text" type="text" maxlength="128" class="input-field" value="${escapeHtml(bs.customText || '')}" placeholder="Napr. Counter-Strike 2" ${bs.mode !== 'custom' ? 'disabled' : ''} />
-                    </div>
+                <div class="rounded-xl bg-bg-elevated/70 border border-slate-800 px-3.5 py-2.5 flex items-center justify-between gap-3">
+                    <span class="text-xs font-medium text-slate-400">Náhľad na Discorde:</span>
+                    <span id="set-status-preview" class="text-xs font-medium ${statusPreview ? 'text-slate-200' : 'text-slate-500 italic'} truncate">
+                        ${statusPreview ? escapeHtml(statusPreview) : 'Bez nastaveného statusu'}
+                    </span>
                 </div>
             </div>
 
@@ -2382,13 +2476,41 @@ function renderSettings() {
         </form>
     `;
 
-    const modeSelect = document.getElementById('set-status-mode');
-    const typeSelect = document.getElementById('set-status-type');
     const textInput = document.getElementById('set-status-text');
-    modeSelect.addEventListener('change', () => {
-        const isCustom = modeSelect.value === 'custom';
-        typeSelect.disabled = !isCustom;
-        textInput.disabled = !isCustom;
+    const statusPreviewEl = document.getElementById('set-status-preview');
+
+    function syncStatusPreview() {
+        if (!statusPreviewEl || !textInput) return;
+        const resolved = resolveBotStatusPreview(textInput.value);
+        if (resolved) {
+            statusPreviewEl.textContent = resolved;
+            statusPreviewEl.className = 'text-xs font-medium text-slate-200 truncate';
+        } else {
+            statusPreviewEl.textContent = 'Bez nastaveného statusu';
+            statusPreviewEl.className = 'text-xs font-medium text-slate-500 italic truncate';
+        }
+    }
+
+    if (textInput) {
+        textInput.addEventListener('input', syncStatusPreview);
+    }
+
+    document.querySelectorAll('.status-var-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!textInput) return;
+            const token = btn.dataset.var || '';
+            const start = typeof textInput.selectionStart === 'number' ? textInput.selectionStart : textInput.value.length;
+            const end = typeof textInput.selectionEnd === 'number' ? textInput.selectionEnd : textInput.value.length;
+            const before = textInput.value.slice(0, start);
+            const after = textInput.value.slice(end);
+            const updated = `${before}${token}${after}`.slice(0, 128);
+            textInput.value = updated;
+            const nextCursor = Math.min(start + token.length, updated.length);
+            textInput.focus();
+            textInput.setSelectionRange(nextCursor, nextCursor);
+            syncStatusPreview();
+            setDirty(true, 'general-settings-form');
+        });
     });
 
     attachRankRowDeleteListeners();
@@ -2424,9 +2546,7 @@ function renderSettings() {
                     unrankedRoleId: document.getElementById('set-unranked-role').value,
                     rankRoles: rankRows,
                     botStatus: {
-                        mode: modeSelect.value,
-                        activityType: typeSelect.value,
-                        customText: textInput.value.trim()
+                        text: textInput.value.trim()
                     }
                 })
             });
@@ -2604,6 +2724,22 @@ async function pollLiveUpdates() {
             state.logs = data.logs;
             patchLogsDom();
         }
+        if (Array.isArray(data.announcementsHistory) && state.activeSection === 'announcements') {
+            const prevSig = JSON.stringify((state.announcementsHistory || []).map(h => `${h.channelId}:${h.messageId}:${h.sentAt || 0}`));
+            const nextSig = JSON.stringify(data.announcementsHistory.map(h => `${h.channelId}:${h.messageId}:${h.sentAt || 0}`));
+            if (prevSig !== nextSig) {
+                state.announcementsHistory = data.announcementsHistory;
+                if (state.editingAnnouncement && !data.announcementsHistory.some(
+                    h => h.channelId === state.editingAnnouncement.channelId && h.messageId === state.editingAnnouncement.messageId
+                )) {
+                    state.editingAnnouncement = null;
+                    showToast('Upravované oznámenie bolo zmazané na Discorde.', 'info');
+                    renderAnnouncements();
+                } else {
+                    renderAnnouncementsHistoryBlock();
+                }
+            }
+        }
     } catch {
         // Pri dočasnej strate spojenia ticho počkáme na ďalší tick
     } finally {
@@ -2730,6 +2866,9 @@ function switchSection(section) {
 
     syncDraftsFromSettings();
     renderActiveSection();
+    if (section === 'announcements') {
+        refreshAnnouncementsHistory();
+    }
     closeMobileSidebar();
     pollLiveUpdates();
 }

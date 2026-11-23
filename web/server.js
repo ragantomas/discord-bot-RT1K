@@ -30,7 +30,9 @@ const {
     getAdminLogSettings,
     updateAdminLogSettings,
     getAnnouncementsHistory,
-    addAnnouncementHistory
+    addAnnouncementHistory,
+    removeAnnouncementHistory,
+    setAnnouncementsHistory
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank, updateAllMemberRanks } = require('../src/services/ranks');
@@ -136,6 +138,11 @@ function buildOverviewPayload(client, guild) {
         ((settings.joinRoles.memberRoleIds || []).length > 0 || (settings.joinRoles.botRoleIds || []).length > 0)
     );
 
+    const topElo = Object.values(users).reduce(
+        (max, u) => (typeof u?.elo === 'number' && u.elo > max ? u.elo : max),
+        0
+    );
+
     return {
         bot: {
             online: client.isReady(),
@@ -152,7 +159,8 @@ function buildOverviewPayload(client, guild) {
         },
         stats: {
             linkedPlayersCount: Object.keys(users).length,
-            activeTempRoomsCount
+            activeTempRoomsCount,
+            topElo
         },
         modules: {
             tempVoiceEnabled: tvActive,
@@ -528,6 +536,8 @@ function startWebServer(client) {
             payload.rooms = buildTempRoomsPayload(guild);
         } else if (section === 'logs') {
             payload.logs = getActivityLogs({ limit: 150 });
+        } else if (section === 'announcements') {
+            payload.announcementsHistory = getAnnouncementsHistory();
         }
 
         return res.json(payload);
@@ -773,23 +783,10 @@ function startWebServer(client) {
             validatedRanks.push({ min: Math.round(min), roleId, color });
         }
 
-        const allowedActivityTypes = new Set(['Custom', 'Playing', 'Watching', 'Listening', 'Competing']);
         const botStatusInput = body.botStatus && typeof body.botStatus === 'object' ? body.botStatus : null;
-        let nextBotStatus = null;
-        if (botStatusInput) {
-            const mode = botStatusInput.mode === 'custom' ? 'custom' : 'auto';
-            const customText = typeof botStatusInput.customText === 'string'
-                ? botStatusInput.customText.trim().slice(0, 128)
-                : '';
-            const activityType = allowedActivityTypes.has(botStatusInput.activityType)
-                ? botStatusInput.activityType
-                : 'Custom';
-
-            if (mode === 'custom' && !customText) {
-                return res.status(400).json({ error: 'Pre vlastný status bota zadaj text aktivity.' });
-            }
-            nextBotStatus = { mode, customText, activityType };
-        }
+        const nextBotStatus = botStatusInput
+            ? { text: typeof botStatusInput.text === 'string' ? botStatusInput.text.trim().slice(0, 128) : '' }
+            : null;
 
         const updated = updateSettings(s => {
             s.dashboardRoleId = dashboardRoleId;
@@ -801,7 +798,7 @@ function startWebServer(client) {
             }
         });
 
-        updateBotStatus(client);
+        updateBotStatus(client, { force: true });
         addActivityLog({
             level: 'info',
             category: 'dashboard',
@@ -1427,8 +1424,48 @@ function startWebServer(client) {
     });
 
     // --- Oznámenia / Embed Builder ---
-    app.get('/api/announcements/history', (req, res) => {
-        return res.json({ history: getAnnouncementsHistory() });
+    async function syncAnnouncementsHistoryWithDiscord(guild) {
+        const history = getAnnouncementsHistory();
+        if (!guild || history.length === 0) return history;
+
+        const checks = await Promise.all(history.map(async entry => {
+            let channel = guild.channels.cache.get(entry.channelId);
+            if (!channel) {
+                try {
+                    channel = await guild.channels.fetch(entry.channelId);
+                } catch (err) {
+                    if (err?.code === 10003) {
+                        return { entry, keep: false };
+                    }
+                    return { entry, keep: true };
+                }
+            }
+
+            if (!channel || !channel.isTextBased()) {
+                return { entry, keep: false };
+            }
+
+            try {
+                await channel.messages.fetch(entry.messageId);
+                return { entry, keep: true };
+            } catch (err) {
+                if (err?.code === 10008 || err?.code === 10003) {
+                    return { entry, keep: false };
+                }
+                return { entry, keep: true };
+            }
+        }));
+
+        const kept = checks.filter(c => c.keep).map(c => c.entry);
+        if (kept.length !== history.length) {
+            return setAnnouncementsHistory(kept);
+        }
+        return kept;
+    }
+
+    app.get('/api/announcements/history', async (req, res) => {
+        const history = await syncAnnouncementsHistoryWithDiscord(req.dashboardAuth.guild);
+        return res.json({ history });
     });
 
     app.post('/api/announcements/send', async (req, res) => {
@@ -1493,12 +1530,20 @@ function startWebServer(client) {
         const channel = guild.channels.cache.get(channelId)
             || await guild.channels.fetch(channelId).catch(() => null);
         if (!channel || !channel.isTextBased()) {
-            return res.status(404).json({ error: 'Kanál pôvodnej správy sa nenašiel.' });
+            const history = removeAnnouncementHistory(channelId, messageId);
+            return res.status(404).json({
+                error: 'Pôvodná správa na Discorde už neexistuje a bola odstránená zo zoznamu.',
+                history
+            });
         }
 
         const existingMsg = await channel.messages.fetch(messageId).catch(() => null);
         if (!existingMsg) {
-            return res.status(404).json({ error: 'Pôvodná správa v kanáli už neexistuje.' });
+            const history = removeAnnouncementHistory(channelId, messageId);
+            return res.status(404).json({
+                error: 'Pôvodná správa na Discorde už neexistuje a bola odstránená zo zoznamu.',
+                history
+            });
         }
 
         const built = buildAnnouncementPayload(guild, body);

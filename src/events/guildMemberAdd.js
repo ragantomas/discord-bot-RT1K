@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const { assignJoinRole } = require('../services/joinRoles');
 const { logMemberJoin } = require('../services/adminLog');
+const { updateBotStatus } = require('../services/botStatus');
 
 module.exports = {
     name: Events.GuildMemberAdd,
@@ -15,6 +16,12 @@ module.exports = {
             await logMemberJoin(member);
         } catch (err) {
             console.error('Chyba pri admin logu príchodu člena:', err);
+        }
+
+        try {
+            updateBotStatus(member.client);
+        } catch (err) {
+            console.error('Chyba pri aktualizácii statusu bota po príchode člena:', err);
         }
     }
 };

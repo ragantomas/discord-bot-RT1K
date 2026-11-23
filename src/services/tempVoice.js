@@ -8,6 +8,7 @@ const {
 } = require('../storage/settingsStore');
 const { buildControlPanel, refreshControlPanel } = require('./tempVoicePanel');
 const { addActivityLog } = require('./activityLog');
+const { updateBotStatus } = require('./botStatus');
 
 function formatRoomName(template, member) {
     const rawTemplate = template || TEMPVOICE_DEFAULTS.roomNameTemplate;
@@ -118,6 +119,7 @@ async function createTempRoom(member, guildConfig) {
     };
 
     setTempRoom(newChannel.id, room);
+    updateBotStatus(guild.client);
 
     addActivityLog({
         level: 'info',
@@ -133,12 +135,6 @@ async function createTempRoom(member, guildConfig) {
     if (panelMessage) {
         room.panelMessageId = panelMessage.id;
         setTempRoom(newChannel.id, room);
-
-    addActivityLog({
-        level: 'info',
-        category: 'tempvoice',
-        message: `Vytvorená TempVoice miestnosť „${newChannel.name}“ pre ${member.displayName}.`
-    });
     }
 
     return room;
@@ -152,6 +148,7 @@ async function handleRoomLeave(channel, leavingMember) {
 
     if (humanMembers.size === 0) {
         deleteTempRoom(channel.id);
+        updateBotStatus(channel.client);
         await channel.delete('Dočasná miestnosť je prázdna').catch(() => null);
         return;
     }
@@ -207,6 +204,7 @@ async function toggleTempRoomLock(client, channelId) {
         || await client.guilds.fetch(room.guildId).catch(() => null);
     if (!guild) {
         deleteTempRoom(channelId);
+        updateBotStatus(client);
         return { ok: false, reason: 'missing_guild' };
     }
 
@@ -214,6 +212,7 @@ async function toggleTempRoomLock(client, channelId) {
         || await guild.channels.fetch(channelId).catch(() => null);
     if (!channel) {
         deleteTempRoom(channelId);
+        updateBotStatus(client);
         return { ok: false, reason: 'missing_channel' };
     }
 
@@ -239,6 +238,7 @@ async function closeTempRoom(client, channelId) {
     if (!room) return { ok: false, reason: 'not_found' };
 
     deleteTempRoom(channelId);
+    updateBotStatus(client);
 
     const guild = client.guilds.cache.get(room.guildId)
         || await client.guilds.fetch(room.guildId).catch(() => null);
@@ -270,6 +270,7 @@ async function renameTempRoom(client, channelId, newName) {
 
     if (!channel) {
         deleteTempRoom(channelId);
+        updateBotStatus(client);
         return { ok: false, reason: 'missing_channel' };
     }
 
@@ -291,6 +292,7 @@ async function kickFromTempRoom(client, channelId, userId) {
 
     if (!channel) {
         deleteTempRoom(channelId);
+        updateBotStatus(client);
         return { ok: false, reason: 'missing_channel' };
     }
 

@@ -19,12 +19,14 @@ module.exports = {
         const tvMatchesTrigger = (current.tempVoice?.setups || []).some(s => s.triggerChannelId === channel.id);
         const tvMatchesCategory = (current.tempVoice?.setups || []).some(s => s.categoryId === channel.id);
         const pbMatches = (current.patchBot?.channelIds || []).includes(channel.id);
+        const annMatches = (current.announcementsHistory || []).some(item => item.channelId === channel.id);
 
         const needsUpdate =
             current.allowedChannelId === channel.id ||
             tvMatchesTrigger ||
             tvMatchesCategory ||
             pbMatches ||
+            annMatches ||
             current.csStatus?.channelId === channel.id ||
             current.rankFeed?.channelId === channel.id ||
             current.adminLog?.channelId === channel.id;
@@ -76,6 +78,10 @@ module.exports = {
                 settings.adminLog.channelId = null;
                 settings.adminLog.enabled = false;
                 console.warn('Kanál pre Admin Log bol zmazaný.');
+            }
+
+            if (Array.isArray(settings.announcementsHistory) && settings.announcementsHistory.some(item => item.channelId === channel.id)) {
+                settings.announcementsHistory = settings.announcementsHistory.filter(item => item.channelId !== channel.id);
             }
         });
     }
