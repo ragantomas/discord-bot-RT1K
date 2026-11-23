@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="sk" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS2 Bot — Web Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bg: {
+                            base: '#0d1017',
+                            surface: '#151a24',
+                            elevated: '#1c2230',
+                            hover: '#242c3d'
+                        },
+                        brand: {
+                            DEFAULT: '#5865F2',
+                            hover: '#4752C4',
+                            gold: '#F5A623'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="bg-bg-base text-slate-100 antialiased min-h-screen selection:bg-brand/40">
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div class="bg-bg-surface border border-slate-700/70 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div class="flex items-start gap-3">
+                <div id="confirm-icon-wrap" class="w-10 h-10 rounded-xl bg-red-500/15 text-red-400 flex items-center justify-center shrink-0">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h3 id="confirm-title" class="text-lg font-semibold text-white">Potvrdiť akciu</h3>
+                    <p id="confirm-message" class="text-sm text-slate-300 mt-1"></p>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 mt-6">
+                <button id="confirm-cancel" type="button" class="px-4 py-2 rounded-xl text-sm font-medium bg-bg-elevated hover:bg-bg-hover text-slate-200 border border-slate-700 transition">
+                    Zrušiť
+                </button>
+                <button id="confirm-accept" type="button" class="px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition">
+                    Potvrdiť
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Splash -->
+    <div id="view-loading" class="min-h-screen flex items-center justify-center p-6">
+        <div class="flex flex-col items-center gap-3 text-slate-400">
+            <div class="w-9 h-9 border-2 border-brand border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-sm">Načítavam dashboard...</p>
+        </div>
+    </div>
+
+    <!-- Login View -->
+    <div id="view-login" class="hidden min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(88,101,242,0.16),_transparent_55%)] pointer-events-none"></div>
+        <div class="relative w-full max-w-md bg-bg-surface/95 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center">
+            <div class="mx-auto w-20 h-20 rounded-2xl bg-bg-elevated border border-slate-700/80 overflow-hidden flex items-center justify-center shadow-lg mb-5">
+                <img id="login-bot-avatar" src="" alt="Bot avatar" class="hidden w-full h-full object-cover" />
+                <i id="login-bot-fallback" data-lucide="bot" class="w-10 h-10 text-brand"></i>
+            </div>
+            <h1 id="login-bot-name" class="text-2xl font-bold text-white tracking-tight">CS2 Discord Bot</h1>
+            <p class="text-sm text-slate-400 mt-2">
+                Webový dashboard pre správu CS2 Premier rankov, TempVoice miestností, PatchBota, Join Roles a stavu serverov.
+            </p>
+
+            <div id="login-error-box" class="hidden mt-5 text-left text-sm rounded-xl border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-3"></div>
+
+            <a id="login-discord-btn" href="/auth/discord" class="mt-6 w-full inline-flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-xl bg-brand hover:bg-brand-hover text-white font-semibold text-sm transition shadow-lg shadow-brand/25">
+                <i data-lucide="log-in" class="w-4 h-4"></i>
+                <span>Prihlásiť sa cez Discord</span>
+            </a>
+
+            <p id="login-oauth-warning" class="hidden mt-4 text-xs text-amber-300/90">
+                OAuth2 prihlásenie zatiaľ nie je nakonfigurované v <code class="px-1 py-0.5 bg-bg-elevated rounded">.env</code> (<code class="px-1 py-0.5 bg-bg-elevated rounded">CLIENT_SECRET</code>, <code class="px-1 py-0.5 bg-bg-elevated rounded">REDIRECT_URI</code>).
+            </p>
+        </div>
+    </div>
+
+    <!-- Access Denied View -->
+    <div id="view-denied" class="hidden min-h-screen flex items-center justify-center p-6">
+        <div class="w-full max-w-md bg-bg-surface border border-red-500/30 rounded-3xl p-8 shadow-2xl text-center">
+            <div class="mx-auto w-16 h-16 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center mb-5">
+                <i data-lucide="shield-alert" class="w-8 h-8"></i>
+            </div>
+            <h1 class="text-2xl font-bold text-white">Prístup zamietnutý</h1>
+            <p class="text-sm text-slate-400 mt-2">
+                Tvoj Discord účet nemá na serveri priradenú rolu s prístupom do tohto dashboardu.
+            </p>
+            <div class="mt-5 flex items-center justify-center gap-3 bg-bg-elevated border border-slate-800 rounded-xl px-4 py-3">
+                <img id="denied-user-avatar" src="" alt="" class="w-8 h-8 rounded-full object-cover" />
+                <span id="denied-user-name" class="text-sm font-medium text-slate-200"></span>
+            </div>
+            <button id="denied-logout-btn" type="button" class="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-200 font-medium text-sm transition">
+                <i data-lucide="log-out" class="w-4 h-4"></i>
+                <span>Odhlásiť sa</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Shell -->
+    <div id="view-app" class="hidden min-h-screen flex">
+        <!-- Mobile Backdrop -->
+        <div id="sidebar-backdrop" class="hidden fixed inset-0 z-30 bg-black/60 lg:hidden"></div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-68 bg-bg-surface border-r border-slate-800/90 flex flex-col transform -translate-x-full lg:translate-x-0 transition-transform duration-200">
+            <div class="h-16 px-5 border-b border-slate-800/90 flex items-center justify-between">
+                <div class="flex items-center gap-3 min-w-0">
+                    <img id="nav-bot-avatar" src="" alt="" class="w-9 h-9 rounded-xl object-cover bg-bg-elevated border border-slate-700 shrink-0" />
+                    <div class="min-w-0">
+                        <div id="nav-bot-name" class="text-sm font-bold text-white truncate">CS2 Bot</div>
+                        <div id="nav-guild-name" class="text-xs text-slate-400 truncate">Načítavam server...</div>
+                    </div>
+                </div>
+                <button id="sidebar-close-btn" type="button" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-bg-elevated">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+                <button data-section="overview" class="nav-item active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4 shrink-0"></i>
+                    <span>Prehľad</span>
+                </button>
+                <button data-section="players" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="trophy" class="w-4 h-4 shrink-0"></i>
+                    <span>Hráči (CS2 Premier)</span>
+                </button>
+                <button data-section="tempvoice" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="mic" class="w-4 h-4 shrink-0"></i>
+                    <span>TempVoice</span>
+                </button>
+                <button data-section="patchbot" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="newspaper" class="w-4 h-4 shrink-0"></i>
+                    <span>CS2 PatchBot</span>
+                </button>
+                <button data-section="joinroles" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="user-plus" class="w-4 h-4 shrink-0"></i>
+                    <span>Join Roles</span>
+                </button>
+                <button data-section="csstatus" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="activity" class="w-4 h-4 shrink-0"></i>
+                    <span>CS2 / Steam Status</span>
+                </button>
+                <button data-section="settings" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="settings" class="w-4 h-4 shrink-0"></i>
+                    <span>Nastavenia</span>
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-800/90 text-xs text-slate-500 flex items-center justify-between">
+                <span>CS2 Leetify & Utility</span>
+                <span class="px-2 py-0.5 rounded-md bg-bg-elevated text-slate-400">Web UI</span>
+            </div>
+        </aside>
+
+        <!-- Main Column -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Top Bar -->
+            <header class="h-16 px-4 sm:px-6 border-b border-slate-800/90 bg-bg-surface/75 backdrop-blur flex items-center justify-between gap-4 sticky top-0 z-20">
+                <div class="flex items-center gap-3 min-w-0">
+                    <button id="sidebar-open-btn" type="button" class="lg:hidden p-2 rounded-xl bg-bg-elevated border border-slate-700/70 text-slate-200 hover:bg-bg-hover">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                    <h2 id="page-title" class="text-lg font-semibold text-white truncate">Prehľad</h2>
+                    <span id="header-bot-badge" class="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        Online
+                    </span>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2.5 bg-bg-elevated border border-slate-800 rounded-xl px-3 py-1.5">
+                        <img id="header-user-avatar" src="" alt="" class="w-6 h-6 rounded-full object-cover" />
+                        <span id="header-user-name" class="text-sm font-medium text-slate-200 hidden sm:inline max-w-[160px] truncate"></span>
+                    </div>
+                    <button id="header-logout-btn" type="button" title="Odhlásiť sa" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700/80 text-slate-300 hover:text-white text-sm font-medium transition">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                        <span class="hidden md:inline">Odhlásiť sa</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <main class="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+                <!-- SECTION: OVERVIEW -->
+                <section id="section-overview" class="space-y-6"></section>
+
+                <!-- SECTION: PLAYERS -->
+                <section id="section-players" class="hidden space-y-6"></section>
+
+                <!-- SECTION: TEMPVOICE -->
+                <section id="section-tempvoice" class="hidden space-y-6"></section>
+
+                <!-- SECTION: PATCHBOT -->
+                <section id="section-patchbot" class="hidden space-y-6"></section>
+
+                <!-- SECTION: JOIN ROLES -->
+                <section id="section-joinroles" class="hidden space-y-6"></section>
+
+                <!-- SECTION: CS STATUS -->
+                <section id="section-csstatus" class="hidden space-y-6"></section>
+
+                <!-- SECTION: SETTINGS -->
+                <section id="section-settings" class="hidden space-y-6"></section>
+            </main>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

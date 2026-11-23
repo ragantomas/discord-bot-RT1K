@@ -5,7 +5,7 @@ const {
     setTempRoom,
     deleteTempRoom,
     getAllTempRooms
-} = require('../storage/tempVoiceStore');
+} = require('../storage/settingsStore');
 const { buildControlPanel, refreshControlPanel } = require('./tempVoicePanel');
 
 function formatRoomName(template, member) {
@@ -186,10 +186,66 @@ async function cleanupTempRoomsOnStartup(client) {
     }
 }
 
+async function toggleTempRoomLock(client, channelId) {
+    const room = getTempRoom(channelId);
+    if (!room) return { ok: false, reason: 'not_found' };
+
+    const guild = client.guilds.cache.get(room.guildId)
+        || await client.guilds.fetch(room.guildId).catch(() => null);
+    if (!guild) {
+        deleteTempRoom(channelId);
+        return { ok: false, reason: 'missing_guild' };
+    }
+
+    const channel = guild.channels.cache.get(channelId)
+        || await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+        deleteTempRoom(channelId);
+        return { ok: false, reason: 'missing_channel' };
+    }
+
+    room.locked = !room.locked;
+
+    await channel.permissionOverwrites.edit(room.ownerId, {
+        ViewChannel: true,
+        Connect: true
+    }).catch(() => null);
+
+    await channel.permissionOverwrites.edit(guild.roles.everyone, {
+        Connect: room.locked ? false : null
+    });
+
+    setTempRoom(channelId, room);
+    await refreshControlPanel(channel, room);
+
+    return { ok: true, locked: room.locked, room };
+}
+
+async function closeTempRoom(client, channelId) {
+    const room = getTempRoom(channelId);
+    if (!room) return { ok: false, reason: 'not_found' };
+
+    deleteTempRoom(channelId);
+
+    const guild = client.guilds.cache.get(room.guildId)
+        || await client.guilds.fetch(room.guildId).catch(() => null);
+    const channel = guild
+        ? (guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null))
+        : null;
+
+    if (channel) {
+        await channel.delete('Zatvorené cez webový dashboard').catch(() => null);
+    }
+
+    return { ok: true };
+}
+
 module.exports = {
     formatRoomName,
     clampBitrate,
     createTempRoom,
     handleRoomLeave,
-    cleanupTempRoomsOnStartup
+    cleanupTempRoomsOnStartup,
+    toggleTempRoomLock,
+    closeTempRoom
 };

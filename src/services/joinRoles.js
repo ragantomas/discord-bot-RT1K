@@ -1,5 +1,5 @@
 const { PermissionFlagsBits } = require('discord.js');
-const { getJoinRolesGuildConfig } = require('../storage/joinRolesStore');
+const { getJoinRolesSettings } = require('../storage/settingsStore');
 
 function validateAssignableRole(guild, role) {
     if (!role) {
@@ -37,7 +37,7 @@ function validateAssignableRole(guild, role) {
 async function assignJoinRole(member) {
     if (!member?.guild || !member.user) return false;
 
-    const config = getJoinRolesGuildConfig(member.guild.id);
+    const config = getJoinRolesSettings();
     if (!config || !config.enabled) return false;
 
     const roleId = member.user.bot ? config.botRoleId : config.memberRoleId;

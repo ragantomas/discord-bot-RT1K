@@ -6,10 +6,9 @@ const {
 } = require('discord.js');
 const { CS2_APP_ID, CS2_ICON_URL, CSSTATUS_DEFAULTS } = require('../config');
 const {
-    getCsStatusGuildConfig,
-    getAllCsStatusGuildConfigs,
-    setCsStatusGuildConfig
-} = require('../storage/csStatusStore');
+    getCsStatusSettings,
+    updateCsStatusSettings
+} = require('../storage/settingsStore');
 
 const REQUEST_TIMEOUT_MS = 8000;
 
@@ -258,14 +257,13 @@ function buildCsStatusMessagePayload(snapshot) {
     return { embeds: [embed], components: [row] };
 }
 
-async function updateGuildStatusMessage(client, guildId, { snapshot = null, forceNewMessage = false } = {}) {
-    const config = getCsStatusGuildConfig(guildId);
+async function updateGuildStatusMessage(client, { snapshot = null, forceNewMessage = false } = {}) {
+    const config = getCsStatusSettings();
     if (!config || !config.channelId) {
         return { ok: false, reason: 'not_configured' };
     }
 
-    const guild = client.guilds.cache.get(guildId)
-        || await client.guilds.fetch(guildId).catch(() => null);
+    const guild = client.guilds.cache.first();
     if (!guild) {
         return { ok: false, reason: 'missing_guild' };
     }
@@ -291,12 +289,10 @@ async function updateGuildStatusMessage(client, guildId, { snapshot = null, forc
         message = await channel.send(payload);
     }
 
-    const updatedConfig = {
-        ...config,
+    updateCsStatusSettings({
         messageId: message.id,
         lastUpdatedAt: Date.now()
-    };
-    setCsStatusGuildConfig(guildId, updatedConfig);
+    });
 
     return {
         ok: true,
@@ -357,26 +353,16 @@ function formatInterval(seconds) {
 }
 
 async function updateDueStatusMessages(client) {
-    const configs = getAllCsStatusGuildConfigs();
+    const config = getCsStatusSettings();
+    if (!config?.enabled || !config.channelId) return;
+
     const now = Date.now();
+    const intervalMs = getConfigIntervalSeconds(config) * 1000;
+    if (now - (config.lastUpdatedAt || 0) < intervalMs) return;
 
-    const dueEntries = Object.entries(configs).filter(([, cfg]) => {
-        if (!cfg?.channelId) return false;
-        const intervalMs = getConfigIntervalSeconds(cfg) * 1000;
-        return now - (cfg.lastUpdatedAt || 0) >= intervalMs;
+    await updateGuildStatusMessage(client).catch(err => {
+        console.error('Chyba pri aktualizácii CS2/Steam stavu:', err);
     });
-
-    if (dueEntries.length === 0) return;
-
-    const snapshot = await fetchCs2SteamStatus();
-
-    for (const [guildId] of dueEntries) {
-        try {
-            await updateGuildStatusMessage(client, guildId, { snapshot });
-        } catch (err) {
-            console.error(`Chyba pri aktualizácii CS2/Steam stavu na serveri ${guildId}:`, err);
-        }
-    }
 }
 
 module.exports = {

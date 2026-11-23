@@ -8,7 +8,7 @@ const {
     TextInputStyle,
     UserSelectMenuBuilder
 } = require('discord.js');
-const { getTempRoom, setTempRoom } = require('../storage/tempVoiceStore');
+const { getTempRoom, setTempRoom } = require('../storage/settingsStore');
 
 function buildControlPanel(channel, room) {
     const limitText = channel.userLimit === 0 ? 'Bez limitu' : `${channel.userLimit} hráčov`;

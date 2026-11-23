@@ -1,18 +1,10 @@
 const { Events } = require('discord.js');
 const {
-    getGuildConfig,
-    setGuildConfig,
+    loadSettings,
+    updateSettings,
     getTempRoom,
     deleteTempRoom
-} = require('../storage/tempVoiceStore');
-const {
-    getPatchGuildConfig,
-    setPatchGuildConfig
-} = require('../storage/patchBotStore');
-const {
-    getCsStatusGuildConfig,
-    setCsStatusGuildConfig
-} = require('../storage/csStatusStore');
+} = require('../storage/settingsStore');
 
 module.exports = {
     name: Events.ChannelDelete,
@@ -21,28 +13,43 @@ module.exports = {
             deleteTempRoom(channel.id);
         }
 
-        if (channel.guildId) {
-            const guildConfig = getGuildConfig(channel.guildId);
-            if (guildConfig?.triggerChannelId === channel.id) {
-                guildConfig.triggerChannelId = null;
-                setGuildConfig(channel.guildId, guildConfig);
-                console.warn(`Spúšťací TempVoice kanál na serveri ${channel.guildId} bol zmazaný.`);
-            }
+        if (!channel.guildId) return;
 
-            const patchConfig = getPatchGuildConfig(channel.guildId);
-            if (patchConfig?.channelId === channel.id) {
-                patchConfig.channelId = null;
-                setPatchGuildConfig(channel.guildId, patchConfig);
-                console.warn(`Kanál pre CS2 PatchBota na serveri ${channel.guildId} bol zmazaný.`);
-            }
+        const current = loadSettings();
+        const needsUpdate =
+            current.allowedChannelId === channel.id ||
+            current.tempVoice?.triggerChannelId === channel.id ||
+            current.tempVoice?.categoryId === channel.id ||
+            current.patchBot?.channelId === channel.id ||
+            current.csStatus?.channelId === channel.id;
 
-            const csStatusConfig = getCsStatusGuildConfig(channel.guildId);
-            if (csStatusConfig?.channelId === channel.id) {
-                csStatusConfig.channelId = null;
-                csStatusConfig.messageId = null;
-                setCsStatusGuildConfig(channel.guildId, csStatusConfig);
-                console.warn(`Kanál pre CS2/Steam stav serverov na serveri ${channel.guildId} bol zmazaný.`);
+        if (!needsUpdate) return;
+
+        updateSettings(settings => {
+            if (settings.allowedChannelId === channel.id) {
+                settings.allowedChannelId = null;
+                console.warn('Povolený kanál pre príkazy bota bol zmazaný a resetovaný na všetky kanály.');
             }
-        }
+            if (settings.tempVoice.triggerChannelId === channel.id) {
+                settings.tempVoice.triggerChannelId = null;
+                settings.tempVoice.enabled = false;
+                console.warn('Spúšťací TempVoice kanál bol zmazaný.');
+            }
+            if (settings.tempVoice.categoryId === channel.id) {
+                settings.tempVoice.categoryId = null;
+                console.warn('Kategória pre TempVoice bola zmazaná.');
+            }
+            if (settings.patchBot.channelId === channel.id) {
+                settings.patchBot.channelId = null;
+                settings.patchBot.enabled = false;
+                console.warn('Kanál pre CS2 PatchBota bol zmazaný.');
+            }
+            if (settings.csStatus.channelId === channel.id) {
+                settings.csStatus.channelId = null;
+                settings.csStatus.messageId = null;
+                settings.csStatus.enabled = false;
+                console.warn('Kanál pre CS2/Steam stav serverov bol zmazaný.');
+            }
+        });
     }
 };

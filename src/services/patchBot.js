@@ -1,9 +1,9 @@
 const { EmbedBuilder, ChannelType } = require('discord.js');
 const { CS2_ICON_URL } = require('../config');
 const {
-    getAllPatchGuildConfigs,
-    markGidsPosted
-} = require('../storage/patchBotStore');
+    getPatchBotSettings,
+    markPatchGidsPosted
+} = require('../storage/settingsStore');
 const {
     fetchCs2News,
     extractFirstImageUrl,
@@ -74,56 +74,41 @@ async function sendPatchToChannel(channel, item, roleId = null) {
 }
 
 async function checkAndPostUpdates(client) {
-    const guildConfigs = getAllPatchGuildConfigs();
-    const activeEntries = Object.entries(guildConfigs).filter(([, cfg]) => Boolean(cfg?.channelId));
+    const config = getPatchBotSettings();
+    if (!config?.enabled || !config.channelId) return;
 
-    if (activeEntries.length === 0) return;
+    const guild = client.guilds.cache.first();
+    if (!guild) return;
 
-    const uniqueModes = new Set(activeEntries.map(([, cfg]) => cfg.mode || 'all'));
-    const newsByMode = new Map();
+    const channel = guild.channels.cache.get(config.channelId)
+        || await guild.channels.fetch(config.channelId).catch(() => null);
+    if (!channel || !channel.isTextBased()) return;
 
-    for (const mode of uniqueModes) {
-        const items = await fetchCs2News({ mode, count: 10 });
-        newsByMode.set(mode, items);
+    const mode = config.mode || 'all';
+    const items = await fetchCs2News({ mode, count: 10 });
+
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    const postedSet = new Set((config.postedGids || []).map(String));
+
+    if (postedSet.size === 0) {
+        const baselineGids = items.map(item => item?.gid).filter(Boolean).map(String);
+        if (baselineGids.length > 0) {
+            markPatchGidsPosted(baselineGids);
+        }
+        return;
     }
 
-    for (const [guildId, config] of activeEntries) {
-        const mode = config.mode || 'all';
-        const items = newsByMode.get(mode);
+    const unseenItems = items
+        .filter(item => item?.gid && !postedSet.has(String(item.gid)))
+        .sort((a, b) => (a.date || 0) - (b.date || 0));
 
-        // Pri chybe API tento server preskočíme bez zmeny uloženého stavu
-        if (!Array.isArray(items) || items.length === 0) continue;
-
-        const guild = client.guilds.cache.get(guildId)
-            || await client.guilds.fetch(guildId).catch(() => null);
-        if (!guild) continue;
-
-        const channel = guild.channels.cache.get(config.channelId)
-            || await guild.channels.fetch(config.channelId).catch(() => null);
-        if (!channel || !channel.isTextBased()) continue;
-
-        const postedSet = new Set((config.postedGids || []).map(String));
-
-        // Ak chýba počiatočný baseline, uložíme aktuálne GID bez spamovania histórie
-        if (postedSet.size === 0) {
-            const baselineGids = items.map(item => item?.gid).filter(Boolean).map(String);
-            if (baselineGids.length > 0) {
-                markGidsPosted(guildId, baselineGids);
-            }
-            continue;
-        }
-
-        const unseenItems = items
-            .filter(item => item?.gid && !postedSet.has(String(item.gid)))
-            .sort((a, b) => (a.date || 0) - (b.date || 0));
-
-        for (const item of unseenItems) {
-            try {
-                await sendPatchToChannel(channel, item, config.roleId || null);
-                markGidsPosted(guildId, [String(item.gid)], item);
-            } catch (err) {
-                console.error(`Chyba pri posielaní CS2 updatu na server ${guildId}:`, err);
-            }
+    for (const item of unseenItems) {
+        try {
+            await sendPatchToChannel(channel, item, config.roleId || null);
+            markPatchGidsPosted([String(item.gid)], item);
+        } catch (err) {
+            console.error(`Chyba pri posielaní CS2 updatu na server ${guild.id}:`, err);
         }
     }
 }

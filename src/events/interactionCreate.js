@@ -1,5 +1,6 @@
-const { Events, PermissionFlagsBits } = require('discord.js');
+const { Events } = require('discord.js');
 const { handleTempVoiceInteraction } = require('../services/tempVoicePanel');
+const { loadSettings } = require('../storage/settingsStore');
 
 async function sendInteractionError(interaction, message) {
     const errorPayload = { content: message, ephemeral: true };
@@ -33,9 +34,10 @@ module.exports = {
         const command = interaction.client.commands.get(interaction.commandName);
         if (!command) return;
 
-        if (command.adminOnly && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        const { allowedChannelId } = loadSettings();
+        if (allowedChannelId && interaction.channelId !== allowedChannelId) {
             return interaction.reply({
-                content: 'Tento príkaz môže použiť len administrátor.',
+                content: `Príkazy bota je možné používať iba v kanáli <#${allowedChannelId}>.`,
                 ephemeral: true
             });
         }

@@ -1,5 +1,5 @@
 const { Events } = require('discord.js');
-const { getGuildConfig, getTempRoom } = require('../storage/tempVoiceStore');
+const { getTempVoiceSettings, getTempRoom } = require('../storage/settingsStore');
 const { createTempRoom, handleRoomLeave } = require('../services/tempVoice');
 
 module.exports = {
@@ -16,9 +16,9 @@ module.exports = {
 
         // 2. Potom skontroluj pripojenie do spúšťacieho VC
         if (newState.channelId && newState.member && !newState.member.user.bot) {
-            const guildConfig = getGuildConfig(newState.guild.id);
-            if (guildConfig?.triggerChannelId && guildConfig.triggerChannelId === newState.channelId) {
-                await createTempRoom(newState.member, guildConfig).catch(err => {
+            const tvConfig = getTempVoiceSettings();
+            if (tvConfig?.enabled && tvConfig.triggerChannelId && tvConfig.triggerChannelId === newState.channelId) {
+                await createTempRoom(newState.member, tvConfig).catch(err => {
                     console.error('Chyba pri vytváraní TempVoice miestnosti:', err);
                 });
             }
