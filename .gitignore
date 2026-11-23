@@ -1,0 +1,11 @@
+node_modules/
+env.txt
+users.json
+settings.json
+.DS_Store
+__MACOSX/
+.vscode/
+.idea/
+*.swp
+*~
+compile_commands.json
