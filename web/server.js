@@ -104,8 +104,12 @@ async function verifyDashboardAccess(client, userId) {
 
     const member = guild.members.cache.get(userId)
         || await guild.members.fetch(userId).catch(() => null);
-    const { dashboardRoleId } = loadSettings();
-    const hasRole = Boolean(dashboardRoleId && member?.roles.cache.has(dashboardRoleId));
+    const { dashboardRoleIds } = loadSettings();
+    const hasRole = Boolean(
+        Array.isArray(dashboardRoleIds) &&
+        member &&
+        dashboardRoleIds.some(roleId => member.roles.cache.has(roleId))
+    );
 
     return {
         allowed: isOwner || hasRole,
@@ -726,16 +730,19 @@ function startWebServer(client) {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
 
-        const dashboardRoleId = body.dashboardRoleId ? String(body.dashboardRoleId).trim() : null;
+        const rawDashboardRoleIds = Array.isArray(body.dashboardRoleIds)
+            ? body.dashboardRoleIds
+            : (body.dashboardRoleId ? [body.dashboardRoleId] : []);
+        const dashboardRoleIds = uniqueStringIds(rawDashboardRoleIds);
         const allowedChannelId = body.allowedChannelId ? String(body.allowedChannelId).trim() : null;
         const unrankedRoleId = body.unrankedRoleId ? String(body.unrankedRoleId).trim() : null;
         const rankRolesInput = Array.isArray(body.rankRoles) ? body.rankRoles : null;
 
-        if (dashboardRoleId) {
-            if (dashboardRoleId === guild.id) {
+        for (const roleId of dashboardRoleIds) {
+            if (roleId === guild.id) {
                 return res.status(400).json({ error: 'Ako prístupovú rolu do dashboardu nie je možné nastaviť `@everyone`.' });
             }
-            const role = guild.roles.cache.get(dashboardRoleId) || await guild.roles.fetch(dashboardRoleId).catch(() => null);
+            const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
                 return res.status(400).json({ error: 'Vybraná rola pre prístup do dashboardu neexistuje.' });
             }
@@ -789,7 +796,7 @@ function startWebServer(client) {
             : null;
 
         const updated = updateSettings(s => {
-            s.dashboardRoleId = dashboardRoleId;
+            s.dashboardRoleIds = dashboardRoleIds;
             s.allowedChannelId = allowedChannelId;
             s.unrankedRoleId = unrankedRoleId;
             s.rankRoles = validatedRanks;

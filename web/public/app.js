@@ -12,6 +12,7 @@ const state = {
     pbDraftChannelIds: [],
     jrDraftMemberRoleIds: [],
     jrDraftBotRoleIds: [],
+    dashboardDraftRoleIds: [],
     logs: [],
     logCategory: 'all',
     logSearch: '',
@@ -134,6 +135,7 @@ function syncDraftsFromSettings() {
     state.pbDraftChannelIds = [...(s.patchBot?.channelIds || [])];
     state.jrDraftMemberRoleIds = [...(s.joinRoles?.memberRoleIds || [])];
     state.jrDraftBotRoleIds = [...(s.joinRoles?.botRoleIds || [])];
+    state.dashboardDraftRoleIds = [...(s.dashboardRoleIds || [])];
 }
 
 function showToast(message, type = 'success') {
@@ -1469,10 +1471,10 @@ function buildTempVoiceSetupCardsHtml() {
                     <select class="tv-setup-trigger input-field">
                         ${buildVoiceChannelOptions(setup.triggerChannelId)}
                     </select>
-                    <label class="inline-flex items-center gap-2 text-xs text-slate-300 mt-1.5 cursor-pointer">
-                        <input type="checkbox" class="tv-setup-create accent-brand rounded" ${setup.createTriggerChannel ? 'checked' : ''} />
-                        <span>Vytvoriť nový spúšťací kanál na serveri</span>
-                    </label>
+                    <div class="flex items-center justify-between gap-3 pt-1.5">
+                        <span class="text-xs text-slate-300">Vytvoriť nový spúšťací kanál na serveri</span>
+                        ${renderToggleSwitch('', setup.createTriggerChannel, 'tv-setup-create')}
+                    </div>
                 </div>
 
                 <div class="space-y-1.5">
@@ -2358,6 +2360,45 @@ function renderAdminLog() {
 
 // --- VŠEOBECNÉ NASTAVENIA + BOT STATUS + RANK ROLY ---
 
+function readDashboardRolesDraftFromDom() {
+    const selects = document.querySelectorAll('#set-dashboard-roles-list .set-dashboard-role-select');
+    if (document.getElementById('set-dashboard-roles-list')) {
+        state.dashboardDraftRoleIds = [...selects].map(s => s.value);
+    }
+}
+
+function buildDashboardRoleRowsHtml(roleIds) {
+    if (roleIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-2">Zatiaľ žiadna rola. Pridaj rolu tlačidlom nižšie.</p>`;
+    }
+
+    return roleIds.map((roleId, idx) => `
+        <div class="flex items-center gap-2">
+            <select class="set-dashboard-role-select input-field flex-1">
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber rolu —' })}
+            </select>
+            <button type="button" data-set-remove-dashboard-role="${idx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function attachDashboardRoleRowListeners() {
+    document.querySelectorAll('[data-set-remove-dashboard-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readDashboardRolesDraftFromDom();
+            state.dashboardDraftRoleIds.splice(Number(btn.dataset.setRemoveDashboardRole), 1);
+            document.getElementById('set-dashboard-roles-list').innerHTML = buildDashboardRoleRowsHtml(
+                state.dashboardDraftRoleIds
+            );
+            attachDashboardRoleRowListeners();
+            setDirty(true, 'general-settings-form');
+            refreshIcons();
+        });
+    });
+}
+
 function renderSettings() {
     const container = document.getElementById('section-settings');
     const s = state.settings || {};
@@ -2373,17 +2414,24 @@ function renderSettings() {
                     <span>Prístup a obmedzenie príkazov</span>
                 </h3>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Rola s prístupom do dashboardu</label>
-                        <select id="set-dashboard-role" class="input-field">
-                            ${buildRoleOptions(s.dashboardRoleId, { allowNone: true, noneLabel: '— Len majiteľ bota —' })}
-                        </select>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+                    <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                        <div class="flex items-center gap-2 text-sm font-semibold text-white">
+                            <i data-lucide="user-check" class="w-4 h-4 text-brand"></i>
+                            <span>Role s prístupom do dashboardu</span>
+                        </div>
+                        <div id="set-dashboard-roles-list" class="space-y-2">
+                            ${buildDashboardRoleRowsHtml(state.dashboardDraftRoleIds)}
+                        </div>
+                        ${renderAddButtonHtml('set-add-dashboard-role-btn', 'Pridať rolu')}
                         <p class="text-xs text-slate-500">Majiteľ bota (<code class="text-slate-400">OWNER_ID</code>) má prístup vždy ako poistku.</p>
                     </div>
 
-                    <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Povolený kanál pre hráčske slash príkazy</label>
+                    <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                        <div class="flex items-center gap-2 text-sm font-semibold text-white">
+                            <i data-lucide="terminal" class="w-4 h-4 text-sky-400"></i>
+                            <span>Povolený kanál pre hráčske slash príkazy</span>
+                        </div>
                         <select id="set-allowed-channel" class="input-field">
                             ${buildTextChannelOptions(s.allowedChannelId, { allowNone: true, noneLabel: '— Všetky textové kanály —' })}
                         </select>
@@ -2513,6 +2561,18 @@ function renderSettings() {
         });
     });
 
+    document.getElementById('set-add-dashboard-role-btn').addEventListener('click', () => {
+        readDashboardRolesDraftFromDom();
+        state.dashboardDraftRoleIds.push('');
+        document.getElementById('set-dashboard-roles-list').innerHTML = buildDashboardRoleRowsHtml(
+            state.dashboardDraftRoleIds
+        );
+        attachDashboardRoleRowListeners();
+        setDirty(true, 'general-settings-form');
+        refreshIcons();
+    });
+
+    attachDashboardRoleRowListeners();
     attachRankRowDeleteListeners();
 
     document.getElementById('add-rank-row-btn').addEventListener('click', () => {
@@ -2529,6 +2589,7 @@ function renderSettings() {
     document.getElementById('general-settings-form').addEventListener('submit', async e => {
         e.preventDefault();
         const btn = document.getElementById('settings-save-btn');
+        readDashboardRolesDraftFromDom();
 
         const rankRows = [...document.querySelectorAll('#rank-roles-tbody .rank-row')].map(row => ({
             color: row.querySelector('.rank-color-input').value,
@@ -2541,7 +2602,7 @@ function renderSettings() {
             const res = await apiFetch('/api/settings/general', {
                 method: 'PUT',
                 body: JSON.stringify({
-                    dashboardRoleId: document.getElementById('set-dashboard-role').value || null,
+                    dashboardRoleIds: state.dashboardDraftRoleIds.filter(Boolean),
                     allowedChannelId: document.getElementById('set-allowed-channel').value || null,
                     unrankedRoleId: document.getElementById('set-unranked-role').value,
                     rankRoles: rankRows,
@@ -2551,6 +2612,7 @@ function renderSettings() {
                 })
             });
             state.settings = res.settings;
+            syncDraftsFromSettings();
             setDirty(false);
             renderSettings();
             showToast('Všeobecné nastavenia, status bota a rank roly boli uložené.');

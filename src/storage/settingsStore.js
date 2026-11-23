@@ -42,7 +42,7 @@ function getDefaultTempVoiceSetup(id = 'default') {
 
 function getDefaultSettings() {
     return {
-        dashboardRoleId: null,
+        dashboardRoleIds: [],
         allowedChannelId: null,
         unrankedRoleId: UNRANKED_ROLE_ID,
         rankRoles: RANK_ROLES.map(r => ({ ...r })),
@@ -200,8 +200,12 @@ function normalizeSettings(raw) {
         );
     }
 
+    const dashboardRoleIds = Array.isArray(src.dashboardRoleIds)
+        ? uniqueStringIds(src.dashboardRoleIds)
+        : uniqueStringIds(src.dashboardRoleId ? [src.dashboardRoleId] : []);
+
     return {
-        dashboardRoleId: src.dashboardRoleId || null,
+        dashboardRoleIds,
         allowedChannelId: src.allowedChannelId || null,
         unrankedRoleId: src.unrankedRoleId || defaults.unrankedRoleId,
         rankRoles: normalizeRankRoles(src.rankRoles),

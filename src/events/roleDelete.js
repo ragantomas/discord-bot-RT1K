@@ -7,11 +7,12 @@ module.exports = {
         if (!role?.guild?.id) return;
 
         const current = loadSettings();
+        const hasDashboardRole = (current.dashboardRoleIds || []).includes(role.id);
         const hasMemberRole = (current.joinRoles?.memberRoleIds || []).includes(role.id);
         const hasBotRole = (current.joinRoles?.botRoleIds || []).includes(role.id);
 
         const needsUpdate =
-            current.dashboardRoleId === role.id ||
+            hasDashboardRole ||
             current.patchBot?.roleId === role.id ||
             hasMemberRole ||
             hasBotRole;
@@ -19,8 +20,8 @@ module.exports = {
         if (!needsUpdate) return;
 
         updateSettings(settings => {
-            if (settings.dashboardRoleId === role.id) {
-                settings.dashboardRoleId = null;
+            if (hasDashboardRole) {
+                settings.dashboardRoleIds = (settings.dashboardRoleIds || []).filter(id => id !== role.id);
                 console.warn(`Rola pre prístup do dashboardu (${role.id}) bola zmazaná.`);
             }
             if (settings.patchBot.roleId === role.id) {
