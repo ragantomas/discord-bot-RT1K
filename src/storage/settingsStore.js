@@ -71,7 +71,31 @@ function getDefaultSettings() {
             messageId: null,
             intervalSeconds: CSSTATUS_DEFAULTS.intervalSeconds,
             lastUpdatedAt: 0
-        }
+        },
+        botStatus: {
+            mode: 'auto',
+            customText: '',
+            activityType: 'Custom'
+        },
+        rankFeed: {
+            enabled: false,
+            channelId: null,
+            notifyRankUp: true,
+            notifyDerank: true
+        },
+        adminLog: {
+            enabled: false,
+            channelId: null,
+            events: {
+                memberJoin: true,
+                memberLeave: true,
+                bans: true,
+                timeouts: true,
+                roleChanges: true,
+                voiceActivity: false
+            }
+        },
+        announcementsHistory: []
     };
 }
 
@@ -124,7 +148,12 @@ function normalizeSettings(raw) {
     const tv = src.tempVoice && typeof src.tempVoice === 'object' ? src.tempVoice : {};
     const pb = src.patchBot && typeof src.patchBot === 'object' ? src.patchBot : {};
     const jr = src.joinRoles && typeof src.joinRoles === 'object' ? src.joinRoles : {};
-    const cs = src.csStatus && typeof csStatusValid(src.csStatus) ? src.csStatus : {};
+    const cs = src.csStatus && csStatusValid(src.csStatus) ? src.csStatus : {};
+    const bs = src.botStatus && typeof src.botStatus === 'object' ? src.botStatus : {};
+    const rf = src.rankFeed && typeof src.rankFeed === 'object' ? src.rankFeed : {};
+    const al = src.adminLog && typeof src.adminLog === 'object' ? src.adminLog : {};
+    const alEvents = al.events && typeof al.events === 'object' ? al.events : {};
+    const allowedActivityTypes = new Set(['Custom', 'Playing', 'Watching', 'Listening', 'Competing']);
 
     // TempVoice: migrácia starého jednotného objektu na pole setups[]
     let rawSetups = Array.isArray(tv.setups) ? tv.setups : null;
@@ -207,7 +236,33 @@ function normalizeSettings(raw) {
             messageId: cs.messageId || null,
             intervalSeconds,
             lastUpdatedAt: typeof cs.lastUpdatedAt === 'number' ? cs.lastUpdatedAt : 0
-        }
+        },
+        botStatus: {
+            mode: bs.mode === 'custom' ? 'custom' : 'auto',
+            customText: typeof bs.customText === 'string' ? bs.customText.trim().slice(0, 128) : '',
+            activityType: allowedActivityTypes.has(bs.activityType) ? bs.activityType : 'Custom'
+        },
+        rankFeed: {
+            enabled: typeof rf.enabled === 'boolean' ? rf.enabled : false,
+            channelId: rf.channelId || null,
+            notifyRankUp: typeof rf.notifyRankUp === 'boolean' ? rf.notifyRankUp : true,
+            notifyDerank: typeof rf.notifyDerank === 'boolean' ? rf.notifyDerank : true
+        },
+        adminLog: {
+            enabled: typeof al.enabled === 'boolean' ? al.enabled : false,
+            channelId: al.channelId || null,
+            events: {
+                memberJoin: typeof alEvents.memberJoin === 'boolean' ? alEvents.memberJoin : true,
+                memberLeave: typeof alEvents.memberLeave === 'boolean' ? alEvents.memberLeave : true,
+                bans: typeof alEvents.bans === 'boolean' ? alEvents.bans : true,
+                timeouts: typeof alEvents.timeouts === 'boolean' ? alEvents.timeouts : true,
+                roleChanges: typeof alEvents.roleChanges === 'boolean' ? alEvents.roleChanges : true,
+                voiceActivity: typeof alEvents.voiceActivity === 'boolean' ? alEvents.voiceActivity : false
+            }
+        },
+        announcementsHistory: Array.isArray(src.announcementsHistory)
+            ? src.announcementsHistory.filter(item => item && item.channelId && item.messageId).slice(0, 15)
+            : []
     };
 }
 
@@ -423,6 +478,56 @@ function updateCsStatusSettings(patch) {
     }).csStatus;
 }
 
+function getBotStatusSettings() {
+    return loadSettings().botStatus;
+}
+
+function updateBotStatusSettings(patch) {
+    return updateSettings(s => {
+        s.botStatus = { ...s.botStatus, ...patch };
+    }).botStatus;
+}
+
+function getRankFeedSettings() {
+    return loadSettings().rankFeed;
+}
+
+function updateRankFeedSettings(patch) {
+    return updateSettings(s => {
+        s.rankFeed = { ...s.rankFeed, ...patch };
+    }).rankFeed;
+}
+
+function getAdminLogSettings() {
+    return loadSettings().adminLog;
+}
+
+function updateAdminLogSettings(patch) {
+    return updateSettings(s => {
+        s.adminLog = {
+            ...s.adminLog,
+            ...patch,
+            events: {
+                ...s.adminLog.events,
+                ...(patch.events || {})
+            }
+        };
+    }).adminLog;
+}
+
+function getAnnouncementsHistory() {
+    return loadSettings().announcementsHistory;
+}
+
+function addAnnouncementHistory(entry) {
+    return updateSettings(s => {
+        const filtered = (s.announcementsHistory || []).filter(
+            item => !(item.channelId === entry.channelId && item.messageId === entry.messageId)
+        );
+        s.announcementsHistory = [entry, ...filtered].slice(0, 15);
+    }).announcementsHistory;
+}
+
 module.exports = {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -448,5 +553,13 @@ module.exports = {
     getJoinRolesSettings,
     updateJoinRolesSettings,
     getCsStatusSettings,
-    updateCsStatusSettings
+    updateCsStatusSettings,
+    getBotStatusSettings,
+    updateBotStatusSettings,
+    getRankFeedSettings,
+    updateRankFeedSettings,
+    getAdminLogSettings,
+    updateAdminLogSettings,
+    getAnnouncementsHistory,
+    addAnnouncementHistory
 };

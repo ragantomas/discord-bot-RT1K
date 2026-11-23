@@ -10,6 +10,7 @@ const {
     formatSteamContentsToMarkdown,
     truncateForEmbed
 } = require('./steamNews');
+const { addActivityLog } = require('./activityLog');
 
 const MODE_LABELS = {
     all: 'Všetky oficiálne CS2 oznámenia',
@@ -122,6 +123,11 @@ async function checkAndPostUpdates(client) {
         }
         if (sentAny) {
             markPatchGidsPosted([String(item.gid)], item);
+            addActivityLog({
+                level: 'success',
+                category: 'patchbot',
+                message: `PatchBot odoslal update: „${item.title}“.`
+            });
         }
     }
 }

@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 const { OWNER_ID, DB_FILE, SETTINGS_FILE } = require('../src/config');
 const { loadUsers, saveUsers, usersFileExists } = require('../src/storage/usersStore');
@@ -10,6 +10,7 @@ const {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
     loadSettings,
+    saveSettings,
     updateSettings,
     settingsFileExists,
     getRankSettings,
@@ -23,16 +24,25 @@ const {
     markPatchGidsPosted,
     updateJoinRolesSettings,
     getCsStatusSettings,
-    updateCsStatusSettings
+    updateCsStatusSettings,
+    getRankFeedSettings,
+    updateRankFeedSettings,
+    getAdminLogSettings,
+    updateAdminLogSettings,
+    getAnnouncementsHistory,
+    addAnnouncementHistory
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank, updateAllMemberRanks } = require('../src/services/ranks');
 const { updateBotStatus } = require('../src/services/botStatus');
-const { toggleTempRoomLock, closeTempRoom } = require('../src/services/tempVoice');
+const { toggleTempRoomLock, closeTempRoom, renameTempRoom, kickFromTempRoom } = require('../src/services/tempVoice');
 const { fetchCs2News } = require('../src/services/steamNews');
 const { sendPatchToChannel } = require('../src/services/patchBot');
 const { validateAssignableRole } = require('../src/services/joinRoles');
 const { parseIntervalSeconds, updateGuildStatusMessage } = require('../src/services/csStatus');
+const { addActivityLog, getActivityLogs, clearActivityLogs } = require('../src/services/activityLog');
+const { sendTestRankFeedMessage } = require('../src/services/rankFeed');
+const { sendTestAdminLogMessage } = require('../src/services/adminLog');
 
 const SESSION_COOKIE = 'rt1k_session';
 const OAUTH_STATE_COOKIE = 'rt1k_oauth_state';
@@ -148,8 +158,11 @@ function buildOverviewPayload(client, guild) {
             tempVoiceEnabled: tvActive,
             patchBotEnabled: pbActive,
             joinRolesEnabled: jrActive,
-            csStatusEnabled: Boolean(settings.csStatus.enabled && settings.csStatus.channelId)
+            csStatusEnabled: Boolean(settings.csStatus.enabled && settings.csStatus.channelId),
+            rankFeedEnabled: Boolean(settings.rankFeed?.enabled && settings.rankFeed?.channelId),
+            adminLogEnabled: Boolean(settings.adminLog?.enabled && settings.adminLog?.channelId)
         },
+        viewAuditLogGranted: Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.ViewAuditLog)),
         steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim())
     };
 }
@@ -187,21 +200,105 @@ function buildTempRoomsPayload(guild) {
         if (!channel) continue;
 
         const ownerMember = guild.members.cache.get(room.ownerId);
-        const humanCount = channel.members.filter(m => !m.user.bot).size;
+        const humanMembers = channel.members.filter(m => !m.user.bot);
 
         activeRooms.push({
             channelId,
             name: channel.name,
             ownerId: room.ownerId,
             ownerName: ownerMember?.displayName || `ID ${room.ownerId}`,
-            memberCount: humanCount,
+            memberCount: humanMembers.size,
             userLimit: channel.userLimit || 0,
             bitrateKbps: Math.round((channel.bitrate || 64000) / 1000),
-            locked: Boolean(room.locked)
+            locked: Boolean(room.locked),
+            members: [...humanMembers.values()].map(m => ({
+                id: m.id,
+                displayName: m.displayName,
+                username: m.user.username,
+                avatarUrl: m.displayAvatarURL({ size: 64 }),
+                isOwner: m.id === room.ownerId
+            }))
         });
     }
 
     return activeRooms;
+}
+
+function getActorName(req) {
+    return req.dashboardAuth?.member?.displayName
+        || req.dashboardAuth?.sessionUser?.username
+        || 'Dashboard';
+}
+
+function isValidHttpUrl(str) {
+    return typeof str === 'string' && /^https?:\/\/.+/i.test(str.trim());
+}
+
+function buildAnnouncementPayload(guild, body) {
+    const content = typeof body.content === 'string' ? body.content.trim().slice(0, 2000) : '';
+    const title = typeof body.title === 'string' ? body.title.trim().slice(0, 256) : '';
+    const description = typeof body.description === 'string' ? body.description.trim().slice(0, 4096) : '';
+    const footerText = typeof body.footerText === 'string' ? body.footerText.trim().slice(0, 2048) : '';
+    const thumbnailUrl = typeof body.thumbnailUrl === 'string' ? body.thumbnailUrl.trim() : '';
+    const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+    const roleId = body.roleId ? String(body.roleId).trim() : null;
+    const includeTimestamp = Boolean(body.timestamp);
+    const colorNum = parseColorValue(body.color) ?? 0x5865F2;
+
+    if (!title && !description && !content) {
+        return { error: 'Zadaj aspoň nadpis, popis embedu alebo text správy.' };
+    }
+
+    if (thumbnailUrl && !isValidHttpUrl(thumbnailUrl)) {
+        return { error: 'Thumbnail URL musí začínať na http:// alebo https://.' };
+    }
+    if (imageUrl && !isValidHttpUrl(imageUrl)) {
+        return { error: 'Obrázok URL musí začínať na http:// alebo https://.' };
+    }
+
+    const hasEmbed = Boolean(title || description || footerText || thumbnailUrl || imageUrl);
+    const payload = {};
+
+    let finalContent = content;
+    if (roleId) {
+        if (roleId === guild.id) {
+            finalContent = `@everyone${finalContent ? ` ${finalContent}` : ''}`;
+            payload.allowedMentions = { parse: ['everyone'] };
+        } else {
+            finalContent = `<@&${roleId}>${finalContent ? ` ${finalContent}` : ''}`;
+            payload.allowedMentions = { roles: [roleId] };
+        }
+    }
+
+    if (finalContent) {
+        payload.content = finalContent.slice(0, 2000);
+    }
+
+    if (hasEmbed) {
+        const embed = new EmbedBuilder().setColor(colorNum);
+        if (title) embed.setTitle(title);
+        if (description) embed.setDescription(description);
+        if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
+        if (imageUrl) embed.setImage(imageUrl);
+        if (footerText) embed.setFooter({ text: footerText });
+        if (includeTimestamp) embed.setTimestamp();
+        payload.embeds = [embed];
+    }
+
+    return {
+        payload,
+        meta: {
+            content,
+            title,
+            description,
+            color: formatHexColor(colorNum),
+            thumbnailUrl,
+            imageUrl,
+            footerText,
+            roleId,
+            timestamp: includeTimestamp
+        }
+    };
 }
 
 function hasChannelPermissions(guild, channel, permsList) {
@@ -429,6 +526,8 @@ function startWebServer(client) {
             payload.players = buildPlayersPayload(guild);
         } else if (section === 'tempvoice') {
             payload.rooms = buildTempRoomsPayload(guild);
+        } else if (section === 'logs') {
+            payload.logs = getActivityLogs({ limit: 150 });
         }
 
         return res.json(payload);
@@ -674,11 +773,40 @@ function startWebServer(client) {
             validatedRanks.push({ min: Math.round(min), roleId, color });
         }
 
+        const allowedActivityTypes = new Set(['Custom', 'Playing', 'Watching', 'Listening', 'Competing']);
+        const botStatusInput = body.botStatus && typeof body.botStatus === 'object' ? body.botStatus : null;
+        let nextBotStatus = null;
+        if (botStatusInput) {
+            const mode = botStatusInput.mode === 'custom' ? 'custom' : 'auto';
+            const customText = typeof botStatusInput.customText === 'string'
+                ? botStatusInput.customText.trim().slice(0, 128)
+                : '';
+            const activityType = allowedActivityTypes.has(botStatusInput.activityType)
+                ? botStatusInput.activityType
+                : 'Custom';
+
+            if (mode === 'custom' && !customText) {
+                return res.status(400).json({ error: 'Pre vlastný status bota zadaj text aktivity.' });
+            }
+            nextBotStatus = { mode, customText, activityType };
+        }
+
         const updated = updateSettings(s => {
             s.dashboardRoleId = dashboardRoleId;
             s.allowedChannelId = allowedChannelId;
             s.unrankedRoleId = unrankedRoleId;
             s.rankRoles = validatedRanks;
+            if (nextBotStatus) {
+                s.botStatus = nextBotStatus;
+            }
+        });
+
+        updateBotStatus(client);
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: 'Aktualizované všeobecné nastavenia, status bota a CS2 rank roly.',
+            actor: getActorName(req)
         });
 
         return res.json({ ok: true, settings: updated });
@@ -813,7 +941,48 @@ function startWebServer(client) {
         if (!result.ok) {
             return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
         }
+        addActivityLog({
+            level: 'warn',
+            category: 'tempvoice',
+            message: `Zatvorená dočasná miestnosť (${req.params.channelId}).`,
+            actor: getActorName(req)
+        });
         return res.json({ ok: true });
+    });
+
+    app.post('/api/tempvoice/rooms/:channelId/rename', async (req, res) => {
+        const newName = String(req.body?.name || '').trim();
+        const result = await renameTempRoom(client, req.params.channelId, newName);
+        if (!result.ok) {
+            if (result.reason === 'invalid_name') {
+                return res.status(400).json({ error: 'Názov miestnosti musí mať 1 až 100 znakov.' });
+            }
+            return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
+        }
+        addActivityLog({
+            level: 'info',
+            category: 'tempvoice',
+            message: `Miestnosť premenovaná na „${result.name}“.`,
+            actor: getActorName(req)
+        });
+        return res.json({ ok: true, name: result.name });
+    });
+
+    app.post('/api/tempvoice/rooms/:channelId/kick/:userId', async (req, res) => {
+        const result = await kickFromTempRoom(client, req.params.channelId, req.params.userId);
+        if (!result.ok) {
+            if (result.reason === 'member_not_in_room') {
+                return res.status(404).json({ error: 'Hráč sa už nenachádza v tejto miestnosti.' });
+            }
+            return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
+        }
+        addActivityLog({
+            level: 'warn',
+            category: 'tempvoice',
+            message: `Hráč ${result.displayName} bol odpojený z TempVoice miestnosti.`,
+            actor: getActorName(req)
+        });
+        return res.json({ ok: true, displayName: result.displayName });
     });
 
     // --- CS2 PatchBot (viacero kanálov, vypnutie nič nemaže) ---
@@ -1075,6 +1244,308 @@ function startWebServer(client) {
         }
 
         return res.status(400).json({ error: 'Neznámy súbor na stiahnutie.' });
+    });
+
+    app.post('/api/backup/restore', (req, res) => {
+        const payload = req.body?.data;
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            return res.status(400).json({ error: 'Nahratý súbor musí byť platný JSON objekt.' });
+        }
+
+        const restored = [];
+
+        function normalizeUsersMap(rawMap) {
+            const clean = {};
+            for (const [uid, val] of Object.entries(rawMap)) {
+                if (!/^\d{15,22}$/.test(uid)) continue;
+                if (typeof val === 'string' && /^\d{17}$/.test(val)) {
+                    clean[uid] = { steamId: val, elo: null };
+                } else if (val && typeof val === 'object' && /^\d{17}$/.test(String(val.steamId || ''))) {
+                    clean[uid] = {
+                        steamId: String(val.steamId),
+                        elo: typeof val.elo === 'number' ? val.elo : null
+                    };
+                }
+            }
+            return clean;
+        }
+
+        // 1. Kompletná záloha { users, settings }
+        if (payload.users && typeof payload.users === 'object' && payload.settings && typeof payload.settings === 'object') {
+            saveUsers(normalizeUsersMap(payload.users));
+            saveSettings(payload.settings);
+            restored.push('users', 'settings');
+        } else if (
+            payload.tempVoice || payload.patchBot || payload.joinRoles ||
+            payload.csStatus || payload.rankRoles || payload.adminLog || payload.rankFeed
+        ) {
+            // 2. Samostatný settings.json
+            saveSettings(payload);
+            restored.push('settings');
+        } else {
+            // 3. Samostatný users.json
+            const entries = Object.entries(payload);
+            const looksLikeUsers = entries.length === 0 || entries.every(([k, v]) =>
+                /^\d{15,22}$/.test(k) && (
+                    typeof v === 'string' ||
+                    (v && typeof v === 'object' && typeof v.steamId === 'string')
+                )
+            );
+            if (!looksLikeUsers) {
+                return res.status(400).json({ error: 'Nerozpoznaný formát zálohy. Nahraj users.json, settings.json alebo kompletnú zálohu.' });
+            }
+            saveUsers(normalizeUsersMap(payload));
+            restored.push('users');
+        }
+
+        updateBotStatus(client);
+        addActivityLog({
+            level: 'warn',
+            category: 'dashboard',
+            message: `Obnovená záloha zo súboru (${restored.join(' + ')}).`,
+            actor: getActorName(req)
+        });
+
+        return res.json({
+            ok: true,
+            restored,
+            settings: loadSettings()
+        });
+    });
+
+    // --- Rank-Up / Derank Feed ---
+    app.put('/api/settings/rankfeed', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const body = req.body || {};
+
+        const enabled = Boolean(body.enabled);
+        const channelId = body.channelId ? String(body.channelId).trim() : null;
+        const notifyRankUp = body.notifyRankUp !== false;
+        const notifyDerank = body.notifyDerank !== false;
+
+        if (channelId) {
+            const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+            if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
+                return res.status(400).json({ error: 'Vybraný kanál pre Rank-Up / Derank oznámenia neexistuje alebo nie je textový.' });
+            }
+            if (enabled && !hasChannelPermissions(guild, channel, [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks
+            ])) {
+                return res.status(400).json({
+                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                });
+            }
+        } else if (enabled) {
+            return res.status(400).json({ error: 'Pre zapnutie Rank-Up / Derank oznámení vyber cieľový kanál.' });
+        }
+
+        const saved = updateRankFeedSettings({
+            enabled,
+            channelId,
+            notifyRankUp,
+            notifyDerank
+        });
+
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: `Rank-Up / Derank oznámenia ${enabled ? 'zapnuté' : 'vypnuté'}.`,
+            actor: getActorName(req)
+        });
+
+        return res.json({ ok: true, rankFeed: saved });
+    });
+
+    app.post('/api/rankfeed/test', async (req, res) => {
+        const { guild, member } = req.dashboardAuth;
+        const result = await sendTestRankFeedMessage(guild, member);
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+        return res.json({ ok: true });
+    });
+
+    // --- Discord Admin Log ---
+    app.put('/api/settings/adminlog', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const body = req.body || {};
+        const events = body.events && typeof body.events === 'object' ? body.events : {};
+
+        const enabled = Boolean(body.enabled);
+        const channelId = body.channelId ? String(body.channelId).trim() : null;
+
+        if (channelId) {
+            const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+            if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
+                return res.status(400).json({ error: 'Vybraný kanál pre Admin Log neexistuje alebo nie je textový.' });
+            }
+            if (enabled && !hasChannelPermissions(guild, channel, [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.SendMessages,
+                PermissionFlagsBits.EmbedLinks
+            ])) {
+                return res.status(400).json({
+                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                });
+            }
+        } else if (enabled) {
+            return res.status(400).json({ error: 'Pre zapnutie Admin Logu vyber cieľový kanál.' });
+        }
+
+        const saved = updateAdminLogSettings({
+            enabled,
+            channelId,
+            events: {
+                memberJoin: Boolean(events.memberJoin),
+                memberLeave: Boolean(events.memberLeave),
+                bans: Boolean(events.bans),
+                timeouts: Boolean(events.timeouts),
+                roleChanges: Boolean(events.roleChanges),
+                voiceActivity: Boolean(events.voiceActivity)
+            }
+        });
+
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: `Admin Log ${enabled ? 'zapnutý' : 'vypnutý'}.`,
+            actor: getActorName(req)
+        });
+
+        return res.json({ ok: true, adminLog: saved });
+    });
+
+    app.post('/api/adminlog/test', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const result = await sendTestAdminLogMessage(guild);
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+        return res.json({ ok: true });
+    });
+
+    // --- Oznámenia / Embed Builder ---
+    app.get('/api/announcements/history', (req, res) => {
+        return res.json({ history: getAnnouncementsHistory() });
+    });
+
+    app.post('/api/announcements/send', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const body = req.body || {};
+        const channelId = String(body.channelId || '').trim();
+
+        if (!channelId) {
+            return res.status(400).json({ error: 'Vyber cieľový kanál pre oznámenie.' });
+        }
+
+        const channel = guild.channels.cache.get(channelId)
+            || await guild.channels.fetch(channelId).catch(() => null);
+        if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
+            return res.status(400).json({ error: 'Vybraný kanál neexistuje alebo nie je textový.' });
+        }
+
+        if (!hasChannelPermissions(guild, channel, [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.EmbedLinks
+        ])) {
+            return res.status(400).json({
+                error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+            });
+        }
+
+        const built = buildAnnouncementPayload(guild, body);
+        if (built.error) {
+            return res.status(400).json({ error: built.error });
+        }
+
+        const msg = await channel.send(built.payload);
+        if (body.crosspost && channel.type === ChannelType.GuildAnnouncement && typeof msg.crosspost === 'function') {
+            await msg.crosspost().catch(() => null);
+        }
+
+        const entry = {
+            channelId: channel.id,
+            channelName: channel.name,
+            messageId: msg.id,
+            sentAt: Date.now(),
+            ...built.meta
+        };
+        const history = addAnnouncementHistory(entry);
+
+        addActivityLog({
+            level: 'success',
+            category: 'dashboard',
+            message: `Odoslané oznámenie do #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`,
+            actor: getActorName(req)
+        });
+
+        return res.json({ ok: true, entry, history });
+    });
+
+    app.put('/api/announcements/:channelId/:messageId', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const { channelId, messageId } = req.params;
+        const body = req.body || {};
+
+        const channel = guild.channels.cache.get(channelId)
+            || await guild.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) {
+            return res.status(404).json({ error: 'Kanál pôvodnej správy sa nenašiel.' });
+        }
+
+        const existingMsg = await channel.messages.fetch(messageId).catch(() => null);
+        if (!existingMsg) {
+            return res.status(404).json({ error: 'Pôvodná správa v kanáli už neexistuje.' });
+        }
+
+        const built = buildAnnouncementPayload(guild, body);
+        if (built.error) {
+            return res.status(400).json({ error: built.error });
+        }
+
+        await existingMsg.edit({
+            content: built.payload.content || null,
+            embeds: built.payload.embeds || []
+        });
+
+        const entry = {
+            channelId: channel.id,
+            channelName: channel.name,
+            messageId: existingMsg.id,
+            sentAt: Date.now(),
+            ...built.meta
+        };
+        const history = addAnnouncementHistory(entry);
+
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: `Upravené oznámenie v #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`,
+            actor: getActorName(req)
+        });
+
+        return res.json({ ok: true, entry, history });
+    });
+
+    // --- Activity Log v dashboarde ---
+    app.get('/api/logs', (req, res) => {
+        const category = String(req.query.category || 'all');
+        const limit = Number(req.query.limit || 150);
+        return res.json({ logs: getActivityLogs({ category, limit }) });
+    });
+
+    app.delete('/api/logs', (req, res) => {
+        clearActivityLogs();
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: 'Activity Log bol vyčistený.',
+            actor: getActorName(req)
+        });
+        return res.json({ ok: true, logs: getActivityLogs({ limit: 150 }) });
     });
 
     // SPA fallback (mimo /api a /auth)

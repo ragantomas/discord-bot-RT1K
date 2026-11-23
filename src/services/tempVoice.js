@@ -7,6 +7,7 @@ const {
     getAllTempRooms
 } = require('../storage/settingsStore');
 const { buildControlPanel, refreshControlPanel } = require('./tempVoicePanel');
+const { addActivityLog } = require('./activityLog');
 
 function formatRoomName(template, member) {
     const rawTemplate = template || TEMPVOICE_DEFAULTS.roomNameTemplate;
@@ -118,6 +119,12 @@ async function createTempRoom(member, guildConfig) {
 
     setTempRoom(newChannel.id, room);
 
+    addActivityLog({
+        level: 'info',
+        category: 'tempvoice',
+        message: `Vytvorená TempVoice miestnosť „${newChannel.name}“ pre ${member.displayName}.`
+    });
+
     const panelMessage = await newChannel.send(buildControlPanel(newChannel, room)).catch(err => {
         console.error('Chyba pri odosielaní ovládacieho panelu TempVoice:', err);
         return null;
@@ -126,6 +133,12 @@ async function createTempRoom(member, guildConfig) {
     if (panelMessage) {
         room.panelMessageId = panelMessage.id;
         setTempRoom(newChannel.id, room);
+
+    addActivityLog({
+        level: 'info',
+        category: 'tempvoice',
+        message: `Vytvorená TempVoice miestnosť „${newChannel.name}“ pre ${member.displayName}.`
+    });
     }
 
     return room;
@@ -240,6 +253,56 @@ async function closeTempRoom(client, channelId) {
     return { ok: true };
 }
 
+async function renameTempRoom(client, channelId, newName) {
+    const room = getTempRoom(channelId);
+    if (!room) return { ok: false, reason: 'not_found' };
+
+    const trimmed = String(newName || '').trim();
+    if (!trimmed || trimmed.length > 100) {
+        return { ok: false, reason: 'invalid_name' };
+    }
+
+    const guild = client.guilds.cache.get(room.guildId)
+        || await client.guilds.fetch(room.guildId).catch(() => null);
+    const channel = guild
+        ? (guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null))
+        : null;
+
+    if (!channel) {
+        deleteTempRoom(channelId);
+        return { ok: false, reason: 'missing_channel' };
+    }
+
+    await channel.setName(trimmed);
+    await refreshControlPanel(channel, room);
+
+    return { ok: true, name: trimmed };
+}
+
+async function kickFromTempRoom(client, channelId, userId) {
+    const room = getTempRoom(channelId);
+    if (!room) return { ok: false, reason: 'not_found' };
+
+    const guild = client.guilds.cache.get(room.guildId)
+        || await client.guilds.fetch(room.guildId).catch(() => null);
+    const channel = guild
+        ? (guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null))
+        : null;
+
+    if (!channel) {
+        deleteTempRoom(channelId);
+        return { ok: false, reason: 'missing_channel' };
+    }
+
+    const targetMember = channel.members.get(userId);
+    if (!targetMember) {
+        return { ok: false, reason: 'member_not_in_room' };
+    }
+
+    await targetMember.voice.disconnect('Odpojený cez webový dashboard.');
+    return { ok: true, displayName: targetMember.displayName };
+}
+
 module.exports = {
     formatRoomName,
     clampBitrate,
@@ -247,5 +310,7 @@ module.exports = {
     handleRoomLeave,
     cleanupTempRoomsOnStartup,
     toggleTempRoomLock,
-    closeTempRoom
+    closeTempRoom,
+    renameTempRoom,
+    kickFromTempRoom
 };

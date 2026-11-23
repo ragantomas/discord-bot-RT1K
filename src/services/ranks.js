@@ -2,6 +2,8 @@ const { INTERVALS } = require('../config');
 const { fetchLeetifyProfile } = require('./leetify');
 const { loadUsers, saveUsers } = require('../storage/usersStore');
 const { getRankSettings } = require('../storage/settingsStore');
+const { notifyRankChange } = require('./rankFeed');
+const { addActivityLog } = require('./activityLog');
 
 let isBulkUpdating = false;
 
@@ -19,8 +21,12 @@ async function removeRankRoles(member) {
     }
 }
 
-async function updateMemberRank(member, steam64Id, users = null) {
+async function updateMemberRank(member, steam64Id, users = null, options = {}) {
     try {
+        const previousElo = typeof options.previousElo === 'number'
+            ? options.previousElo
+            : (typeof users?.[member.id]?.elo === 'number' ? users[member.id].elo : null);
+
         const data = await fetchLeetifyProfile(steam64Id);
         if (!data) return { error: 'Profil sa nenašiel na Leetify.' };
 
@@ -53,7 +59,11 @@ async function updateMemberRank(member, steam64Id, users = null) {
             saveUsers(users);
         }
 
-        return { elo: finalElo, data };
+        if (options.notifyChange !== false && typeof previousElo === 'number' && typeof finalElo === 'number') {
+            await notifyRankChange(member, previousElo, finalElo).catch(console.error);
+        }
+
+        return { elo: finalElo, previousElo, data };
     } catch (err) {
         console.error(err);
         return { error: 'Chyba pri komunikácii s Leetify alebo Discordom.' };
@@ -90,6 +100,12 @@ async function updateAllMemberRanks(client) {
             }
             await new Promise(r => setTimeout(r, INTERVALS.RANK_UPDATE_DELAY_MS));
         }
+
+        addActivityLog({
+            level: 'info',
+            category: 'elo',
+            message: `Hromadná aktualizácia rankov dokončená (${updated}/${entries.length} hráčov).`
+        });
 
         return {
             alreadyRunning: false,

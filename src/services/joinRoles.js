@@ -1,5 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getJoinRolesSettings } = require('../storage/settingsStore');
+const { addActivityLog } = require('./activityLog');
 
 function validateAssignableRole(guild, role) {
     if (!role) {
@@ -72,6 +73,12 @@ async function assignJoinRole(member) {
         rolesToAdd,
         member.user.bot ? 'Automatické join role pre bota' : 'Automatické join role pre člena'
     );
+
+    addActivityLog({
+        level: 'info',
+        category: 'joinroles',
+        message: `Pridelené join role (${rolesToAdd.map(r => r.name).join(', ')}) pre ${member.user.tag}.`
+    });
     return true;
 }
 

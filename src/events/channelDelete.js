@@ -25,7 +25,9 @@ module.exports = {
             tvMatchesTrigger ||
             tvMatchesCategory ||
             pbMatches ||
-            current.csStatus?.channelId === channel.id;
+            current.csStatus?.channelId === channel.id ||
+            current.rankFeed?.channelId === channel.id ||
+            current.adminLog?.channelId === channel.id;
 
         if (!needsUpdate) return;
 
@@ -62,6 +64,18 @@ module.exports = {
                 settings.csStatus.messageId = null;
                 settings.csStatus.enabled = false;
                 console.warn('Kanál pre CS2/Steam stav serverov bol zmazaný.');
+            }
+
+            if (settings.rankFeed.channelId === channel.id) {
+                settings.rankFeed.channelId = null;
+                settings.rankFeed.enabled = false;
+                console.warn('Kanál pre Rank-Up / Derank oznámenia bol zmazaný.');
+            }
+
+            if (settings.adminLog.channelId === channel.id) {
+                settings.adminLog.channelId = null;
+                settings.adminLog.enabled = false;
+                console.warn('Kanál pre Admin Log bol zmazaný.');
             }
         });
     }

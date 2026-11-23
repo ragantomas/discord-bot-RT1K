@@ -1,11 +1,17 @@
 const { Events } = require('discord.js');
 const { getTempVoiceSettings, getTempRoom } = require('../storage/settingsStore');
 const { createTempRoom, handleRoomLeave } = require('../services/tempVoice');
+const { logVoiceState } = require('../services/adminLog');
 
 module.exports = {
     name: Events.VoiceStateUpdate,
     async execute(oldState, newState) {
         if (oldState.channelId === newState.channelId) return;
+
+        // 0. Admin Log voice aktivity
+        await logVoiceState(oldState, newState).catch(err => {
+            console.error('Chyba pri admin logu voice aktivity:', err);
+        });
 
         // 1. Najprv skontroluj odchod zo starej TempVoice miestnosti
         if (oldState.channelId && oldState.channel && getTempRoom(oldState.channelId)) {
