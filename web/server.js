@@ -90,7 +90,8 @@ async function verifyDashboardAccess(client, userId) {
         return { allowed: isOwner, isOwner, guild: null, member: null };
     }
 
-    const member = await guild.members.fetch(userId).catch(() => null);
+    const member = guild.members.cache.get(userId)
+        || await guild.members.fetch(userId).catch(() => null);
     const { dashboardRoleId } = loadSettings();
     const hasRole = Boolean(dashboardRoleId && member?.roles.cache.has(dashboardRoleId));
 
@@ -100,6 +101,107 @@ async function verifyDashboardAccess(client, userId) {
         guild,
         member
     };
+}
+
+function buildOverviewPayload(client, guild) {
+    const users = loadUsers();
+    const settings = loadSettings();
+
+    const activeTempRoomsCount = Object.values(settings.tempVoice.rooms || {})
+        .filter(r => r && r.guildId === guild.id && guild.channels.cache.has(r.channelId))
+        .length;
+
+    const tvActive = Boolean(
+        settings.tempVoice.enabled &&
+        (settings.tempVoice.setups || []).some(s => s.enabled && s.triggerChannelId)
+    );
+
+    const pbActive = Boolean(
+        settings.patchBot.enabled &&
+        (settings.patchBot.channelIds || []).length > 0
+    );
+
+    const jrActive = Boolean(
+        settings.joinRoles.enabled &&
+        ((settings.joinRoles.memberRoleIds || []).length > 0 || (settings.joinRoles.botRoleIds || []).length > 0)
+    );
+
+    return {
+        bot: {
+            online: client.isReady(),
+            ping: Number.isFinite(client.ws.ping) ? Math.round(client.ws.ping) : 0,
+            uptimeMs: client.uptime || 0,
+            username: client.user?.username || 'Bot',
+            avatarUrl: client.user?.displayAvatarURL({ size: 128 }) || null
+        },
+        guild: {
+            id: guild.id,
+            name: guild.name,
+            memberCount: guild.memberCount,
+            iconUrl: guild.iconURL({ size: 128 }) || null
+        },
+        stats: {
+            linkedPlayersCount: Object.keys(users).length,
+            activeTempRoomsCount
+        },
+        modules: {
+            tempVoiceEnabled: tvActive,
+            patchBotEnabled: pbActive,
+            joinRolesEnabled: jrActive,
+            csStatusEnabled: Boolean(settings.csStatus.enabled && settings.csStatus.channelId)
+        },
+        steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim())
+    };
+}
+
+function buildPlayersPayload(guild) {
+    const users = loadUsers();
+    return Object.entries(users)
+        .map(([userId, data]) => {
+            const member = guild.members.cache.get(userId);
+            const elo = typeof data.elo === 'number' ? data.elo : null;
+            const rankObj = elo !== null ? getRankForElo(elo) : null;
+
+            return {
+                userId,
+                steamId: data.steamId,
+                elo,
+                rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080',
+                displayName: member?.displayName || `Používateľ ${userId}`,
+                username: member?.user?.username || 'Neznámy na serveri',
+                inGuild: Boolean(member),
+                avatarUrl: member?.displayAvatarURL({ size: 64 })
+                    || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                leetifyUrl: `https://leetify.com/app/profile/${data.steamId}`
+            };
+        })
+        .sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1));
+}
+
+function buildTempRoomsPayload(guild) {
+    const roomsMap = getAllTempRooms();
+    const activeRooms = [];
+
+    for (const [channelId, room] of Object.entries(roomsMap)) {
+        const channel = guild.channels.cache.get(channelId);
+        if (!channel) continue;
+
+        const ownerMember = guild.members.cache.get(room.ownerId);
+        const humanCount = channel.members.filter(m => !m.user.bot).size;
+
+        activeRooms.push({
+            channelId,
+            name: channel.name,
+            ownerId: room.ownerId,
+            ownerName: ownerMember?.displayName || `ID ${room.ownerId}`,
+            memberCount: humanCount,
+            userLimit: channel.userLimit || 0,
+            bitrateKbps: Math.round((channel.bitrate || 64000) / 1000),
+            locked: Boolean(room.locked)
+        });
+    }
+
+    return activeRooms;
 }
 
 function hasChannelPermissions(guild, channel, permsList) {
@@ -310,57 +412,26 @@ function startWebServer(client) {
 
     app.use('/api', requireAuth);
 
-    // --- Prehľad & Metadata ---
+    // --- Prehľad, Live polling & Metadata ---
     app.get('/api/overview', (req, res) => {
         const { guild } = req.dashboardAuth;
-        const users = loadUsers();
-        const settings = loadSettings();
+        return res.json(buildOverviewPayload(client, guild));
+    });
 
-        const activeTempRoomsCount = Object.values(settings.tempVoice.rooms || {})
-            .filter(r => r && r.guildId === guild.id)
-            .length;
+    app.get('/api/live', (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const section = String(req.query.section || 'overview');
+        const payload = {
+            overview: buildOverviewPayload(client, guild)
+        };
 
-        const tvActive = Boolean(
-            settings.tempVoice.enabled &&
-            (settings.tempVoice.setups || []).some(s => s.enabled && s.triggerChannelId)
-        );
+        if (section === 'players') {
+            payload.players = buildPlayersPayload(guild);
+        } else if (section === 'tempvoice') {
+            payload.rooms = buildTempRoomsPayload(guild);
+        }
 
-        const pbActive = Boolean(
-            settings.patchBot.enabled &&
-            (settings.patchBot.channelIds || []).length > 0
-        );
-
-        const jrActive = Boolean(
-            settings.joinRoles.enabled &&
-            ((settings.joinRoles.memberRoleIds || []).length > 0 || (settings.joinRoles.botRoleIds || []).length > 0)
-        );
-
-        return res.json({
-            bot: {
-                online: client.isReady(),
-                ping: Number.isFinite(client.ws.ping) ? Math.round(client.ws.ping) : 0,
-                uptimeMs: client.uptime || 0,
-                username: client.user?.username || 'Bot',
-                avatarUrl: client.user?.displayAvatarURL({ size: 128 }) || null
-            },
-            guild: {
-                id: guild.id,
-                name: guild.name,
-                memberCount: guild.memberCount,
-                iconUrl: guild.iconURL({ size: 128 }) || null
-            },
-            stats: {
-                linkedPlayersCount: Object.keys(users).length,
-                activeTempRoomsCount
-            },
-            modules: {
-                tempVoiceEnabled: tvActive,
-                patchBotEnabled: pbActive,
-                joinRolesEnabled: jrActive,
-                csStatusEnabled: Boolean(settings.csStatus.enabled && settings.csStatus.channelId)
-            },
-            steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim())
-        });
+        return res.json(payload);
     });
 
     app.get('/api/guild/meta', async (req, res) => {
@@ -438,33 +509,8 @@ function startWebServer(client) {
     // --- Hráči (CS2 Premier) ---
     app.get('/api/players', async (req, res) => {
         const { guild } = req.dashboardAuth;
-        const users = loadUsers();
-        const entries = Object.entries(users);
-
         await guild.members.fetch().catch(() => guild.members.cache);
-
-        const players = entries
-            .map(([userId, data]) => {
-                const member = guild.members.cache.get(userId);
-                const elo = typeof data.elo === 'number' ? data.elo : null;
-                const rankObj = elo !== null ? getRankForElo(elo) : null;
-
-                return {
-                    userId,
-                    steamId: data.steamId,
-                    elo,
-                    rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080',
-                    displayName: member?.displayName || `Používateľ ${userId}`,
-                    username: member?.user?.username || 'Neznámy na serveri',
-                    inGuild: Boolean(member),
-                    avatarUrl: member?.displayAvatarURL({ size: 64 })
-                        || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                    leetifyUrl: `https://leetify.com/app/profile/${data.steamId}`
-                };
-            })
-            .sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1));
-
-        return res.json({ players });
+        return res.json({ players: buildPlayersPayload(guild) });
     });
 
     app.post('/api/players/link', async (req, res) => {
@@ -742,33 +788,16 @@ function startWebServer(client) {
     app.get('/api/tempvoice/rooms', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const roomsMap = getAllTempRooms();
-        const activeRooms = [];
 
-        for (const [channelId, room] of Object.entries(roomsMap)) {
+        for (const channelId of Object.keys(roomsMap)) {
             const channel = guild.channels.cache.get(channelId)
                 || await guild.channels.fetch(channelId).catch(() => null);
-
             if (!channel) {
                 deleteTempRoom(channelId);
-                continue;
             }
-
-            const ownerMember = await guild.members.fetch(room.ownerId).catch(() => null);
-            const humanCount = channel.members.filter(m => !m.user.bot).size;
-
-            activeRooms.push({
-                channelId,
-                name: channel.name,
-                ownerId: room.ownerId,
-                ownerName: ownerMember?.displayName || `ID ${room.ownerId}`,
-                memberCount: humanCount,
-                userLimit: channel.userLimit || 0,
-                bitrateKbps: Math.round((channel.bitrate || 64000) / 1000),
-                locked: Boolean(room.locked)
-            });
         }
 
-        return res.json({ rooms: activeRooms });
+        return res.json({ rooms: buildTempRoomsPayload(guild) });
     });
 
     app.post('/api/tempvoice/rooms/:channelId/toggle-lock', async (req, res) => {

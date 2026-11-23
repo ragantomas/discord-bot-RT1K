@@ -42,14 +42,22 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+const LIVE_POLL_MS = 5000;
+let livePollTimer = null;
+let uptimeTickTimer = null;
+let isLivePolling = false;
+let lastPlayersHtml = '';
+let lastRoomsHtml = '';
+
 function formatDuration(ms) {
     const totalSec = Math.max(0, Math.floor((ms || 0) / 1000));
     const days = Math.floor(totalSec / 86400);
     const hours = Math.floor((totalSec % 86400) / 3600);
     const mins = Math.floor((totalSec % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h ${mins}m`;
-    if (hours > 0) return `${hours}h ${mins}m`;
-    return `${mins}m`;
+    const secs = totalSec % 60;
+    if (days > 0) return `${days}d ${hours}h ${mins}m ${secs}s`;
+    if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+    return `${mins}m ${secs}s`;
 }
 
 function formatIntervalLabel(seconds) {
@@ -185,6 +193,7 @@ async function apiFetch(url, options = {}) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
+            stopLiveUpdates();
             await bootstrap();
         }
         throw new Error(data.error || `Chyba servera (${res.status})`);
@@ -292,8 +301,8 @@ function renderOverview() {
                     <i data-lucide="radio" class="w-4 h-4 text-emerald-400"></i>
                 </div>
                 <div class="mt-3 flex items-baseline gap-2.5">
-                    <span class="text-2xl font-bold ${ov.bot.online ? 'text-emerald-400' : 'text-red-400'}">${ov.bot.online ? 'Online' : 'Offline'}</span>
-                    <span class="text-xs text-slate-400">Ping: ${escapeHtml(pingBadge)}</span>
+                    <span id="ov-bot-status" class="text-2xl font-bold ${ov.bot.online ? 'text-emerald-400' : 'text-red-400'}">${ov.bot.online ? 'Online' : 'Offline'}</span>
+                    <span id="ov-bot-ping" class="text-xs text-slate-400">Ping: ${escapeHtml(pingBadge)}</span>
                 </div>
             </div>
 
@@ -302,8 +311,8 @@ function renderOverview() {
                     <span>Uptime</span>
                     <i data-lucide="clock" class="w-4 h-4 text-brand"></i>
                 </div>
-                <div class="mt-3 text-2xl font-bold text-white">${escapeHtml(formatDuration(ov.bot.uptimeMs))}</div>
-                <div class="text-xs text-slate-400 mt-1">${escapeHtml(ov.guild.name)} (${ov.guild.memberCount} členov)</div>
+                <div id="ov-bot-uptime" class="mt-3 text-2xl font-bold text-white">${escapeHtml(formatDuration(ov.bot.uptimeMs))}</div>
+                <div id="ov-guild-members" class="text-xs text-slate-400 mt-1">${escapeHtml(ov.guild.name)} (${ov.guild.memberCount} členov)</div>
             </div>
 
             <div class="card p-5">
@@ -311,7 +320,7 @@ function renderOverview() {
                     <span>Prepojení hráči</span>
                     <i data-lucide="users" class="w-4 h-4 text-brand-gold"></i>
                 </div>
-                <div class="mt-3 text-2xl font-bold text-white">${ov.stats.linkedPlayersCount}</div>
+                <div id="ov-linked-count" class="mt-3 text-2xl font-bold text-white">${ov.stats.linkedPlayersCount}</div>
                 <div class="text-xs text-slate-400 mt-1">V databáze <code class="text-slate-300">users.json</code></div>
             </div>
 
@@ -320,7 +329,7 @@ function renderOverview() {
                     <span>Aktívne TempVoice</span>
                     <i data-lucide="headphones" class="w-4 h-4 text-sky-400"></i>
                 </div>
-                <div class="mt-3 text-2xl font-bold text-white">${ov.stats.activeTempRoomsCount}</div>
+                <div id="ov-tv-count" class="mt-3 text-2xl font-bold text-white">${ov.stats.activeTempRoomsCount}</div>
                 <div class="text-xs text-slate-400 mt-1">Momentálne otvorené miestnosti</div>
             </div>
         </div>
@@ -363,7 +372,7 @@ function renderOverview() {
                                 <i data-lucide="${m.icon}" class="w-4 h-4 text-slate-400"></i>
                                 ${escapeHtml(m.label)}
                             </span>
-                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${m.enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}">
+                            <span data-module-badge="${m.key}" class="text-xs font-semibold px-2.5 py-1 rounded-full ${m.enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}">
                                 ${m.enabled ? 'Aktívny' : 'Vypnutý'}
                             </span>
                         </button>
@@ -527,7 +536,7 @@ function renderPlayers() {
         <div class="card overflow-hidden">
             <div class="p-5 border-b border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                    <h3 class="text-base font-semibold text-white">Prepojení hráči (${state.players.length})</h3>
+                    <h3 id="players-count-heading" class="text-base font-semibold text-white">Prepojení hráči (${state.players.length})</h3>
                     <p class="text-xs text-slate-400 mt-0.5">Zoradené podľa Premier Elo od najvyššieho</p>
                 </div>
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
@@ -841,7 +850,7 @@ function renderTempVoice() {
         <div class="card p-6">
             <div class="flex items-center justify-between gap-3 mb-4">
                 <div>
-                    <h3 class="text-base font-semibold text-white">Aktívne dočasné miestnosti (${state.tempRooms.length})</h3>
+                    <h3 id="tv-rooms-heading" class="text-base font-semibold text-white">Aktívne dočasné miestnosti (${state.tempRooms.length})</h3>
                     <p class="text-xs text-slate-400 mt-0.5">Na diaľku ich môžeš zamknúť, odomknúť alebo zavrieť.</p>
                 </div>
                 <button id="tv-refresh-rooms" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
@@ -1548,33 +1557,170 @@ function attachRankRowDeleteListeners() {
     });
 }
 
-// --- DATA REFRESH & NAVIGATION ---
+// --- DATA REFRESH, LIVE POLLING & NAVIGATION ---
+
+function updateHeaderBotBadge(bot) {
+    const badge = document.getElementById('header-bot-badge');
+    if (!badge || !bot) return;
+    badge.className = bot.online
+        ? 'hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+        : 'hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30';
+    badge.innerHTML = `<span class="w-2 h-2 rounded-full ${bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>${bot.online ? `Online (${bot.ping} ms)` : 'Offline'}`;
+}
+
+function patchOverviewDom() {
+    const ov = state.overview;
+    if (!ov) return;
+
+    const statusEl = document.getElementById('ov-bot-status');
+    const pingEl = document.getElementById('ov-bot-ping');
+    const uptimeEl = document.getElementById('ov-bot-uptime');
+    const guildEl = document.getElementById('ov-guild-members');
+    const linkedEl = document.getElementById('ov-linked-count');
+    const tvEl = document.getElementById('ov-tv-count');
+
+    if (statusEl) {
+        statusEl.textContent = ov.bot.online ? 'Online' : 'Offline';
+        statusEl.className = `text-2xl font-bold ${ov.bot.online ? 'text-emerald-400' : 'text-red-400'}`;
+    }
+    if (pingEl) {
+        pingEl.textContent = `Ping: ${ov.bot.online ? `${ov.bot.ping} ms` : 'N/A'}`;
+    }
+    if (uptimeEl) {
+        uptimeEl.textContent = formatDuration(ov.bot.uptimeMs);
+    }
+    if (guildEl) {
+        guildEl.textContent = `${ov.guild.name} (${ov.guild.memberCount} členov)`;
+    }
+    if (linkedEl) {
+        linkedEl.textContent = String(ov.stats.linkedPlayersCount);
+    }
+    if (tvEl) {
+        tvEl.textContent = String(ov.stats.activeTempRoomsCount);
+    }
+
+    const moduleMap = {
+        tempvoice: ov.modules.tempVoiceEnabled,
+        patchbot: ov.modules.patchBotEnabled,
+        joinroles: ov.modules.joinRolesEnabled,
+        csstatus: ov.modules.csStatusEnabled
+    };
+
+    Object.entries(moduleMap).forEach(([key, enabled]) => {
+        const pill = document.querySelector(`[data-module-badge="${key}"]`);
+        if (!pill) return;
+        pill.textContent = enabled ? 'Aktívny' : 'Vypnutý';
+        pill.className = `text-xs font-semibold px-2.5 py-1 rounded-full ${enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}`;
+    });
+}
+
+function patchPlayersTableDom() {
+    const heading = document.getElementById('players-count-heading');
+    if (heading) {
+        heading.textContent = `Prepojení hráči (${state.players.length})`;
+    }
+
+    const tbody = document.getElementById('players-tbody');
+    if (!tbody || tbody.querySelector('button:disabled')) return;
+
+    const nextHtml = renderPlayersTableRows();
+    if (nextHtml !== lastPlayersHtml) {
+        lastPlayersHtml = nextHtml;
+        tbody.innerHTML = nextHtml;
+        attachPlayerTableListeners();
+        refreshIcons();
+    }
+}
+
+function patchTempRoomsDom() {
+    const heading = document.getElementById('tv-rooms-heading');
+    if (heading) {
+        heading.textContent = `Aktívne dočasné miestnosti (${state.tempRooms.length})`;
+    }
+
+    const listEl = document.getElementById('tv-rooms-list');
+    if (!listEl || listEl.querySelector('button:disabled')) return;
+
+    const nextHtml = renderTempVoiceRoomsList();
+    if (nextHtml !== lastRoomsHtml) {
+        lastRoomsHtml = nextHtml;
+        listEl.innerHTML = nextHtml;
+        attachTempVoiceRoomListeners();
+        refreshIcons();
+    }
+}
+
+async function pollLiveUpdates() {
+    if (document.hidden || isLivePolling || !state.auth?.authorized) return;
+    isLivePolling = true;
+    try {
+        const data = await apiFetch(`/api/live?section=${encodeURIComponent(state.activeSection)}`);
+        if (data.overview) {
+            state.overview = data.overview;
+            updateHeaderBotBadge(data.overview.bot);
+            if (state.activeSection === 'overview') {
+                patchOverviewDom();
+            }
+        }
+        if (Array.isArray(data.players) && state.activeSection === 'players') {
+            state.players = data.players;
+            patchPlayersTableDom();
+        }
+        if (Array.isArray(data.rooms) && state.activeSection === 'tempvoice') {
+            state.tempRooms = data.rooms;
+            patchTempRoomsDom();
+        }
+    } catch {
+        // Pri dočasnej strate spojenia ticho počkáme na ďalší tick
+    } finally {
+        isLivePolling = false;
+    }
+}
+
+function startLiveUpdates() {
+    stopLiveUpdates();
+    livePollTimer = setInterval(pollLiveUpdates, LIVE_POLL_MS);
+    uptimeTickTimer = setInterval(() => {
+        if (document.hidden || !state.overview?.bot?.online) return;
+        state.overview.bot.uptimeMs += 1000;
+        const uptimeEl = document.getElementById('ov-bot-uptime');
+        if (uptimeEl) {
+            uptimeEl.textContent = formatDuration(state.overview.bot.uptimeMs);
+        }
+    }, 1000);
+}
+
+function stopLiveUpdates() {
+    if (livePollTimer) {
+        clearInterval(livePollTimer);
+        livePollTimer = null;
+    }
+    if (uptimeTickTimer) {
+        clearInterval(uptimeTickTimer);
+        uptimeTickTimer = null;
+    }
+}
 
 async function refreshOverviewOnly() {
     state.overview = await apiFetch('/api/overview');
-    const badge = document.getElementById('header-bot-badge');
-    if (badge && state.overview?.bot) {
-        badge.innerHTML = `<span class="w-2 h-2 rounded-full ${state.overview.bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>${state.overview.bot.online ? `Online (${state.overview.bot.ping} ms)` : 'Offline'}`;
-    }
-    if (state.activeSection === 'overview') renderOverview();
+    updateHeaderBotBadge(state.overview?.bot);
+    if (state.activeSection === 'overview') patchOverviewDom();
 }
 
 async function refreshOverviewAndPlayers() {
     const [ov, pl] = await Promise.all([apiFetch('/api/overview'), apiFetch('/api/players')]);
     state.overview = ov;
     state.players = pl.players || [];
-    renderOverview();
-    renderPlayers();
+    updateHeaderBotBadge(ov?.bot);
+    if (state.activeSection === 'overview') patchOverviewDom();
+    if (state.activeSection === 'players') patchPlayersTableDom();
 }
 
 async function refreshTempRooms() {
     const data = await apiFetch('/api/tempvoice/rooms');
     state.tempRooms = data.rooms || [];
-    const listEl = document.getElementById('tv-rooms-list');
-    if (listEl) {
-        listEl.innerHTML = renderTempVoiceRoomsList();
-        attachTempVoiceRoomListeners();
-        refreshIcons();
+    if (document.getElementById('tv-rooms-list')) {
+        patchTempRoomsDom();
     } else if (state.activeSection === 'tempvoice') {
         renderTempVoice();
     }
@@ -1597,6 +1743,12 @@ function renderActiveSection() {
         settings: renderSettings
     };
     (map[state.activeSection] || renderOverview)();
+    if (state.activeSection === 'players') {
+        lastPlayersHtml = document.getElementById('players-tbody')?.innerHTML || '';
+    }
+    if (state.activeSection === 'tempvoice') {
+        lastRoomsHtml = document.getElementById('tv-rooms-list')?.innerHTML || '';
+    }
 }
 
 function switchSection(section) {
@@ -1614,6 +1766,7 @@ function switchSection(section) {
     syncDraftsFromSettings();
     renderActiveSection();
     closeMobileSidebar();
+    pollLiveUpdates();
 }
 
 function openMobileSidebar() {
@@ -1627,11 +1780,13 @@ function closeMobileSidebar() {
 }
 
 async function handleLogout() {
+    stopLiveUpdates();
     await fetch('/api/logout', { method: 'POST' }).catch(() => null);
     window.location.href = '/';
 }
 
 async function bootstrap() {
+    stopLiveUpdates();
     showView('view-loading');
     try {
         const res = await fetch('/api/auth/me');
@@ -1702,17 +1857,23 @@ async function bootstrap() {
         state.tempRooms = roomsRes.rooms || [];
         syncDraftsFromSettings();
 
-        const badge = document.getElementById('header-bot-badge');
-        badge.innerHTML = `<span class="w-2 h-2 rounded-full ${overview.bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>${overview.bot.online ? `Online (${overview.bot.ping} ms)` : 'Offline'}`;
+        updateHeaderBotBadge(overview.bot);
 
         showView('view-app');
         switchSection(state.activeSection);
+        startLiveUpdates();
     } catch (err) {
         console.error('Chyba inicializácie dashboardu:', err);
         showView('view-login');
         showToast('Nepodarilo sa načítať dashboard.', 'error');
     }
 }
+
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state.auth?.authorized) {
+        pollLiveUpdates();
+    }
+});
 
 document.getElementById('denied-logout-btn').addEventListener('click', handleLogout);
 document.getElementById('header-logout-btn').addEventListener('click', handleLogout);
