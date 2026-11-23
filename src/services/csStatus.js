@@ -12,8 +12,6 @@ const {
 } = require('../storage/csStatusStore');
 
 const REQUEST_TIMEOUT_MS = 8000;
-const MANUAL_REFRESH_COOLDOWN_MS = 30 * 1000;
-const refreshCooldowns = new Map();
 
 const EU_DATACENTER_REGEX = /^(EU\b|Poland|Spain|Austria|Germany|Sweden|Netherlands|Finland|France|UK|United Kingdom|Frankfurt|Vienna|Warsaw|Stockholm|Amsterdam|Madrid|London|Helsinki)/i;
 
@@ -175,7 +173,7 @@ function computeOverallStatus(snapshot) {
     return { color: 0x57F287, label: '🟢 Všetky služby fungujú normálne' };
 }
 
-function buildCsStatusMessagePayload(snapshot, intervalMinutes = CSSTATUS_DEFAULTS.intervalMinutes) {
+function buildCsStatusMessagePayload(snapshot) {
     const overall = computeOverallStatus(snapshot);
     const fetchedUnix = Math.floor((snapshot.fetchedAt || Date.now()) / 1000);
 
@@ -240,18 +238,18 @@ function buildCsStatusMessagePayload(snapshot, intervalMinutes = CSSTATUS_DEFAUL
         });
     }
 
-    embed.setFooter({
-        text: snapshot.hasApiKey
-            ? `Aktualizuje sa každých ${intervalMinutes} min • Zdroj: Steam Web API`
-            : `Aktualizuje sa každých ${intervalMinutes} min • Pre CS2 MM a EU servery pridaj STEAM_API_KEY do .env`
+    embed.addFields({
+        name: '🔗 Zdroj',
+        value: '[Steam Web API](https://developer.valvesoftware.com/wiki/Steam_Web_API) • [Steam Status (steamstat.us)](https://steamstat.us/)',
+        inline: false
     });
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('csstatus:refresh')
-            .setLabel('Obnoviť teraz')
-            .setEmoji('🔄')
-            .setStyle(ButtonStyle.Secondary)
+            .setLabel('Otvoriť na webe')
+            .setEmoji('🌐')
+            .setStyle(ButtonStyle.Link)
+            .setURL('https://steamstat.us/')
     );
 
     return { embeds: [embed], components: [row] };
@@ -276,8 +274,7 @@ async function updateGuildStatusMessage(client, guildId, { snapshot = null, forc
     }
 
     const activeSnapshot = snapshot || await fetchCs2SteamStatus();
-    const intervalMinutes = config.intervalMinutes || CSSTATUS_DEFAULTS.intervalMinutes;
-    const payload = buildCsStatusMessagePayload(activeSnapshot, intervalMinutes);
+    const payload = buildCsStatusMessagePayload(activeSnapshot);
 
     let message = null;
     if (!forceNewMessage && config.messageId) {
@@ -329,38 +326,6 @@ async function updateDueStatusMessages(client) {
     }
 }
 
-async function handleCsStatusInteraction(interaction) {
-    if (interaction.customId !== 'csstatus:refresh') return;
-
-    const guildId = interaction.guildId;
-    const config = guildId ? getCsStatusGuildConfig(guildId) : null;
-
-    if (!config || config.channelId !== interaction.channelId) {
-        return interaction.reply({
-            content: 'Tento status panel už nie je aktívny.',
-            ephemeral: true
-        });
-    }
-
-    const now = Date.now();
-    const lastClick = refreshCooldowns.get(guildId) || 0;
-    const remainingMs = MANUAL_REFRESH_COOLDOWN_MS - (now - lastClick);
-
-    if (remainingMs > 0) {
-        const seconds = Math.ceil(remainingMs / 1000);
-        return interaction.reply({
-            content: `⏳ Stav bol práve obnovený. Skús znova o **${seconds} s**.`,
-            ephemeral: true
-        });
-    }
-
-    refreshCooldowns.set(guildId, now);
-    await interaction.deferUpdate();
-
-    const snapshot = await fetchCs2SteamStatus();
-    await updateGuildStatusMessage(interaction.client, guildId, { snapshot });
-}
-
 module.exports = {
     fetchCs2SteamStatus,
     formatProbeStatus,
@@ -368,6 +333,5 @@ module.exports = {
     extractEuDatacenters,
     buildCsStatusMessagePayload,
     updateGuildStatusMessage,
-    updateDueStatusMessages,
-    handleCsStatusInteraction
+    updateDueStatusMessages
 };
