@@ -120,7 +120,7 @@ function formatValveState(state) {
     const normalized = String(state || '').toLowerCase();
     const map = {
         normal: '🟢 Normálny',
-        idle: '🟢 Voľný (Idle)',
+        idle: '🟢 OK (voľný)',
         low: '🟢 Nízka záťaž',
         medium: '🟡 Stredná záťaž',
         delayed: '🟡 Oneskorený',
@@ -133,13 +133,24 @@ function formatValveState(state) {
     return map[normalized] || (state ? `⚪ ${state}` : '⚪ Neznáme');
 }
 
+function getDatacenterState(dc) {
+    if (!dc || typeof dc !== 'object') return 'offline';
+    const capacity = String(dc.capacity || '').toLowerCase();
+    const load = String(dc.load || '').toLowerCase();
+
+    if (capacity === 'offline' || !load || load === 'offline') {
+        return 'offline';
+    }
+    return dc.load;
+}
+
 function extractEuDatacenters(datacenters) {
     if (!datacenters || typeof datacenters !== 'object') return [];
 
     return Object.entries(datacenters)
         .filter(([name]) => EU_DATACENTER_REGEX.test(name))
-        .slice(0, 8)
-        .map(([name, dc]) => `• **${name}:** ${formatValveState(dc?.load || dc?.capacity)}`);
+        .slice(0, 12)
+        .map(([name, dc]) => `• **${name}:** ${formatValveState(getDatacenterState(dc))}`);
 }
 
 function computeOverallStatus(snapshot) {
@@ -159,12 +170,13 @@ function computeOverallStatus(snapshot) {
     }
 
     const anyProbeSlow = probes.some(p => p?.ok && typeof p.latencyMs === 'number' && p.latencyMs >= 1500);
+    const communityState = String(services.SteamCommunity || '').toLowerCase();
     const valveWarn = [
         services.SessionsLogon,
         scheduler,
-        services.SteamCommunity,
-        services.IEconItems
-    ].some(val => warnStates.has(String(val || '').toLowerCase()));
+        services.SteamCommunity
+    ].some(val => warnStates.has(String(val || '').toLowerCase()))
+        || downStates.has(communityState);
 
     if (anyProbeSlow || valveWarn) {
         return { color: 0xF5A623, label: '🟡 Čiastočné spomalenie / záťaž' };
@@ -216,12 +228,9 @@ function buildCsStatusMessagePayload(snapshot) {
     if (services) {
         const serviceLines = [
             `• **Sessions Logon:** ${formatValveState(services.SessionsLogon)}`,
-            `• **Matchmaking:** ${formatValveState(mm?.scheduler)}`,
-            `• **Steam Community:** ${formatValveState(services.SteamCommunity)}`
+            `• **Inventár hráčov:** ${formatValveState(services.SteamCommunity)}`,
+            `• **Matchmaking:** ${formatValveState(mm?.scheduler)}`
         ];
-        if (services.IEconItems !== undefined) {
-            serviceLines.push(`• **Inventár (Items):** ${formatValveState(services.IEconItems)}`);
-        }
         embed.addFields({ name: '⚙️ CS2 služby', value: serviceLines.join('\n'), inline: false });
     }
 
