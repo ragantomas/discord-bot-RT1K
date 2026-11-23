@@ -36,7 +36,10 @@ function getDefaultTempVoiceSetup(id = 'default') {
         triggerName: TEMPVOICE_DEFAULTS.triggerName,
         roomNameTemplate: TEMPVOICE_DEFAULTS.roomNameTemplate,
         bitrateKbps: TEMPVOICE_DEFAULTS.bitrateKbps,
-        userLimit: TEMPVOICE_DEFAULTS.userLimit
+        userLimit: TEMPVOICE_DEFAULTS.userLimit,
+        lockOnDisable: false,
+        lockRoleIds: [],
+        lockedRolePrevConnect: {}
     };
 }
 
@@ -119,6 +122,17 @@ function normalizeTempVoiceSetup(rawSetup, index = 0) {
     const def = getDefaultTempVoiceSetup(`tv_${index + 1}`);
     const src = rawSetup && typeof rawSetup === 'object' ? rawSetup : {};
 
+    const lockedRolePrevConnect = {};
+    if (src.lockedRolePrevConnect && typeof src.lockedRolePrevConnect === 'object' && !Array.isArray(src.lockedRolePrevConnect)) {
+        for (const [roleId, prevState] of Object.entries(src.lockedRolePrevConnect)) {
+            const cleanId = String(roleId || '').trim();
+            if (!cleanId) continue;
+            if (prevState === 'allow' || prevState === 'deny' || prevState === 'inherit') {
+                lockedRolePrevConnect[cleanId] = prevState;
+            }
+        }
+    }
+
     return {
         id: typeof src.id === 'string' && src.id.trim() ? src.id.trim() : def.id,
         enabled: typeof src.enabled === 'boolean' ? src.enabled : Boolean(src.triggerChannelId),
@@ -135,7 +149,10 @@ function normalizeTempVoiceSetup(rawSetup, index = 0) {
             : def.bitrateKbps,
         userLimit: typeof src.userLimit === 'number' && Number.isFinite(src.userLimit)
             ? Math.min(Math.max(Math.round(src.userLimit), 0), 99)
-            : def.userLimit
+            : def.userLimit,
+        lockOnDisable: Boolean(src.lockOnDisable),
+        lockRoleIds: uniqueStringIds(src.lockRoleIds),
+        lockedRolePrevConnect
     };
 }
 

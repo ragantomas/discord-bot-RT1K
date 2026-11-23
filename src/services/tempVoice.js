@@ -305,6 +305,132 @@ async function kickFromTempRoom(client, channelId, userId) {
     return { ok: true, displayName: targetMember.displayName };
 }
 
+function getOverwriteConnectState(channel, roleId) {
+    const ow = channel.permissionOverwrites?.cache?.get(roleId);
+    if (ow?.allow?.has(PermissionFlagsBits.Connect)) return 'allow';
+    if (ow?.deny?.has(PermissionFlagsBits.Connect)) return 'deny';
+    return 'inherit';
+}
+
+async function restoreTriggerRoleConnect(channel, roleId, prevState) {
+    const connectValue = prevState === 'allow' ? true : (prevState === 'deny' ? false : null);
+    await channel.permissionOverwrites.edit(
+        roleId,
+        { Connect: connectValue },
+        { reason: 'TempVoice bol zapnutý — obnovenie oprávnení spúšťacieho kanála' }
+    );
+}
+
+async function unlockTriggerChannelRoles(guild, channelId, prevConnectMap) {
+    if (!guild || !channelId || !prevConnectMap || typeof prevConnectMap !== 'object') {
+        return { warning: null };
+    }
+    const entries = Object.entries(prevConnectMap);
+    if (entries.length === 0) return { warning: null };
+
+    const channel = guild.channels.cache.get(channelId)
+        || await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || channel.type !== ChannelType.GuildVoice) {
+        return { warning: null };
+    }
+
+    let failedRoles = 0;
+    for (const [roleId, prevState] of entries) {
+        try {
+            await restoreTriggerRoleConnect(channel, roleId, prevState);
+        } catch {
+            failedRoles++;
+        }
+    }
+
+    const warning = failedRoles > 0
+        ? `Nepodarilo sa obnoviť oprávnenia na kanáli „${channel.name}“ (skontroluj, či má bot právo Spravovať roly / Manage Permissions).`
+        : null;
+    return { warning };
+}
+
+async function syncTriggerChannelLock(guild, setup, prevSetup, shouldBeLocked) {
+    let prevChannelWarning = null;
+    if (
+        prevSetup?.triggerChannelId &&
+        prevSetup.triggerChannelId !== setup.triggerChannelId &&
+        Object.keys(prevSetup.lockedRolePrevConnect || {}).length > 0
+    ) {
+        const res = await unlockTriggerChannelRoles(guild, prevSetup.triggerChannelId, prevSetup.lockedRolePrevConnect);
+        prevChannelWarning = res.warning;
+    }
+
+    const nextPrevMap = prevSetup?.triggerChannelId === setup.triggerChannelId
+        ? { ...(prevSetup.lockedRolePrevConnect || {}) }
+        : {};
+
+    if (!setup.triggerChannelId || !guild) {
+        return { lockedRolePrevConnect: {}, warning: prevChannelWarning };
+    }
+
+    const channel = guild.channels.cache.get(setup.triggerChannelId)
+        || await guild.channels.fetch(setup.triggerChannelId).catch(() => null);
+    if (!channel || channel.type !== ChannelType.GuildVoice) {
+        return { lockedRolePrevConnect: {}, warning: prevChannelWarning };
+    }
+
+    const desiredLockedSet = new Set(shouldBeLocked ? (setup.lockRoleIds || []) : []);
+    let unlockedCount = 0;
+    let lockedCount = 0;
+    let failedRoles = 0;
+
+    for (const roleId of Object.keys(nextPrevMap)) {
+        if (desiredLockedSet.has(roleId)) continue;
+        try {
+            await restoreTriggerRoleConnect(channel, roleId, nextPrevMap[roleId]);
+            delete nextPrevMap[roleId];
+            unlockedCount++;
+        } catch {
+            failedRoles++;
+        }
+    }
+
+    for (const roleId of desiredLockedSet) {
+        const wasAlreadyLocked = Object.prototype.hasOwnProperty.call(nextPrevMap, roleId);
+        const prevState = wasAlreadyLocked ? nextPrevMap[roleId] : getOverwriteConnectState(channel, roleId);
+        try {
+            await channel.permissionOverwrites.edit(
+                roleId,
+                { Connect: false },
+                { reason: 'TempVoice bol vypnutý — automatické zamknutie spúšťacieho kanála' }
+            );
+            nextPrevMap[roleId] = prevState;
+            if (!wasAlreadyLocked) lockedCount++;
+        } catch {
+            failedRoles++;
+        }
+    }
+
+    if (lockedCount > 0) {
+        addActivityLog({
+            level: 'info',
+            category: 'tempvoice',
+            message: `Automaticky zamknutý spúšťací kanál „${channel.name}“ pre ${lockedCount} ${lockedCount === 1 ? 'rolu' : 'rolí'}.`
+        });
+    }
+    if (unlockedCount > 0) {
+        addActivityLog({
+            level: 'info',
+            category: 'tempvoice',
+            message: `Automaticky odomknutý spúšťací kanál „${channel.name}“ (${unlockedCount} ${unlockedCount === 1 ? 'rola' : 'rolí'}).`
+        });
+    }
+
+    const currWarning = failedRoles > 0
+        ? `Nepodarilo sa upraviť oprávnenia na kanáli „${channel.name}“ (skontroluj, či má bot právo Spravovať roly / Manage Permissions).`
+        : null;
+
+    return {
+        lockedRolePrevConnect: nextPrevMap,
+        warning: currWarning || prevChannelWarning
+    };
+}
+
 module.exports = {
     formatRoomName,
     clampBitrate,
@@ -314,5 +440,8 @@ module.exports = {
     toggleTempRoomLock,
     closeTempRoom,
     renameTempRoom,
-    kickFromTempRoom
+    kickFromTempRoom,
+    getOverwriteConnectState,
+    unlockTriggerChannelRoles,
+    syncTriggerChannelLock
 };

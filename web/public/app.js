@@ -130,7 +130,9 @@ function syncDraftsFromSettings() {
     const s = state.settings || {};
     state.tvDraftSetups = (s.tempVoice?.setups || []).map(item => ({
         ...item,
-        createTriggerChannel: false
+        createTriggerChannel: false,
+        lockOnDisable: Boolean(item.lockOnDisable),
+        lockRoleIds: [...(item.lockRoleIds || [])]
     }));
     state.pbDraftChannelIds = [...(s.patchBot?.channelIds || [])];
     state.jrDraftMemberRoleIds = [...(s.joinRoles?.memberRoleIds || [])];
@@ -1434,8 +1436,27 @@ function readTempVoiceDraftFromDom() {
         triggerName: card.querySelector('.tv-setup-trigger-name').value,
         roomNameTemplate: card.querySelector('.tv-setup-template').value,
         userLimit: Number(card.querySelector('.tv-setup-limit').value),
-        bitrateKbps: Number(card.querySelector('.tv-setup-bitrate').value)
+        bitrateKbps: Number(card.querySelector('.tv-setup-bitrate').value),
+        lockOnDisable: Boolean(card.querySelector('.tv-setup-lock-on-disable')?.checked),
+        lockRoleIds: [...card.querySelectorAll('.tv-setup-lock-role-select')].map(s => s.value)
     }));
+}
+
+function buildTempVoiceLockRoleRowsHtml(setupIdx, roleIds) {
+    if (!Array.isArray(roleIds) || roleIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-1.5">Zatiaľ žiadna rola. Pridaj rolu (napr. @everyone) tlačidlom nižšie.</p>`;
+    }
+
+    return roleIds.map((roleId, roleIdx) => `
+        <div class="flex items-center gap-2">
+            <select class="tv-setup-lock-role-select input-field flex-1">
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber rolu —', allowEveryone: true })}
+            </select>
+            <button type="button" data-tv-lock-role-remove="${setupIdx}:${roleIdx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
 }
 
 function buildTempVoiceSetupCardsHtml() {
@@ -1504,11 +1525,72 @@ function buildTempVoiceSetupCardsHtml() {
                     <input type="number" min="8" max="384" required class="tv-setup-bitrate input-field" value="${Number(setup.bitrateKbps ?? 64)}" />
                 </div>
             </div>
+
+            <div class="p-4 rounded-xl bg-bg-base/60 border border-slate-800/90 space-y-3">
+                <div class="flex items-start justify-between gap-4">
+                    <div class="space-y-0.5">
+                        <div class="text-xs font-semibold text-white flex items-center gap-1.5">
+                            <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i>
+                            <span>Zamknúť spúšťací kanál pri vypnutí</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Keď sa tento TempVoice alebo celý modul vypne, vybraným rolám sa zablokuje pripojenie do spúšťacieho VC. Po opätovnom zapnutí sa pôvodné práva vrátia.</p>
+                    </div>
+                    ${renderToggleSwitch('', setup.lockOnDisable, 'tv-setup-lock-on-disable')}
+                </div>
+
+                <div class="tv-setup-lock-roles-wrap space-y-2.5 ${setup.lockOnDisable ? '' : 'hidden'}">
+                    <div class="tv-setup-lock-roles-list space-y-2">
+                        ${buildTempVoiceLockRoleRowsHtml(idx, setup.lockRoleIds || [])}
+                    </div>
+                    <button type="button" data-tv-lock-role-add="${idx}" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-700 hover:border-brand/70 bg-bg-elevated/50 hover:bg-brand/10 text-slate-300 hover:text-white text-xs font-medium transition">
+                        <i data-lucide="plus" class="w-3.5 h-3.5 text-brand"></i>
+                        <span>Pridať rolu na zamknutie</span>
+                    </button>
+                </div>
+            </div>
         </div>
     `).join('');
 }
 
 function attachTempVoiceSetupListeners() {
+    document.querySelectorAll('.tv-setup-lock-on-disable').forEach(toggle => {
+        toggle.addEventListener('change', () => {
+            const card = toggle.closest('.tv-setup-card');
+            const wrap = card?.querySelector('.tv-setup-lock-roles-wrap');
+            if (wrap) {
+                wrap.classList.toggle('hidden', !toggle.checked);
+            }
+        });
+    });
+
+    document.querySelectorAll('[data-tv-lock-role-add]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const setupIdx = Number(btn.dataset.tvLockRoleAdd);
+            readTempVoiceDraftFromDom();
+            if (!state.tvDraftSetups[setupIdx]) return;
+            state.tvDraftSetups[setupIdx].lockRoleIds = [...(state.tvDraftSetups[setupIdx].lockRoleIds || []), ''];
+            document.getElementById('tv-setups-list').innerHTML = buildTempVoiceSetupCardsHtml();
+            attachTempVoiceSetupListeners();
+            setDirty(true, 'tv-settings-form');
+            refreshIcons();
+        });
+    });
+
+    document.querySelectorAll('[data-tv-lock-role-remove]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const [setupIdxStr, roleIdxStr] = String(btn.dataset.tvLockRoleRemove || '').split(':');
+            const setupIdx = Number(setupIdxStr);
+            const roleIdx = Number(roleIdxStr);
+            readTempVoiceDraftFromDom();
+            if (!state.tvDraftSetups[setupIdx] || !Array.isArray(state.tvDraftSetups[setupIdx].lockRoleIds)) return;
+            state.tvDraftSetups[setupIdx].lockRoleIds.splice(roleIdx, 1);
+            document.getElementById('tv-setups-list').innerHTML = buildTempVoiceSetupCardsHtml();
+            attachTempVoiceSetupListeners();
+            setDirty(true, 'tv-settings-form');
+            refreshIcons();
+        });
+    });
+
     document.querySelectorAll('[data-tv-remove]').forEach(btn => {
         btn.addEventListener('click', async () => {
             const idx = Number(btn.dataset.tvRemove);
@@ -1592,7 +1674,9 @@ function renderTempVoice() {
             triggerName: '➕ Vytvoriť miestnosť',
             roomNameTemplate: '🎮 {user}',
             bitrateKbps: 64,
-            userLimit: 0
+            userLimit: 0,
+            lockOnDisable: false,
+            lockRoleIds: []
         });
         document.getElementById('tv-setups-list').innerHTML = buildTempVoiceSetupCardsHtml();
         attachTempVoiceSetupListeners();
@@ -1606,11 +1690,15 @@ function renderTempVoice() {
         const btn = document.getElementById('tv-save-btn');
         await setButtonLoading(btn, true, 'Ukladám...');
         try {
+            const payloadSetups = state.tvDraftSetups.map(s => ({
+                ...s,
+                lockRoleIds: (s.lockRoleIds || []).filter(Boolean)
+            }));
             const res = await apiFetch('/api/settings/tempvoice', {
                 method: 'PUT',
                 body: JSON.stringify({
                     enabled: document.getElementById('tv-global-enabled').checked,
-                    setups: state.tvDraftSetups
+                    setups: payloadSetups
                 })
             });
             state.settings.tempVoice = res.tempVoice;
@@ -1619,6 +1707,9 @@ function renderTempVoice() {
             await refreshMetaAndOverview();
             renderTempVoice();
             showToast('Nastavenia TempVoice boli uložené.');
+            if (Array.isArray(res.warnings)) {
+                res.warnings.forEach(w => showToast(w, 'error'));
+            }
         } catch (err) {
             showToast(err.message, 'error');
         } finally {

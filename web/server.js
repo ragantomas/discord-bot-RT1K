@@ -37,7 +37,14 @@ const {
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank, updateAllMemberRanks } = require('../src/services/ranks');
 const { updateBotStatus } = require('../src/services/botStatus');
-const { toggleTempRoomLock, closeTempRoom, renameTempRoom, kickFromTempRoom } = require('../src/services/tempVoice');
+const {
+    toggleTempRoomLock,
+    closeTempRoom,
+    renameTempRoom,
+    kickFromTempRoom,
+    unlockTriggerChannelRoles,
+    syncTriggerChannelLock
+} = require('../src/services/tempVoice');
 const { fetchCs2News } = require('../src/services/steamNews');
 const { sendPatchToChannel } = require('../src/services/patchBot');
 const { validateAssignableRole } = require('../src/services/joinRoles');
@@ -823,6 +830,8 @@ function startWebServer(client) {
 
         const moduleEnabled = Boolean(body.enabled);
         const rawSetups = Array.isArray(body.setups) ? body.setups : [];
+        const existingTv = getTempVoiceSettings();
+        const prevById = new Map((existingTv.setups || []).map(s => [s.id, s]));
 
         const normalizedSetups = [];
         const usedTriggerIds = new Set();
@@ -890,6 +899,21 @@ function startWebServer(client) {
                 }
             }
 
+            const lockOnDisable = Boolean(raw.lockOnDisable);
+            const lockRoleIds = uniqueStringIds(raw.lockRoleIds);
+
+            for (const roleId of lockRoleIds) {
+                const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+                if (!role) {
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraná rola pre zamknutie kanála neexistuje.` });
+                }
+            }
+            if (lockOnDisable && lockRoleIds.length === 0) {
+                return res.status(400).json({
+                    error: `TempVoice #${i + 1}: Pre automatické zamknutie pri vypnutí vyber aspoň jednu rolu (napr. @everyone).`
+                });
+            }
+
             if (triggerChannelId) {
                 if (usedTriggerIds.has(triggerChannelId)) {
                     return res.status(400).json({ error: 'Dve TempVoice konfigurácie nemôžu používať rovnaký spúšťací hlasový kanál.' });
@@ -905,8 +929,28 @@ function startWebServer(client) {
                 triggerName,
                 roomNameTemplate,
                 bitrateKbps: Math.round(bitrateKbps),
-                userLimit: Math.round(userLimit)
+                userLimit: Math.round(userLimit),
+                lockOnDisable,
+                lockRoleIds,
+                lockedRolePrevConnect: {}
             });
+        }
+
+        const warnings = [];
+        const nextIds = new Set(normalizedSetups.map(s => s.id));
+        for (const prevSetup of existingTv.setups || []) {
+            if (!nextIds.has(prevSetup.id) && prevSetup.triggerChannelId && Object.keys(prevSetup.lockedRolePrevConnect || {}).length > 0) {
+                const resUnlock = await unlockTriggerChannelRoles(guild, prevSetup.triggerChannelId, prevSetup.lockedRolePrevConnect);
+                if (resUnlock.warning) warnings.push(resUnlock.warning);
+            }
+        }
+
+        for (const setup of normalizedSetups) {
+            const prevSetup = prevById.get(setup.id) || null;
+            const shouldBeLocked = Boolean(setup.lockOnDisable && setup.lockRoleIds.length > 0 && !(moduleEnabled && setup.enabled));
+            const syncRes = await syncTriggerChannelLock(guild, setup, prevSetup, shouldBeLocked);
+            setup.lockedRolePrevConnect = syncRes.lockedRolePrevConnect;
+            if (syncRes.warning) warnings.push(syncRes.warning);
         }
 
         const saved = updateTempVoiceSettings({
@@ -914,7 +958,7 @@ function startWebServer(client) {
             setups: normalizedSetups
         });
 
-        return res.json({ ok: true, tempVoice: saved });
+        return res.json({ ok: true, tempVoice: saved, warnings });
     });
 
     app.get('/api/tempvoice/rooms', async (req, res) => {
