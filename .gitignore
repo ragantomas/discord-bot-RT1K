@@ -10,3 +10,4 @@ __MACOSX/
 *.swp
 *~
 compile_commands.json
+AGENTS.md
