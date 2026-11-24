@@ -26,17 +26,17 @@ const state = {
 
 const SECTION_TITLES = {
     overview: 'Prehľad',
-    players: 'Hráči (CS2 Premier)',
-    announcements: 'Oznámenia / Embed Builder',
+    players: 'Hráči',
+    announcements: 'Oznámenia',
     logs: 'Activity Log',
     tempvoice: 'TempVoice',
-    patchbot: 'CS2 PatchBot',
+    patchbot: 'PatchBot',
     joinroles: 'Join Roles',
-    csstatus: 'CS2 / Steam Status',
+    csstatus: 'CS2 Status',
     rankfeed: 'Rank-Up / Derank',
     adminlog: 'Admin Log',
-    welcome: 'Uvítacie správy',
-    tickets: 'Ticket systém',
+    welcome: 'Uvítanie',
+    tickets: 'Tickety',
     settings: 'Nastavenia'
 };
 
@@ -50,12 +50,12 @@ const OAUTH_ERRORS = {
 
 const LIVE_POLL_MS = 5000;
 const BOT_STATUS_VARIABLES = [
-    { token: '{players}', label: 'Prepojení hráči' },
-    { token: '{members}', label: 'Členovia servera' },
-    { token: '{rooms}', label: 'Aktívne TempVoice' },
-    { token: '{top_elo}', label: 'Najvyššie Elo' },
-    { token: '{ping}', label: 'Ping bota' },
-    { token: '{uptime}', label: 'Uptime bota' }
+    { token: '{players}', label: 'Hráči' },
+    { token: '{members}', label: 'Členovia' },
+    { token: '{rooms}', label: 'TempVoice' },
+    { token: '{top_elo}', label: 'Top Elo' },
+    { token: '{ping}', label: 'Ping' },
+    { token: '{uptime}', label: 'Uptime' }
 ];
 let livePollTimer = null;
 let uptimeTickTimer = null;
@@ -383,13 +383,13 @@ function renderOverview() {
     const pingBadge = ov.bot.online ? `${ov.bot.ping} ms` : 'N/A';
     const moduleRows = [
         { key: 'tempvoice', label: 'TempVoice', enabled: ov.modules.tempVoiceEnabled, icon: 'mic' },
-        { key: 'patchbot', label: 'CS2 PatchBot', enabled: ov.modules.patchBotEnabled, icon: 'newspaper' },
+        { key: 'patchbot', label: 'PatchBot', enabled: ov.modules.patchBotEnabled, icon: 'newspaper' },
         { key: 'joinroles', label: 'Join Roles', enabled: ov.modules.joinRolesEnabled, icon: 'user-plus' },
-        { key: 'csstatus', label: 'CS2 / Steam Status', enabled: ov.modules.csStatusEnabled, icon: 'activity' },
+        { key: 'csstatus', label: 'CS2 Status', enabled: ov.modules.csStatusEnabled, icon: 'activity' },
         { key: 'rankfeed', label: 'Rank-Up / Derank', enabled: ov.modules.rankFeedEnabled, icon: 'trending-up' },
         { key: 'adminlog', label: 'Admin Log', enabled: ov.modules.adminLogEnabled, icon: 'shield-check' },
-        { key: 'welcome', label: 'Uvítacie správy', enabled: ov.modules.welcomeEnabled, icon: 'hand' },
-        { key: 'tickets', label: 'Ticket systém', enabled: ov.modules.ticketsEnabled, icon: 'ticket' }
+        { key: 'welcome', label: 'Uvítanie', enabled: ov.modules.welcomeEnabled, icon: 'hand' },
+        { key: 'tickets', label: 'Tickety', enabled: ov.modules.ticketsEnabled, icon: 'ticket' }
     ];
 
     container.innerHTML = `
@@ -420,7 +420,6 @@ function renderOverview() {
                     <i data-lucide="users" class="w-4 h-4 text-brand-gold"></i>
                 </div>
                 <div id="ov-linked-count" class="mt-3 text-2xl font-bold text-white">${ov.stats.linkedPlayersCount}</div>
-                <div class="text-xs text-slate-400 mt-1">V databáze <code class="text-slate-300">users.json</code></div>
             </div>
 
             <div class="card p-5">
@@ -429,7 +428,6 @@ function renderOverview() {
                     <i data-lucide="headphones" class="w-4 h-4 text-sky-400"></i>
                 </div>
                 <div id="ov-tv-count" class="mt-3 text-2xl font-bold text-white">${ov.stats.activeTempRoomsCount}</div>
-                <div class="text-xs text-slate-400 mt-1">Momentálne otvorené miestnosti</div>
             </div>
         </div>
 
@@ -583,9 +581,8 @@ function openEloHistoryModal(player) {
 
     if (history.length === 0) {
         bodyEl.innerHTML = `
-            <div class="p-6 rounded-xl bg-bg-elevated border border-slate-800 text-center space-y-2">
-                <p class="text-sm text-slate-300 font-medium">Pre tohto hráča zatiaľ nie sú uložené historické body Elo.</p>
-                <p class="text-xs text-slate-400">Body sa automaticky zaznamenávajú pri každej aktualizácii rankov (`/update`, `/stats` alebo hodinový cyklus).</p>
+            <div class="p-6 rounded-xl bg-bg-elevated border border-slate-800 text-center">
+                <p class="text-sm text-slate-300 font-medium">Zatiaľ bez histórie Elo.</p>
             </div>
         `;
     } else {
@@ -596,26 +593,25 @@ function openEloHistoryModal(player) {
         bodyEl.innerHTML = `
             <div class="grid grid-cols-3 gap-3">
                 <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Aktuálne Elo</div>
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Aktuálne</div>
                     <div class="text-lg font-bold text-white mt-0.5">${typeof player.elo === 'number' ? player.elo.toLocaleString('sk-SK') : 'Unranked'}</div>
                 </div>
                 <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div class="text-[11px] uppercase tracking-wider text-slate-400">7-dňová zmena</div>
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Za 7 dní</div>
                     <div class="text-lg font-bold mt-0.5 ${deltaColor}">${escapeHtml(deltaText)}</div>
                 </div>
                 <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Rozsah (Min / Max)</div>
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Min / Max</div>
                     <div class="text-sm font-semibold text-slate-200 mt-1">${minVal.toLocaleString('sk-SK')} / ${maxVal.toLocaleString('sk-SK')}</div>
                 </div>
             </div>
 
             <div class="p-4 rounded-2xl bg-bg-elevated/70 border border-slate-800">
-                ${history.length === 1 ? `<p class="text-xs text-slate-400 mb-2">Zatiaľ iba 1 záznam — pri ďalšej zmene Elo sa vykreslí krivka.</p>` : ''}
                 ${buildEloChartSvg(history, player.rankColor)}
             </div>
 
             <div class="space-y-1.5">
-                <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">Posledné zmeny (${history.length})</div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">História (${history.length})</div>
                 <div class="rounded-xl border border-slate-800 divide-y divide-slate-800/80 max-h-44 overflow-y-auto bg-bg-base/50">
                     ${recentRows.map((pt, idx) => {
                         const prev = recentRows[idx + 1];
@@ -797,14 +793,14 @@ function renderPlayers() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
                 <i data-lucide="link" class="w-4 h-4 text-brand"></i>
-                <span>Rýchle prepojenie hráča (Force Link)</span>
+                <span>Prepojiť hráča</span>
             </h3>
             <form id="force-link-form" class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                 <div class="md:col-span-5 space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Člen servera</label>
+                    <label class="text-xs font-medium text-slate-400">Člen</label>
                     <div id="fl-member-combobox" class="relative">
                         <input id="fl-user-id" type="hidden" value="" />
-                        <input id="fl-member-input" type="text" autocomplete="off" placeholder="Vyber alebo vyhľadaj člena..." class="input-field pr-9" />
+                        <input id="fl-member-input" type="text" autocomplete="off" placeholder="Vyhľadať člena..." class="input-field pr-9" />
                         <button id="fl-member-clear" type="button" title="Vymazať výber" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-white hover:bg-bg-hover transition">
                             <i data-lucide="x" class="w-3.5 h-3.5"></i>
                         </button>
@@ -812,8 +808,8 @@ function renderPlayers() {
                     </div>
                 </div>
                 <div class="md:col-span-5 space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Steam64 ID, Steam link alebo Leetify URL</label>
-                    <input id="fl-profile" type="text" required placeholder="https://steamcommunity.com/id/... alebo 7656119..." class="input-field" />
+                    <label class="text-xs font-medium text-slate-400">Steam / Leetify profil</label>
+                    <input id="fl-profile" type="text" required placeholder="Steam64 ID alebo URL" class="input-field" />
                 </div>
                 <div class="md:col-span-2">
                     <button id="fl-submit-btn" type="submit" class="w-full h-[42px] inline-flex items-center justify-center gap-2 px-4 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
@@ -826,12 +822,9 @@ function renderPlayers() {
 
         <div class="card overflow-hidden">
             <div class="p-5 border-b border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <h3 id="players-count-heading" class="text-base font-semibold text-white">Prepojení hráči (${state.players.length})</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Zoradené podľa Premier Elo od najvyššieho</p>
-                </div>
+                <h3 id="players-count-heading" class="text-base font-semibold text-white">Hráči (${state.players.length})</h3>
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    <input id="players-search" type="text" placeholder="Hľadať hráča alebo Steam ID..." class="input-field sm:w-64" value="${escapeHtml(state.playerSearch)}" />
+                    <input id="players-search" type="text" placeholder="Hľadať..." class="input-field sm:w-64" value="${escapeHtml(state.playerSearch)}" />
                     <button id="players-update-all" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-100 transition shrink-0">
                         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                         <span>Aktualizovať všetkých</span>
@@ -844,8 +837,8 @@ function renderPlayers() {
                     <thead>
                         <tr class="bg-bg-elevated/60 text-xs uppercase tracking-wider text-slate-400">
                             <th class="px-4 py-3 font-medium">Hráč</th>
-                            <th class="px-4 py-3 font-medium">Steam64 ID / Leetify</th>
-                            <th class="px-4 py-3 font-medium">Premier Elo</th>
+                            <th class="px-4 py-3 font-medium">Steam / Leetify</th>
+                            <th class="px-4 py-3 font-medium">Elo</th>
                             <th class="px-4 py-3 font-medium text-right">Akcie</th>
                         </tr>
                     </thead>
@@ -1009,7 +1002,7 @@ function updateAnnouncementPreview() {
                             </div>
                         ` : ''}
                     </div>
-                ` : '<p class="text-xs text-slate-500 mt-2 italic">Začni písať text alebo embed na zobrazenie náhľadu...</p>'}
+                ` : '<p class="text-xs text-slate-500 mt-2 italic">Náhľad správy...</p>'}
             </div>
         </div>
     `;
@@ -1096,9 +1089,9 @@ function renderAnnouncementsHistoryBlock() {
 
     host.innerHTML = `
         <div class="p-3.5 rounded-xl bg-bg-elevated/70 border border-slate-800 space-y-1.5">
-            <label class="text-xs font-medium text-slate-400">Načítať a upraviť posledné oznámenie (voliteľné)</label>
+            <label class="text-xs font-medium text-slate-400">Upraviť odoslané</label>
             <select id="ann-history-select" class="input-field">
-                <option value="">— Vytvoriť nové oznámenie —</option>
+                <option value="">— Nové oznámenie —</option>
                 ${history.map((h, i) => `
                     <option value="${i}" ${editing && editing.messageId === h.messageId ? 'selected' : ''}>
                         #${escapeHtml(h.channelName || h.channelId)} — ${escapeHtml(h.title || h.content || 'Bez nadpisu')}
@@ -1153,11 +1146,11 @@ function renderAnnouncements() {
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <h3 class="text-base font-semibold text-white flex items-center gap-2">
                         <i data-lucide="megaphone" class="w-4 h-4 text-brand"></i>
-                        <span>${editing ? 'Upraviť odoslané oznámenie' : 'Vytvoriť nové oznámenie'}</span>
+                        <span>${editing ? 'Upraviť oznámenie' : 'Nové oznámenie'}</span>
                     </h3>
                     ${editing ? `
                         <button id="ann-cancel-edit" type="button" class="px-3 py-1.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs text-slate-200 transition">
-                            Prepnúť na novú správu
+                            Nová správa
                         </button>
                     ` : ''}
                 </div>
@@ -1167,13 +1160,13 @@ function renderAnnouncements() {
                 <form id="ann-form" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Cieľový kanál</label>
+                            <label class="text-xs font-medium text-slate-400">Kanál</label>
                             <select id="ann-channel" class="input-field" ${editing ? 'disabled' : ''}>
                                 ${buildTextChannelOptions(editing?.channelId || '')}
                             </select>
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Ping rola (voliteľné)</label>
+                            <label class="text-xs font-medium text-slate-400">Ping rola</label>
                             <select id="ann-role" class="input-field">
                                 ${buildRoleOptions(editing?.roleId || '', { allowNone: true, noneLabel: '— Bez pingu —', allowEveryone: true })}
                             </select>
@@ -1181,14 +1174,14 @@ function renderAnnouncements() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Obyčajný text nad embedom (voliteľné)</label>
-                        <input id="ann-content" type="text" maxlength="2000" class="input-field" value="${escapeHtml(editing?.content || '')}" placeholder="Krátka správa alebo oznámenie..." />
+                        <label class="text-xs font-medium text-slate-400">Text nad embedom</label>
+                        <input id="ann-content" type="text" maxlength="2000" class="input-field" value="${escapeHtml(editing?.content || '')}" />
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
                         <div class="md:col-span-9 space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Nadpis embedu</label>
-                            <input id="ann-title" type="text" maxlength="256" class="input-field" value="${escapeHtml(editing?.title || '')}" placeholder="Napr. Pravidlá servera alebo CS2 Turnaj" />
+                            <label class="text-xs font-medium text-slate-400">Nadpis</label>
+                            <input id="ann-title" type="text" maxlength="256" class="input-field" value="${escapeHtml(editing?.title || '')}" />
                         </div>
                         <div class="md:col-span-3 space-y-1.5">
                             <label class="text-xs font-medium text-slate-400">Farba</label>
@@ -1197,34 +1190,34 @@ function renderAnnouncements() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Popis embedu (podporuje Discord Markdown)</label>
-                        <textarea id="ann-description" rows="5" maxlength="4096" class="input-field resize-y" placeholder="Text oznámenia...">${escapeHtml(editing?.description || '')}</textarea>
+                        <label class="text-xs font-medium text-slate-400">Popis</label>
+                        <textarea id="ann-description" rows="5" maxlength="4096" class="input-field resize-y">${escapeHtml(editing?.description || '')}</textarea>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Thumbnail URL (malý obrázok vpravo)</label>
+                            <label class="text-xs font-medium text-slate-400">Thumbnail URL</label>
                             <input id="ann-thumb" type="url" class="input-field" value="${escapeHtml(editing?.thumbnailUrl || '')}" placeholder="https://..." />
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Veľký obrázok URL (banner)</label>
+                            <label class="text-xs font-medium text-slate-400">Obrázok URL</label>
                             <input id="ann-image" type="url" class="input-field" value="${escapeHtml(editing?.imageUrl || '')}" placeholder="https://..." />
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                         <div class="space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Footer text (voliteľné)</label>
-                            <input id="ann-footer" type="text" maxlength="2048" class="input-field" value="${escapeHtml(editing?.footerText || '')}" placeholder="BOT Gaben • ROAD TO 1K" />
+                            <label class="text-xs font-medium text-slate-400">Footer</label>
+                            <input id="ann-footer" type="text" maxlength="2048" class="input-field" value="${escapeHtml(editing?.footerText || '')}" />
                         </div>
                         <div class="flex flex-col gap-2.5 pt-4">
                             <label class="flex items-center justify-between gap-3 text-xs text-slate-300">
-                                <span>Zobraziť čas odoslania (Timestamp)</span>
+                                <span>Timestamp</span>
                                 ${renderToggleSwitch('ann-timestamp', editing ? Boolean(editing.timestamp) : true)}
                             </label>
                             ${!editing ? `
                                 <label class="flex items-center justify-between gap-3 text-xs text-slate-300">
-                                    <span>Automaticky publikovať (Announcement kanál)</span>
+                                    <span>Publikovať</span>
                                     ${renderToggleSwitch('ann-crosspost', false)}
                                 </label>
                             ` : ''}
@@ -1234,7 +1227,7 @@ function renderAnnouncements() {
                     <div class="flex justify-end pt-2">
                         <button id="ann-submit-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                             <i data-lucide="send" class="w-4 h-4"></i>
-                            <span>${editing ? 'Uložiť úpravu správy' : 'Odoslať oznámenie'}</span>
+                            <span>${editing ? 'Uložiť zmeny' : 'Odoslať'}</span>
                         </button>
                     </div>
                 </form>
@@ -1243,7 +1236,7 @@ function renderAnnouncements() {
             <div class="xl:col-span-5 card p-6 flex flex-col">
                 <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
                     <i data-lucide="eye" class="w-4 h-4 text-sky-400"></i>
-                    <span>Živý Discord náhľad</span>
+                    <span>Náhľad</span>
                 </h3>
                 <div id="ann-preview" class="flex-1 rounded-2xl bg-[#313338] border border-slate-800 p-4"></div>
             </div>
@@ -1324,7 +1317,7 @@ function buildLogsListHtml() {
     });
 
     if (list.length === 0) {
-        return `<div class="p-8 text-center text-sm text-slate-400">Zatiaľ nie sú zaznamenané žiadne udalosti pre tento filter.</div>`;
+        return `<div class="p-8 text-center text-sm text-slate-400">Žiadne záznamy.</div>`;
     }
 
     const levelStyles = {
@@ -1390,15 +1383,12 @@ function renderLogs() {
         <div class="card overflow-hidden">
             <div class="p-5 border-b border-slate-800/90 space-y-4">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                        <h3 class="text-base font-semibold text-white flex items-center gap-2">
-                            <i data-lucide="scroll-text" class="w-4 h-4 text-brand"></i>
-                            <span>Živý Activity Log bota</span>
-                        </h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Posledných 500 udalostí (uložené aj po reštarte bota, obnovuje sa každých 5 s).</p>
-                    </div>
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="scroll-text" class="w-4 h-4 text-brand"></i>
+                        <span>Activity Log</span>
+                    </h3>
                     <div class="flex items-center gap-2">
-                        <input id="logs-search" type="text" placeholder="Hľadať v logu..." class="input-field sm:w-56" value="${escapeHtml(state.logSearch)}" />
+                        <input id="logs-search" type="text" placeholder="Hľadať..." class="input-field sm:w-56" value="${escapeHtml(state.logSearch)}" />
                         <button id="logs-clear-btn" type="button" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition shrink-0">
                             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                             <span>Vyčistiť</span>
@@ -1455,7 +1445,7 @@ function renderLogs() {
 
 function renderTempVoiceRoomsList() {
     if (state.tempRooms.length === 0) {
-        return `<p class="text-sm text-slate-400 py-4 text-center">Momentálne nie sú otvorené žiadne dočasné miestnosti.</p>`;
+        return `<p class="text-sm text-slate-400 py-4 text-center">Žiadne otvorené miestnosti.</p>`;
     }
 
     return `
@@ -1623,7 +1613,7 @@ function readTempVoiceDraftFromDom() {
 
 function buildTempVoiceLockRoleRowsHtml(setupIdx, roleIds) {
     if (!Array.isArray(roleIds) || roleIds.length === 0) {
-        return `<p class="text-xs text-slate-400 py-1.5">Zatiaľ žiadna rola. Pridaj rolu (napr. @everyone) tlačidlom nižšie.</p>`;
+        return `<p class="text-xs text-slate-400 py-1.5">Žiadna rola.</p>`;
     }
 
     return roleIds.map((roleId, roleIdx) => `
@@ -1641,7 +1631,7 @@ function buildTempVoiceLockRoleRowsHtml(setupIdx, roleIds) {
 function buildTempVoiceSetupCardsHtml() {
     const maxBitrate = state.meta?.maxBitrateKbps || 96;
     if (state.tvDraftSetups.length === 0) {
-        return `<div class="p-6 rounded-xl bg-bg-elevated/60 border border-slate-800 text-center text-sm text-slate-400">Zatiaľ nemáš žiadny TempVoice kanál. Klikni na <strong>Pridať TempVoice</strong> nižšie.</div>`;
+        return `<div class="p-6 rounded-xl bg-bg-elevated/60 border border-slate-800 text-center text-sm text-slate-400">Žiadna konfigurácia.</div>`;
     }
 
     return state.tvDraftSetups.map((setup, idx) => `
@@ -1649,17 +1639,14 @@ function buildTempVoiceSetupCardsHtml() {
             <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
                 <div class="flex items-center gap-3">
                     <span class="w-7 h-7 rounded-lg bg-brand/15 text-brand text-xs font-bold flex items-center justify-center">#${idx + 1}</span>
-                    <div>
-                        <div class="text-sm font-semibold text-white">TempVoice konfigurácia #${idx + 1}</div>
-                        <div class="text-xs text-slate-400">Nezávislý spúšťací VC a šablóna miestností</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">TempVoice #${idx + 1}</div>
                 </div>
                 <div class="flex items-center gap-3">
                     <div class="inline-flex items-center gap-2 text-xs text-slate-300">
                         <span>Aktívny</span>
                         ${renderToggleSwitch('', setup.enabled, 'tv-setup-enabled')}
                     </div>
-                    <button type="button" data-tv-remove="${idx}" title="Odstrániť túto konfiguráciu" class="p-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition">
+                    <button type="button" data-tv-remove="${idx}" title="Odstrániť" class="p-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                 </div>
@@ -1667,12 +1654,12 @@ function buildTempVoiceSetupCardsHtml() {
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Spúšťací hlasový kanál (Trigger VC)</label>
+                    <label class="text-xs font-medium text-slate-400">Spúšťací kanál</label>
                     <select class="tv-setup-trigger input-field">
                         ${buildVoiceChannelOptions(setup.triggerChannelId)}
                     </select>
                     <div class="flex items-center justify-between gap-3 pt-1.5">
-                        <span class="text-xs text-slate-300">Vytvoriť nový spúšťací kanál na serveri</span>
+                        <span class="text-xs text-slate-300">Vytvoriť nový kanál</span>
                         ${renderToggleSwitch('', setup.createTriggerChannel, 'tv-setup-create')}
                     </div>
                 </div>
@@ -1690,29 +1677,26 @@ function buildTempVoiceSetupCardsHtml() {
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Šablóna názvu (<code class="text-slate-300">{user}</code>, <code class="text-slate-300">{username}</code>)</label>
+                    <label class="text-xs font-medium text-slate-400">Šablóna názvu · <code class="text-slate-300">{user}</code> <code class="text-slate-300">{username}</code></label>
                     <input type="text" maxlength="100" required class="tv-setup-template input-field" value="${escapeHtml(setup.roomNameTemplate || '🎮 {user}')}" />
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Predvolený limit hráčov (0–99, 0 = bez limitu)</label>
+                    <label class="text-xs font-medium text-slate-400">Limit hráčov · 0 = bez limitu</label>
                     <input type="number" min="0" max="99" required class="tv-setup-limit input-field" value="${Number(setup.userLimit ?? 0)}" />
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Bitrate v kbps (8–384, limit servera: ${maxBitrate} kbps)</label>
+                    <label class="text-xs font-medium text-slate-400">Bitrate · max ${maxBitrate} kbps</label>
                     <input type="number" min="8" max="384" required class="tv-setup-bitrate input-field" value="${Number(setup.bitrateKbps ?? 64)}" />
                 </div>
             </div>
 
             <div class="p-4 rounded-xl bg-bg-base/60 border border-slate-800/90 space-y-3">
-                <div class="flex items-start justify-between gap-4">
-                    <div class="space-y-0.5">
-                        <div class="text-xs font-semibold text-white flex items-center gap-1.5">
-                            <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i>
-                            <span>Zamknúť spúšťací kanál pri vypnutí</span>
-                        </div>
-                        <p class="text-xs text-slate-400">Keď sa tento TempVoice alebo celý modul vypne, vybraným rolám sa zablokuje pripojenie do spúšťacieho VC. Po opätovnom zapnutí sa pôvodné práva vrátia.</p>
+                <div class="flex items-center justify-between gap-4">
+                    <div class="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <i data-lucide="lock" class="w-3.5 h-3.5 text-amber-400"></i>
+                        <span>Zamknúť kanál pri vypnutí</span>
                     </div>
                     ${renderToggleSwitch('', setup.lockOnDisable, 'tv-setup-lock-on-disable')}
                 </div>
@@ -1723,7 +1707,7 @@ function buildTempVoiceSetupCardsHtml() {
                     </div>
                     <button type="button" data-tv-lock-role-add="${idx}" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-700 hover:border-brand/70 bg-bg-elevated/50 hover:bg-brand/10 text-slate-300 hover:text-white text-xs font-medium transition">
                         <i data-lucide="plus" class="w-3.5 h-3.5 text-brand"></i>
-                        <span>Pridať rolu na zamknutie</span>
+                        <span>Pridať rolu</span>
                     </button>
                 </div>
             </div>
@@ -1798,15 +1782,12 @@ function renderTempVoice() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="sliders" class="w-4 h-4 text-brand"></i>
-                <span>Nastavenia TempVoice</span>
+                <span>TempVoice</span>
             </h3>
 
             <form id="tv-settings-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť TempVoice modul</div>
-                        <div class="text-xs text-slate-400">Deaktivácia iba pozastaví vytváranie nových miestností — všetky nastavenia aj kanály ostanú zachované.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť TempVoice</div>
                     ${renderToggleSwitch('tv-global-enabled', tv.enabled)}
                 </div>
 
@@ -1821,7 +1802,7 @@ function renderTempVoice() {
                 <div class="flex justify-end pt-2">
                     <button id="tv-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť TempVoice nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
@@ -1829,10 +1810,7 @@ function renderTempVoice() {
 
         <div class="card p-6">
             <div class="flex items-center justify-between gap-3 mb-4">
-                <div>
-                    <h3 id="tv-rooms-heading" class="text-base font-semibold text-white">Aktívne dočasné miestnosti (${state.tempRooms.length})</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Na diaľku ich môžeš premenovať, zamknúť, odomknúť, zavrieť alebo odpojiť hráča.</p>
-                </div>
+                <h3 id="tv-rooms-heading" class="text-base font-semibold text-white">Aktívne miestnosti (${state.tempRooms.length})</h3>
                 <button id="tv-refresh-rooms" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                     <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                     <span>Obnoviť</span>
@@ -1926,7 +1904,7 @@ function readPatchBotDraftFromDom() {
 
 function buildPatchBotChannelRowsHtml() {
     if (state.pbDraftChannelIds.length === 0) {
-        return `<p class="text-xs text-slate-400 py-2">Zatiaľ nie je pridaný žiadny kanál. Pridaj kanál tlačidlom nižšie.</p>`;
+        return `<p class="text-xs text-slate-400 py-2">Žiadny kanál.</p>`;
     }
 
     return state.pbDraftChannelIds.map((channelId, idx) => `
@@ -1962,20 +1940,17 @@ function renderPatchBot() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="newspaper" class="w-4 h-4 text-brand-gold"></i>
-                <span>CS2 PatchBot (automatické novinky zo Steamu)</span>
+                <span>PatchBot</span>
             </h3>
 
             <form id="pb-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť CS2 PatchBota</div>
-                        <div class="text-xs text-slate-400">Kontroluje nové CS2 updaty každých 5 minút. Pri vypnutí ostanú nastavenia zachované.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť PatchBot</div>
                     ${renderToggleSwitch('pb-enabled', pb.enabled)}
                 </div>
 
                 <div class="space-y-2.5">
-                    <label class="text-xs font-medium text-slate-400 block">Cieľové kanály pre CS2 updaty</label>
+                    <label class="text-xs font-medium text-slate-400 block">Kanály</label>
                     <div id="pb-channels-list" class="space-y-2">
                         ${buildPatchBotChannelRowsHtml()}
                     </div>
@@ -1988,13 +1963,13 @@ function renderPatchBot() {
                     <div class="space-y-1.5">
                         <label class="text-xs font-medium text-slate-400">Typ správ</label>
                         <select id="pb-mode" class="input-field">
-                            <option value="all" ${pb.mode !== 'patchnotes' ? 'selected' : ''}>Všetky oficiálne CS2 oznámenia</option>
-                            <option value="patchnotes" ${pb.mode === 'patchnotes' ? 'selected' : ''}>Len Patch Notes (Release Notes)</option>
+                            <option value="all" ${pb.mode !== 'patchnotes' ? 'selected' : ''}>Všetky CS2 oznámenia</option>
+                            <option value="patchnotes" ${pb.mode === 'patchnotes' ? 'selected' : ''}>Len Patch Notes</option>
                         </select>
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Ping rola pri novom update</label>
+                        <label class="text-xs font-medium text-slate-400">Ping rola</label>
                         <select id="pb-role" class="input-field">
                             ${buildRoleOptions(pb.roleId, { allowNone: true, noneLabel: '— Bez pingu —', allowEveryone: true })}
                         </select>
@@ -2003,29 +1978,28 @@ function renderPatchBot() {
 
                 <div class="flex items-center justify-between flex-wrap gap-3 pt-2">
                     <div class="text-xs text-slate-400">
-                        Posledný odoslaný update:
-                        <strong class="text-slate-200">${escapeHtml(pb.lastPostedTitle || 'Zatiaľ žiadny')}</strong>
-                        ${pb.lastPostedAt ? `(${escapeHtml(formatRelativeTimestamp(pb.lastPostedAt))})` : ''}
+                        Posledný update:
+                        <strong class="text-slate-200">${escapeHtml(pb.lastPostedTitle || 'Žiadny')}</strong>
+                        ${pb.lastPostedAt ? `· ${escapeHtml(formatRelativeTimestamp(pb.lastPostedAt))}` : ''}
                     </div>
                     <button id="pb-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť PatchBot nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
         </div>
 
         <div class="card p-6">
-            <h3 class="text-base font-semibold text-white mb-2">Otestovať / poslať najnovší CS2 príspevok</h3>
-            <p class="text-xs text-slate-400 mb-4">Okamžite stiahne najnovší príspevok podľa zvoleného režimu a odošle ho do všetkých nastavených kanálov.</p>
+            <h3 class="text-base font-semibold text-white mb-4">Poslať najnovší update</h3>
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <label class="inline-flex items-center gap-3 text-sm text-slate-300 cursor-pointer">
                     ${renderToggleSwitch('pb-test-ping', false)}
-                    <span>Označiť nastavenú ping rolu</span>
+                    <span>Označiť ping rolu</span>
                 </label>
                 <button id="pb-send-latest-btn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-white transition">
                     <i data-lucide="send" class="w-4 h-4"></i>
-                    <span>Poslať najnovší update teraz</span>
+                    <span>Poslať teraz</span>
                 </button>
             </div>
         </div>
@@ -2108,7 +2082,7 @@ function readJoinRolesDraftFromDom() {
 
 function buildJoinRoleRowsHtml(roleIds, selectClass, removeAttr) {
     if (roleIds.length === 0) {
-        return `<p class="text-xs text-slate-400 py-2">Zatiaľ žiadna rola. Pridaj rolu tlačidlom nižšie.</p>`;
+        return `<p class="text-xs text-slate-400 py-2">Žiadna rola.</p>`;
     }
 
     return roleIds.map((roleId, idx) => `
@@ -2163,15 +2137,12 @@ function renderJoinRoles() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="user-plus" class="w-4 h-4 text-emerald-400"></i>
-                <span>Join Roles (automatické role po pripojení)</span>
+                <span>Join Roles</span>
             </h3>
 
             <form id="jr-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť automatické Join Roles</div>
-                        <div class="text-xs text-slate-400">Noví členovia a boti dostanú vybrané role po vstupe na server. Pri vypnutí sa nič nevymaže.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť Join Roles</div>
                     ${renderToggleSwitch('jr-enabled', jr.enabled)}
                 </div>
 
@@ -2179,35 +2150,35 @@ function renderJoinRoles() {
                     <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
                         <div class="flex items-center gap-2 text-sm font-semibold text-white">
                             <i data-lucide="user" class="w-4 h-4 text-brand"></i>
-                            <span>Role pre bežných hráčov</span>
+                            <span>Hráči</span>
                         </div>
                         <div id="jr-member-list" class="space-y-2">
                             ${buildJoinRoleRowsHtml(state.jrDraftMemberRoleIds, 'jr-member-select', 'data-jr-remove-member')}
                         </div>
-                        ${renderAddButtonHtml('jr-add-member-btn', 'Pridať rolu pre hráčov')}
+                        ${renderAddButtonHtml('jr-add-member-btn', 'Pridať rolu')}
                     </div>
 
                     <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
                         <div class="flex items-center gap-2 text-sm font-semibold text-white">
                             <i data-lucide="bot" class="w-4 h-4 text-sky-400"></i>
-                            <span>Role pre botov</span>
+                            <span>Boti</span>
                         </div>
                         <div id="jr-bot-list" class="space-y-2">
                             ${buildJoinRoleRowsHtml(state.jrDraftBotRoleIds, 'jr-bot-select', 'data-jr-remove-bot')}
                         </div>
-                        ${renderAddButtonHtml('jr-add-bot-btn', 'Pridať rolu pre botov')}
+                        ${renderAddButtonHtml('jr-add-bot-btn', 'Pridať rolu')}
                     </div>
                 </div>
 
-                <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
-                    <i data-lucide="info" class="w-4 h-4 mt-0.5 shrink-0 text-amber-400"></i>
-                    <span>Rola bota musí byť v nastaveniach rolí Discord servera umiestnená <strong>vyššie</strong> ako všetky vybrané join role.</span>
+                <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-center gap-2.5">
+                    <i data-lucide="info" class="w-4 h-4 shrink-0 text-amber-400"></i>
+                    <span>Rola bota musí byť nad vybranými rolami.</span>
                 </div>
 
                 <div class="flex justify-end">
                     <button id="jr-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť Join Roles</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
@@ -2288,28 +2259,25 @@ function renderCsStatus() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="activity" class="w-4 h-4 text-sky-400"></i>
-                <span>Živý stav CS2 a Steam serverov</span>
+                <span>CS2 Status</span>
             </h3>
 
             <form id="cs-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť automatický embed so stavom serverov</div>
-                        <div class="text-xs text-slate-400">Upravuje jednu embed správu v určenom kanáli. Pri vypnutí ostane všetko zachované.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť CS2 Status</div>
                     ${renderToggleSwitch('cs-enabled', cs.enabled)}
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Cieľový kanál</label>
+                        <label class="text-xs font-medium text-slate-400">Kanál</label>
                         <select id="cs-channel" class="input-field">
                             ${buildTextChannelOptions(cs.channelId)}
                         </select>
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Interval obnovy (30 s až 60 min)</label>
+                        <label class="text-xs font-medium text-slate-400">Interval obnovy · 30 s až 60 min</label>
                         <div class="flex items-center gap-2">
                             <input id="cs-interval-num" type="number" min="1" max="3600" required class="input-field flex-1" value="${parts.value}" />
                             <select id="cs-interval-unit" class="input-field w-36">
@@ -2322,8 +2290,8 @@ function renderCsStatus() {
 
                 <div class="p-4 rounded-xl bg-bg-elevated border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-300">
                     <div class="space-y-1">
-                        <div>Aktuálny interval: <strong>${escapeHtml(formatIntervalLabel(cs.intervalSeconds))}</strong></div>
-                        <div>Režim dát: <strong>${state.steamApiKeyConfigured ? 'Plný CS2/EU režim (STEAM_API_KEY aktívny)' : 'Základný Steam + CS2 hráči režim'}</strong></div>
+                        <div>Interval: <strong>${escapeHtml(formatIntervalLabel(cs.intervalSeconds))}</strong></div>
+                        <div>Režim: <strong>${state.steamApiKeyConfigured ? 'Plný · Steam API' : 'Základný'}</strong></div>
                     </div>
                     <div class="flex items-center gap-2">
                         ${messageLink ? `
@@ -2334,7 +2302,7 @@ function renderCsStatus() {
                         ` : ''}
                         <button id="cs-refresh-now" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-surface hover:bg-bg-hover border border-slate-700 text-slate-200 transition">
                             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                            <span>Obnoviť stav teraz</span>
+                            <span>Obnoviť teraz</span>
                         </button>
                     </div>
                 </div>
@@ -2342,7 +2310,7 @@ function renderCsStatus() {
                 <div class="flex justify-end">
                     <button id="cs-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
@@ -2410,20 +2378,17 @@ function renderRankFeed() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="trending-up" class="w-4 h-4 text-brand-gold"></i>
-                <span>Rank-Up / Derank oznámenia</span>
+                <span>Rank-Up / Derank</span>
             </h3>
 
             <form id="rf-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť Rank-Up / Derank oznámenia</div>
-                        <div class="text-xs text-slate-400">Keď hráč pri aktualizácii prestúpi do iného CS2 Premier pásma, bot pošle kartu do zvoleného kanála.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť oznámenia</div>
                     ${renderToggleSwitch('rf-enabled', rf.enabled)}
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Kanál pre oznámenia</label>
+                    <label class="text-xs font-medium text-slate-400">Kanál</label>
                     <select id="rf-channel" class="input-field">
                         ${buildTextChannelOptions(rf.channelId)}
                     </select>
@@ -2431,17 +2396,11 @@ function renderRankFeed() {
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex items-center justify-between gap-3 p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                        <div>
-                            <div class="text-sm font-medium text-white">📈 Oznámiť Rank-Up</div>
-                            <div class="text-xs text-slate-400">Postup do vyššej farby Premier ranku</div>
-                        </div>
+                        <div class="text-sm font-medium text-white">📈 Rank-Up</div>
                         ${renderToggleSwitch('rf-up', rf.notifyRankUp !== false)}
                     </div>
                     <div class="flex items-center justify-between gap-3 p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                        <div>
-                            <div class="text-sm font-medium text-white">📉 Oznámiť Derank</div>
-                            <div class="text-xs text-slate-400">Pád do nižšej farby Premier ranku</div>
-                        </div>
+                        <div class="text-sm font-medium text-white">📉 Derank</div>
                         ${renderToggleSwitch('rf-down', rf.notifyDerank !== false)}
                     </div>
                 </div>
@@ -2449,11 +2408,11 @@ function renderRankFeed() {
                 <div class="flex items-center justify-between flex-wrap gap-3 pt-2">
                     <button id="rf-test-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-200 transition">
                         <i data-lucide="send" class="w-4 h-4"></i>
-                        <span>Poslať testovacie oznámenie</span>
+                        <span>Test</span>
                     </button>
                     <button id="rf-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
@@ -2512,53 +2471,47 @@ function renderAdminLog() {
     const hasAudit = Boolean(state.overview?.viewAuditLogGranted);
 
     const eventRows = [
-        { id: 'al-ev-join', key: 'memberJoin', title: '📥 Príchod člena', desc: 'Zobrazí vek Discord účtu a typ účtu' },
-        { id: 'al-ev-leave', key: 'memberLeave', title: '📤 Odchod / Kick člena', desc: 'Zobrazí roly člena a pri kicku aj moderátora' },
-        { id: 'al-ev-bans', key: 'bans', title: '🔨 Bany & Unbany', desc: 'Loguje udelené aj zrušené bany na serveri' },
-        { id: 'al-ev-timeouts', key: 'timeouts', title: '🔇 Timeouty', desc: 'Loguje udelenie aj zrušenie timeoutu' },
-        { id: 'al-ev-roles', key: 'roleChanges', title: '🏷️ Zmeny rolí', desc: 'Pridané a odobrané roly u členov' },
-        { id: 'al-ev-voice', key: 'voiceActivity', title: '🎙️ Voice aktivita', desc: 'Pripojenia, odpojenia a presuny medzi VC' }
+        { id: 'al-ev-join', key: 'memberJoin', title: '📥 Príchod člena' },
+        { id: 'al-ev-leave', key: 'memberLeave', title: '📤 Odchod / Kick' },
+        { id: 'al-ev-bans', key: 'bans', title: '🔨 Bany a unbany' },
+        { id: 'al-ev-timeouts', key: 'timeouts', title: '🔇 Timeouty' },
+        { id: 'al-ev-roles', key: 'roleChanges', title: '🏷️ Zmeny rolí' },
+        { id: 'al-ev-voice', key: 'voiceActivity', title: '🎙️ Voice aktivita' }
     ];
 
     container.innerHTML = `
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="shield-check" class="w-4 h-4 text-sky-400"></i>
-                <span>Discord Admin Log</span>
+                <span>Admin Log</span>
             </h3>
 
             <form id="al-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť Discord Admin Log</div>
-                        <div class="text-xs text-slate-400">Automaticky zapisuje udalosti servera do vybraného log kanála.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť Admin Log</div>
                     ${renderToggleSwitch('al-enabled', al.enabled)}
                 </div>
 
                 ${!hasAudit ? `
-                    <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2.5">
-                        <i data-lucide="alert-triangle" class="w-4 h-4 mt-0.5 shrink-0 text-amber-400"></i>
-                        <span>Bot momentálne nemá právo <strong>View Audit Log</strong> — logovanie funguje, ale pri banoch, kickoch a timeoutoch nezobrazí meno moderátora.</span>
+                    <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-center gap-2.5">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 text-amber-400"></i>
+                        <span>Chýba právo <strong>View Audit Log</strong> — pri banoch, kickoch a timeoutoch sa nezobrazí moderátor.</span>
                     </div>
                 ` : ''}
 
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Kanál pre Admin Log (napr. #admin-log)</label>
+                    <label class="text-xs font-medium text-slate-400">Kanál</label>
                     <select id="al-channel" class="input-field">
                         ${buildTextChannelOptions(al.channelId)}
                     </select>
                 </div>
 
                 <div class="space-y-2.5">
-                    <label class="text-xs font-medium text-slate-400 block">Sledované udalosti</label>
+                    <label class="text-xs font-medium text-slate-400 block">Udalosti</label>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         ${eventRows.map(ev => `
                             <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                                <div>
-                                    <div class="text-sm font-medium text-white">${escapeHtml(ev.title)}</div>
-                                    <div class="text-xs text-slate-400">${escapeHtml(ev.desc)}</div>
-                                </div>
+                                <div class="text-sm font-medium text-white">${escapeHtml(ev.title)}</div>
                                 ${renderToggleSwitch(ev.id, Boolean(events[ev.key]))}
                             </div>
                         `).join('')}
@@ -2568,11 +2521,11 @@ function renderAdminLog() {
                 <div class="flex items-center justify-between flex-wrap gap-3 pt-2">
                     <button id="al-test-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-200 transition">
                         <i data-lucide="send" class="w-4 h-4"></i>
-                        <span>Poslať testovací log</span>
+                        <span>Test</span>
                     </button>
                     <button id="al-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
@@ -2634,11 +2587,11 @@ function renderWelcome() {
     const container = document.getElementById('section-welcome');
     const w = state.settings?.welcome || {};
     const welcomeVars = [
-        { token: '{user}', label: 'Mention (@člen)' },
-        { token: '{displayname}', label: 'Meno na serveri' },
-        { token: '{username}', label: 'Discord username' },
-        { token: '{server}', label: 'Názov servera' },
-        { token: '{members}', label: 'Počet členov' }
+        { token: '{user}', label: 'Mention' },
+        { token: '{displayname}', label: 'Meno' },
+        { token: '{username}', label: 'Username' },
+        { token: '{server}', label: 'Server' },
+        { token: '{members}', label: 'Členovia' }
     ];
 
     container.innerHTML = `
@@ -2646,29 +2599,23 @@ function renderWelcome() {
             <div class="card p-6 space-y-4">
                 <h3 class="text-base font-semibold text-white flex items-center gap-2">
                     <i data-lucide="hand" class="w-4 h-4 text-emerald-400"></i>
-                    <span>Uvítacie a rozlúčkové správy</span>
+                    <span>Uvítanie</span>
                 </h3>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                        <div>
-                            <div class="text-sm font-semibold text-white">Zapnúť modul Uvítacie správy</div>
-                            <div class="text-xs text-slate-400">Pri vypnutí ostanú všetky texty aj kanály uložené.</div>
-                        </div>
+                        <div class="text-sm font-semibold text-white">Zapnúť Uvítanie</div>
                         ${renderToggleSwitch('wl-enabled', w.enabled)}
                     </div>
 
                     <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                        <div>
-                            <div class="text-sm font-semibold text-white">Ignorovať botov</div>
-                            <div class="text-xs text-slate-400">Neposielať uvítanie ani rozlúčku pre bot účty.</div>
-                        </div>
+                        <div class="text-sm font-semibold text-white">Ignorovať botov</div>
                         ${renderToggleSwitch('wl-ignore-bots', w.ignoreBots !== false)}
                     </div>
                 </div>
 
                 <div class="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2">
-                    <div class="text-xs font-medium text-slate-400">Kliknutím vložíš premennú do posledného aktívneho poľa:</div>
+                    <div class="text-xs font-medium text-slate-400">Premenné:</div>
                     <div class="flex flex-wrap gap-2">
                         ${welcomeVars.map(v => `
                             <button type="button" class="wl-var-chip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-base hover:bg-bg-hover border border-slate-700/80 hover:border-brand/60 text-xs transition" data-var="${escapeHtml(v.token)}">
@@ -2677,25 +2624,22 @@ function renderWelcome() {
                             </button>
                         `).join('')}
                     </div>
-                    <p class="text-xs text-slate-400">Skloňovanie členov: <code class="text-sky-300">{members:člen|členovia|členov}</code></p>
+                    <p class="text-xs text-slate-400">Skloňovanie: <code class="text-sky-300">{members:člen|členovia|členov}</code></p>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="card p-6 space-y-4">
                     <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                        <div>
-                            <h4 class="text-sm font-semibold text-white flex items-center gap-2">
-                                <i data-lucide="hash" class="w-4 h-4 text-brand"></i>
-                                <span>Uvítanie do roomky (kanála)</span>
-                            </h4>
-                            <p class="text-xs text-slate-400 mt-0.5">Verejný uvítací embed vo vybranom textovom kanáli.</p>
-                        </div>
+                        <h4 class="text-sm font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="hash" class="w-4 h-4 text-brand"></i>
+                            <span>Do kanála</span>
+                        </h4>
                         ${renderToggleSwitch('wl-chan-enabled', w.channelEnabled)}
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Cieľový kanál</label>
+                        <label class="text-xs font-medium text-slate-400">Kanál</label>
                         <select id="wl-chan-id" class="input-field">
                             ${buildTextChannelOptions(w.channelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
                         </select>
@@ -2703,7 +2647,7 @@ function renderWelcome() {
 
                     <div class="grid grid-cols-12 gap-3">
                         <div class="col-span-9 space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Nadpis embedu</label>
+                            <label class="text-xs font-medium text-slate-400">Nadpis</label>
                             <input id="wl-chan-title" type="text" maxlength="256" class="wl-target-input input-field" value="${escapeHtml(w.channelTitle || '')}" />
                         </div>
                         <div class="col-span-3 space-y-1.5">
@@ -2713,38 +2657,35 @@ function renderWelcome() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Text správy do roomky</label>
+                        <label class="text-xs font-medium text-slate-400">Text</label>
                         <textarea id="wl-chan-desc" rows="4" maxlength="4000" class="wl-target-input input-field resize-y">${escapeHtml(w.channelDescription || '')}</textarea>
                     </div>
 
                     <div class="flex items-center justify-between gap-3 pt-1">
-                        <span class="text-xs text-slate-300">Zobraziť avatar nového člena</span>
+                        <span class="text-xs text-slate-300">Avatar člena</span>
                         ${renderToggleSwitch('wl-chan-avatar', w.channelShowAvatar !== false)}
                     </div>
 
                     <div class="flex justify-end pt-2">
                         <button type="button" data-wl-test="channel" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                             <i data-lucide="send" class="w-3.5 h-3.5"></i>
-                            <span>Test do roomky</span>
+                            <span>Test</span>
                         </button>
                     </div>
                 </div>
 
                 <div class="card p-6 space-y-4">
                     <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                        <div>
-                            <h4 class="text-sm font-semibold text-white flex items-center gap-2">
-                                <i data-lucide="mail" class="w-4 h-4 text-emerald-400"></i>
-                                <span>Uvítanie do DM (súkromnej správy)</span>
-                            </h4>
-                            <p class="text-xs text-slate-400 mt-0.5">Súkromný embed do správ (môže mať úplne iný text ako roomka).</p>
-                        </div>
+                        <h4 class="text-sm font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="mail" class="w-4 h-4 text-emerald-400"></i>
+                            <span>Do DM</span>
+                        </h4>
                         ${renderToggleSwitch('wl-dm-enabled', w.dmEnabled)}
                     </div>
 
                     <div class="grid grid-cols-12 gap-3">
                         <div class="col-span-9 space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Nadpis DM embedu</label>
+                            <label class="text-xs font-medium text-slate-400">Nadpis</label>
                             <input id="wl-dm-title" type="text" maxlength="256" class="wl-target-input input-field" value="${escapeHtml(w.dmTitle || '')}" />
                         </div>
                         <div class="col-span-3 space-y-1.5">
@@ -2754,19 +2695,14 @@ function renderWelcome() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Text DM správy</label>
+                        <label class="text-xs font-medium text-slate-400">Text</label>
                         <textarea id="wl-dm-desc" rows="5" maxlength="4000" class="wl-target-input input-field resize-y">${escapeHtml(w.dmDescription || '')}</textarea>
-                    </div>
-
-                    <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2">
-                        <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5 text-amber-400"></i>
-                        <span>Ak má člen zakázané súkromné správy od ľudí zo servera, Discord DM ticho preskočí bez chyby.</span>
                     </div>
 
                     <div class="flex justify-end pt-1">
                         <button type="button" data-wl-test="dm" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                             <i data-lucide="send" class="w-3.5 h-3.5"></i>
-                            <span>Poslať test do môjho DM</span>
+                            <span>Test do DM</span>
                         </button>
                     </div>
                 </div>
@@ -2774,25 +2710,22 @@ function renderWelcome() {
 
             <div class="card p-6 space-y-4">
                 <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                    <div>
-                        <h4 class="text-sm font-semibold text-white flex items-center gap-2">
-                            <i data-lucide="log-out" class="w-4 h-4 text-red-400"></i>
-                            <span>Rozlúčková správa pri odchode (voliteľné)</span>
-                        </h4>
-                        <p class="text-xs text-slate-400 mt-0.5">Oznámenie do vybraného kanála, keď niekto opustí server.</p>
-                    </div>
+                    <h4 class="text-sm font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="log-out" class="w-4 h-4 text-red-400"></i>
+                        <span>Rozlúčková správa</span>
+                    </h4>
                     ${renderToggleSwitch('wl-gb-enabled', w.goodbyeEnabled)}
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <div class="md:col-span-4 space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Kanál pre rozlúčku</label>
+                        <label class="text-xs font-medium text-slate-400">Kanál</label>
                         <select id="wl-gb-id" class="input-field">
                             ${buildTextChannelOptions(w.goodbyeChannelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
                         </select>
                     </div>
                     <div class="md:col-span-6 space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Nadpis embedu</label>
+                        <label class="text-xs font-medium text-slate-400">Nadpis</label>
                         <input id="wl-gb-title" type="text" maxlength="256" class="wl-target-input input-field" value="${escapeHtml(w.goodbyeTitle || '')}" />
                     </div>
                     <div class="md:col-span-2 space-y-1.5">
@@ -2802,18 +2735,18 @@ function renderWelcome() {
                 </div>
 
                 <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Text rozlúčkovej správy</label>
+                    <label class="text-xs font-medium text-slate-400">Text</label>
                     <textarea id="wl-gb-desc" rows="2" maxlength="4000" class="wl-target-input input-field resize-y">${escapeHtml(w.goodbyeDescription || '')}</textarea>
                 </div>
 
                 <div class="flex flex-wrap items-center justify-end gap-3 pt-1">
                     <button type="button" data-wl-test="goodbye" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                         <i data-lucide="send" class="w-3.5 h-3.5"></i>
-                        <span>Test rozlúčky</span>
+                        <span>Test</span>
                     </button>
                     <button id="wl-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť Uvítacie správy</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </div>
@@ -2911,13 +2844,13 @@ function readTicketRolesDraftFromDom() {
 
 function buildTicketSupportRoleRowsHtml(roleIds) {
     if (!Array.isArray(roleIds) || roleIds.length === 0) {
-        return `<p class="text-xs text-slate-400 py-1.5">Zatiaľ žiadna Support rola (tickety uvidia len admini a majiteľ bota).</p>`;
+        return `<p class="text-xs text-slate-400 py-1.5">Žiadna rola.</p>`;
     }
 
     return roleIds.map((roleId, idx) => `
         <div class="flex items-center gap-2">
             <select class="tk-role-select input-field flex-1">
-                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber Support rolu —' })}
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber rolu —' })}
             </select>
             <button type="button" data-tk-remove-role="${idx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
@@ -2942,7 +2875,7 @@ function attachTicketRoleListeners() {
 function renderOpenTicketsList() {
     const list = state.openTickets || [];
     if (list.length === 0) {
-        return `<p class="text-sm text-slate-400 py-4 text-center">Momentálne nie sú otvorené žiadne tickety.</p>`;
+        return `<p class="text-sm text-slate-400 py-4 text-center">Žiadne otvorené tickety.</p>`;
     }
 
     return list.map(t => `
@@ -2953,17 +2886,17 @@ function renderOpenTicketsList() {
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="px-2 py-0.5 rounded-md bg-brand/15 text-brand text-xs font-bold">#${String(t.number).padStart(3, '0')}</span>
                         <span class="font-semibold text-white text-sm truncate">${escapeHtml(t.subject)}</span>
-                        ${t.claimedByName ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">Prevzal: ${escapeHtml(t.claimedByName)}</span>` : `<span class="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-300">Čaká na prevzatie</span>`}
+                        ${t.claimedByName ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">${escapeHtml(t.claimedByName)}</span>` : `<span class="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-300">Neprevzatý</span>`}
                     </div>
                     <div class="text-xs text-slate-400 mt-1">
-                        Autor: <span class="text-slate-200">${escapeHtml(t.userName)}</span> • Kanál: <span class="font-mono text-slate-300">#${escapeHtml(t.channelName)}</span> • ${escapeHtml(new Date(t.createdAt).toLocaleString('sk-SK'))}
+                        ${escapeHtml(t.userName)} · <span class="font-mono text-slate-300">#${escapeHtml(t.channelName)}</span> · ${escapeHtml(new Date(t.createdAt).toLocaleString('sk-SK'))}
                     </div>
                 </div>
             </div>
             <div class="shrink-0">
                 <button type="button" data-tk-close="${escapeHtml(t.channelId)}" data-tk-num="${String(t.number).padStart(3, '0')}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition">
                     <i data-lucide="lock" class="w-3.5 h-3.5"></i>
-                    <span>Zatvoriť & Transcript</span>
+                    <span>Zatvoriť</span>
                 </button>
             </div>
         </div>
@@ -3028,33 +2961,30 @@ function renderTickets() {
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
                 <i data-lucide="ticket" class="w-4 h-4 text-brand"></i>
-                <span>Nastavenia Ticket systému</span>
+                <span>Tickety</span>
             </h3>
 
             <form id="tk-form" class="space-y-5">
                 <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
-                    <div>
-                        <div class="text-sm font-semibold text-white">Zapnúť Ticket systém</div>
-                        <div class="text-xs text-slate-400">Hráči môžu cez tlačidlo v paneli vytvárať súkromné support tickety. Pri vypnutí sa nič nevymaže.</div>
-                    </div>
+                    <div class="text-sm font-semibold text-white">Zapnúť Tickety</div>
                     ${renderToggleSwitch('tk-enabled', tk.enabled)}
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Kategória pre nové tickety</label>
+                        <label class="text-xs font-medium text-slate-400">Kategória</label>
                         <select id="tk-category" class="input-field">
                             ${buildCategoryOptions(tk.categoryId)}
                         </select>
                     </div>
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Log kanál pre prepisy (Transcript)</label>
+                        <label class="text-xs font-medium text-slate-400">Log kanál</label>
                         <select id="tk-log-channel" class="input-field">
-                            ${buildTextChannelOptions(tk.logChannelId, { allowNone: true, noneLabel: '— Bez ukladania prepisov —' })}
+                            ${buildTextChannelOptions(tk.logChannelId, { allowNone: true, noneLabel: '— Žiadny —' })}
                         </select>
                     </div>
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Kanál pre Ticket panel</label>
+                        <label class="text-xs font-medium text-slate-400">Kanál panelu</label>
                         <select id="tk-panel-channel" class="input-field">
                             ${buildTextChannelOptions(tk.panelChannelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
                         </select>
@@ -3064,27 +2994,27 @@ function renderTickets() {
                 <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
                     <div class="flex items-center gap-2 text-sm font-semibold text-white">
                         <i data-lucide="shield" class="w-4 h-4 text-sky-400"></i>
-                        <span>Support roly (vidia každý ticket a môžu ho prevziať)</span>
+                        <span>Support roly</span>
                     </div>
                     <div id="tk-roles-list" class="space-y-2">
                         ${buildTicketSupportRoleRowsHtml(state.ticketDraftSupportRoleIds)}
                     </div>
-                    ${renderAddButtonHtml('tk-add-role-btn', 'Pridať Support rolu')}
+                    ${renderAddButtonHtml('tk-add-role-btn', 'Pridať rolu')}
                 </div>
 
                 <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-4">
                     <div class="text-sm font-semibold text-white flex items-center gap-2">
                         <i data-lucide="layout-template" class="w-4 h-4 text-brand-gold"></i>
-                        <span>Vzhľad Ticket panelu na Discorde</span>
+                        <span>Ticket panel</span>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
                         <div class="md:col-span-6 space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Nadpis panelu</label>
+                            <label class="text-xs font-medium text-slate-400">Nadpis</label>
                             <input id="tk-panel-title" type="text" maxlength="256" required class="input-field" value="${escapeHtml(tk.panelTitle || '')}" />
                         </div>
                         <div class="md:col-span-4 space-y-1.5">
-                            <label class="text-xs font-medium text-slate-400">Text tlačidla</label>
+                            <label class="text-xs font-medium text-slate-400">Tlačidlo</label>
                             <input id="tk-panel-btn" type="text" maxlength="80" required class="input-field" value="${escapeHtml(tk.panelButtonLabel || '')}" />
                         </div>
                         <div class="md:col-span-2 space-y-1.5">
@@ -3094,7 +3024,7 @@ function renderTickets() {
                     </div>
 
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Popis v embede panelu</label>
+                        <label class="text-xs font-medium text-slate-400">Popis</label>
                         <textarea id="tk-panel-desc" rows="3" maxlength="4000" required class="input-field resize-y">${escapeHtml(tk.panelDescription || '')}</textarea>
                     </div>
                 </div>
@@ -3102,11 +3032,11 @@ function renderTickets() {
                 <div class="flex flex-wrap items-center justify-end gap-3 pt-1">
                     <button id="tk-send-panel-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-200 transition">
                         <i data-lucide="send" class="w-4 h-4 text-sky-400"></i>
-                        <span>${tk.panelMessageId ? 'Aktualizovať panel v kanáli' : 'Odoslať panel do kanála'}</span>
+                        <span>${tk.panelMessageId ? 'Aktualizovať panel' : 'Odoslať panel'}</span>
                     </button>
                     <button id="tk-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť Ticket nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </form>
@@ -3114,10 +3044,7 @@ function renderTickets() {
 
         <div class="card p-6">
             <div class="flex items-center justify-between gap-3 mb-4">
-                <div>
-                    <h3 id="tk-open-heading" class="text-base font-semibold text-white">Otvorené tickety (${state.openTickets.length})</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Live prehľad aktívnych ticketov s možnosťou diaľkového zatvorenia a uloženia prepisu.</p>
-                </div>
+                <h3 id="tk-open-heading" class="text-base font-semibold text-white">Otvorené tickety (${state.openTickets.length})</h3>
                 <button id="tk-refresh-open" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                     <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                     <span>Obnoviť</span>
@@ -3219,7 +3146,7 @@ function readDashboardRolesDraftFromDom() {
 
 function buildDashboardRoleRowsHtml(roleIds) {
     if (roleIds.length === 0) {
-        return `<p class="text-xs text-slate-400 py-2">Zatiaľ žiadna rola. Pridaj rolu tlačidlom nižšie.</p>`;
+        return `<p class="text-xs text-slate-400 py-2">Žiadna rola.</p>`;
     }
 
     return roleIds.map((roleId, idx) => `
@@ -3261,51 +3188,47 @@ function renderSettings() {
             <div class="card p-6 space-y-5">
                 <h3 class="text-base font-semibold text-white flex items-center gap-2">
                     <i data-lucide="shield" class="w-4 h-4 text-brand"></i>
-                    <span>Prístup a obmedzenie príkazov</span>
+                    <span>Prístup a príkazy</span>
                 </h3>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
                     <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
                         <div class="flex items-center gap-2 text-sm font-semibold text-white">
                             <i data-lucide="user-check" class="w-4 h-4 text-brand"></i>
-                            <span>Role s prístupom do dashboardu</span>
+                            <span>Prístup do dashboardu</span>
                         </div>
                         <div id="set-dashboard-roles-list" class="space-y-2">
                             ${buildDashboardRoleRowsHtml(state.dashboardDraftRoleIds)}
                         </div>
                         ${renderAddButtonHtml('set-add-dashboard-role-btn', 'Pridať rolu')}
-                        <p class="text-xs text-slate-500">Majiteľ bota (<code class="text-slate-400">OWNER_ID</code>) má prístup vždy ako poistku.</p>
+                        <p class="text-xs text-slate-500">Majiteľ bota má prístup vždy.</p>
                     </div>
 
                     <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
                         <div class="flex items-center gap-2 text-sm font-semibold text-white">
                             <i data-lucide="terminal" class="w-4 h-4 text-sky-400"></i>
-                            <span>Povolený kanál pre hráčske slash príkazy</span>
+                            <span>Kanál pre príkazy</span>
                         </div>
                         <select id="set-allowed-channel" class="input-field">
-                            ${buildTextChannelOptions(s.allowedChannelId, { allowNone: true, noneLabel: '— Všetky textové kanály —' })}
+                            ${buildTextChannelOptions(s.allowedChannelId, { allowNone: true, noneLabel: '— Všetky kanály —' })}
                         </select>
-                        <p class="text-xs text-slate-500">Tlačidlá TempVoice v hlasových kanáloch fungujú vždy všade.</p>
                     </div>
                 </div>
             </div>
 
             <div class="card p-6 space-y-4">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
-                        <i data-lucide="sparkles" class="w-4 h-4 text-sky-400"></i>
-                        <span>Status / aktivita bota na Discorde</span>
-                    </h3>
-                    <span class="text-xs text-slate-400">Nechaj prázdne, ak nechceš mať nastavený žiadny status.</span>
-                </div>
+                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-sky-400"></i>
+                    <span>Status bota</span>
+                </h3>
 
                 <div class="space-y-2">
-                    <label for="set-status-text" class="text-xs font-medium text-slate-400">Text statusu</label>
+                    <label for="set-status-text" class="text-xs font-medium text-slate-400">Text</label>
                     <input id="set-status-text" type="text" maxlength="128" class="input-field" value="${escapeHtml(statusText)}" />
                 </div>
 
                 <div class="space-y-2">
-                    <p class="text-xs font-medium text-slate-400">Kliknutím vložíš dynamickú premennú:</p>
+                    <p class="text-xs font-medium text-slate-400">Premenné:</p>
                     <div class="flex flex-wrap gap-2">
                         ${BOT_STATUS_VARIABLES.map(v => `
                             <button type="button" class="status-var-chip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700/80 hover:border-brand/60 text-xs transition" data-var="${escapeHtml(v.token)}">
@@ -3315,27 +3238,24 @@ function renderSettings() {
                         `).join('')}
                     </div>
                     <p class="text-xs text-slate-400">
-                        Skloňovanie podľa čísla: <code class="text-sky-300">{players:hráča|hráčov}</code> (1 / ostatné) alebo <code class="text-sky-300">{rooms:miestnosť|miestnosti|miestností}</code> (1 / 2–4 / 0, 5+).
+                        Skloňovanie: <code class="text-sky-300">{players:hráča|hráčov}</code> alebo <code class="text-sky-300">{rooms:miestnosť|miestnosti|miestností}</code>
                     </p>
                 </div>
 
                 <div class="rounded-xl bg-bg-elevated/70 border border-slate-800 px-3.5 py-2.5 flex items-center justify-between gap-3">
-                    <span class="text-xs font-medium text-slate-400">Náhľad na Discorde:</span>
+                    <span class="text-xs font-medium text-slate-400">Náhľad:</span>
                     <span id="set-status-preview" class="text-xs font-medium ${statusPreview ? 'text-slate-200' : 'text-slate-500 italic'} truncate">
-                        ${statusPreview ? escapeHtml(statusPreview) : 'Bez nastaveného statusu'}
+                        ${statusPreview ? escapeHtml(statusPreview) : 'Žiadny status'}
                     </span>
                 </div>
             </div>
 
             <div class="card p-6 space-y-5">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                        <h3 class="text-base font-semibold text-white flex items-center gap-2">
-                            <i data-lucide="award" class="w-4 h-4 text-brand-gold"></i>
-                            <span>Mapovanie CS2 Premier rank rolí</span>
-                        </h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Zmeny sa prejavia okamžite pri ďalšej aktualizácii rankov bez reštartu bota.</p>
-                    </div>
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="award" class="w-4 h-4 text-brand-gold"></i>
+                        <span>CS2 rank roly</span>
+                    </h3>
                     <button id="add-rank-row-btn" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                         <i data-lucide="plus" class="w-3.5 h-3.5"></i>
                         <span>Pridať pásmo</span>
@@ -3343,7 +3263,7 @@ function renderSettings() {
                 </div>
 
                 <div class="p-4 rounded-xl bg-bg-elevated border border-slate-800 grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                    <div class="md:col-span-4 text-sm font-semibold text-slate-200">Unranked (bez Premier ranku)</div>
+                    <div class="md:col-span-4 text-sm font-semibold text-slate-200">Unranked</div>
                     <div class="md:col-span-8">
                         <select id="set-unranked-role" class="input-field">
                             ${buildRoleOptions(s.unrankedRoleId, { allowNone: false })}
@@ -3370,20 +3290,17 @@ function renderSettings() {
                 <div class="flex justify-end pt-2">
                     <button id="settings-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
                         <i data-lucide="save" class="w-4 h-4"></i>
-                        <span>Uložiť všetky nastavenia</span>
+                        <span>Uložiť</span>
                     </button>
                 </div>
             </div>
         </form>
 
         <div class="card p-6 space-y-4">
-            <div>
-                <h3 class="text-base font-semibold text-white flex items-center gap-2">
-                    <i data-lucide="archive" class="w-4 h-4 text-emerald-400"></i>
-                    <span>Záloha a obnova databázy</span>
-                </h3>
-                <p class="text-xs text-slate-400 mt-0.5">Stiahni si zálohu nastavení alebo hráčov, prípadne obnov dáta zo zálohy (.json).</p>
-            </div>
+            <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <i data-lucide="archive" class="w-4 h-4 text-emerald-400"></i>
+                <span>Záloha a obnova</span>
+            </h3>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button id="set-backup-btn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-200 text-sm font-medium transition">
@@ -3395,7 +3312,7 @@ function renderSettings() {
                     <input id="set-restore-file" type="file" accept=".json,application/json" class="hidden" />
                     <button id="set-restore-btn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-slate-700 hover:border-amber-400/70 bg-bg-elevated/60 hover:bg-amber-500/10 text-slate-200 text-sm font-medium transition">
                         <i data-lucide="upload" class="w-4 h-4 text-amber-400"></i>
-                        <span>Obnoviť zo zálohy (.json)</span>
+                        <span>Obnoviť zálohu</span>
                     </button>
                 </div>
             </div>
@@ -3412,7 +3329,7 @@ function renderSettings() {
             statusPreviewEl.textContent = resolved;
             statusPreviewEl.className = 'text-xs font-medium text-slate-200 truncate';
         } else {
-            statusPreviewEl.textContent = 'Bez nastaveného statusu';
+            statusPreviewEl.textContent = 'Žiadny status';
             statusPreviewEl.className = 'text-xs font-medium text-slate-500 italic truncate';
         }
     }
@@ -3652,7 +3569,7 @@ function patchOverviewDom() {
 function patchPlayersTableDom() {
     const heading = document.getElementById('players-count-heading');
     if (heading) {
-        heading.textContent = `Prepojení hráči (${state.players.length})`;
+        heading.textContent = `Hráči (${state.players.length})`;
     }
 
     const tbody = document.getElementById('players-tbody');
@@ -3670,7 +3587,7 @@ function patchPlayersTableDom() {
 function patchTempRoomsDom() {
     const heading = document.getElementById('tv-rooms-heading');
     if (heading) {
-        heading.textContent = `Aktívne dočasné miestnosti (${state.tempRooms.length})`;
+        heading.textContent = `Aktívne miestnosti (${state.tempRooms.length})`;
     }
 
     const listEl = document.getElementById('tv-rooms-list');
