@@ -217,6 +217,15 @@ async function logMemberUpdate(oldMember, newMember) {
                 .setTimestamp();
 
             await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+
+            const summaryParts = [];
+            if (added.size > 0) summaryParts.push(`pridané: ${added.map(r => `@${r.name}`).join(', ')}`);
+            if (removed.size > 0) summaryParts.push(`odobrané: ${removed.map(r => `@${r.name}`).join(', ')}`);
+            addActivityLog({
+                level: 'info',
+                category: 'adminlog',
+                message: `Zmena rolí pre ${newMember.user.tag} (${summaryParts.join('; ')}).`
+            });
         }
     }
 }
@@ -256,6 +265,20 @@ async function logVoiceState(oldState, newState) {
         .setTimestamp();
 
     await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+
+    let logMessage = '';
+    if (!oldState.channelId && newState.channelId) {
+        logMessage = `${member.user.tag} sa pripojil do VC „${newState.channel?.name || newState.channelId}“.`;
+    } else if (oldState.channelId && !newState.channelId) {
+        logMessage = `${member.user.tag} sa odpojil z VC „${oldState.channel?.name || oldState.channelId}“.`;
+    } else {
+        logMessage = `${member.user.tag} sa presunul z VC „${oldState.channel?.name || oldState.channelId}“ do „${newState.channel?.name || oldState.channelId}“.`;
+    }
+    addActivityLog({
+        level: 'info',
+        category: 'adminlog',
+        message: logMessage
+    });
 }
 
 async function sendTestAdminLogMessage(guild) {
