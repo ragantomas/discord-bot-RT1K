@@ -127,7 +127,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
         level: 'warn',
         category: 'moderation',
         message: `Warn #${warning.id} pre ${targetTag}: ${cleanReason}`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId: userId
     });
 
     let escalation = null;
@@ -162,7 +163,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                             level: 'warn',
                             category: 'moderation',
                             message: `Auto-timeout (${formatDurationMinutes(mins)}) pre ${targetTag} po ${total} varovaniach.`,
-                            actor: 'Auto-eskalácia'
+                            actor: 'Auto-eskalácia',
+                            targetUserId: member.id
                         });
                         escalation = { action: 'timeout', durationMinutes: mins };
                     }
@@ -187,7 +189,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                             level: 'warn',
                             category: 'moderation',
                             message: `Auto-kick pre ${targetTag} po ${total} varovaniach.`,
-                            actor: 'Auto-eskalácia'
+                            actor: 'Auto-eskalácia',
+                            targetUserId: member.id
                         });
                         escalation = { action: 'kick' };
                     }
@@ -212,7 +215,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                             level: 'warn',
                             category: 'moderation',
                             message: `Auto-ban pre ${targetTag} po ${total} varovaniach.`,
-                            actor: 'Auto-eskalácia'
+                            actor: 'Auto-eskalácia',
+                            targetUserId: member.id
                         });
                         escalation = { action: 'ban' };
                     }
@@ -244,7 +248,8 @@ async function removeWarning({ guild, targetUserId, targetLabel = null, warningI
         level: 'info',
         category: 'moderation',
         message: `Odstránený warn #${res.removed.id} pre ${label}.`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId
     });
 
     return { ok: true, removed: res.removed, remaining: res.remaining };
@@ -269,7 +274,8 @@ async function clearAllWarnings({ guild, targetUserId, targetLabel = null, moder
         level: 'info',
         category: 'moderation',
         message: `Vymazané všetky varovania (${removedCount}) pre ${label}.`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId
     });
 
     return { ok: true, removedCount };
@@ -316,7 +322,8 @@ async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Be
         level: 'warn',
         category: 'moderation',
         message: `Timeout ${durLabel} pre ${targetMember.user.tag}: ${cleanReason}`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId: targetMember.id
     });
 
     return { ok: true, durationLabel: durLabel };
@@ -348,7 +355,8 @@ async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout'
         level: 'info',
         category: 'moderation',
         message: `Zrušený timeout pre ${targetMember.user.tag}.`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId: targetMember.id
     });
 
     return { ok: true };
@@ -389,7 +397,8 @@ async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderat
         level: 'warn',
         category: 'moderation',
         message: `Kick pre ${targetUser.tag}: ${cleanReason}`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId: targetUser.id
     });
 
     return { ok: true, targetTag: targetUser.tag };
@@ -446,7 +455,8 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
         level: 'warn',
         category: 'moderation',
         message: `Ban pre ${targetTag}: ${cleanReason}`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId: userId
     });
 
     return { ok: true, targetTag };
@@ -479,7 +489,8 @@ async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = 
         level: 'info',
         category: 'moderation',
         message: `Unban pre ${banInfo.user?.tag || cleanId}: ${cleanReason}`,
-        actor: moderatorTag
+        actor: moderatorTag,
+        targetUserId: cleanId
     });
 
     return { ok: true, targetTag: banInfo.user?.tag || cleanId };

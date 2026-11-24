@@ -4,6 +4,7 @@ users.json
 settings.json
 activity.json
 warnings.json
+player_activity.json
 .DS_Store
 __MACOSX/
 .vscode/

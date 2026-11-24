@@ -50,7 +50,8 @@ const {
     updateModerationSettings
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
-const { getRankForElo, removeRankRoles, updateMemberRank, updateAllMemberRanks } = require('../src/services/ranks');
+const { getRankForElo, removeRankRoles, updateMemberRank } = require('../src/services/ranks');
+const { getPlayerActivity, getAllPlayerActivity } = require('../src/services/playerActivity');
 const { updateBotStatus } = require('../src/services/botStatus');
 const {
     toggleTempRoomLock,
@@ -345,12 +346,56 @@ function computeWeeklyEloStats(data) {
     };
 }
 
+function formatMemberRoles(guild, member) {
+    if (!member?.roles?.cache) return [];
+    return [...member.roles.cache.values()]
+        .filter(r => r && r.id !== guild.id)
+        .sort((a, b) => b.position - a.position)
+        .map(r => ({
+            id: r.id,
+            name: r.name,
+            colorHex: r.color ? formatHexColor(r.color) : '#99AAB5',
+            editable: Boolean(r.editable && !r.managed)
+        }));
+}
+
+function formatMemberVoice(member) {
+    if (!member?.voice?.channelId) return null;
+    return {
+        channelId: member.voice.channelId,
+        channelName: member.voice.channel?.name || 'Voice',
+        selfMute: Boolean(member.voice.selfMute),
+        selfDeaf: Boolean(member.voice.selfDeaf),
+        serverMute: Boolean(member.voice.serverMute),
+        serverDeaf: Boolean(member.voice.serverDeaf),
+        streaming: Boolean(member.voice.streaming),
+        selfVideo: Boolean(member.voice.selfVideo)
+    };
+}
+
 function buildPlayersPayload(guild) {
     const users = loadUsers();
     const warningsByUser = getAllWarningsByUser();
+    const allActivity = getAllPlayerActivity();
+    const openTicketsMap = getAllOpenTickets();
+    const ticketsByUser = new Map();
     const now = Date.now();
-    const memberMap = new Map();
 
+    for (const [channelId, t] of Object.entries(openTicketsMap)) {
+        if (!t || t.guildId !== guild.id || !guild.channels.cache.has(channelId)) continue;
+        const list = ticketsByUser.get(t.userId) || [];
+        const claimer = t.claimedById ? guild.members.cache.get(t.claimedById) : null;
+        list.push({
+            channelId,
+            number: Number(t.number || 0),
+            channelName: guild.channels.cache.get(channelId)?.name || channelId,
+            subject: t.subject || 'Bez predmetu',
+            claimedByName: claimer?.displayName || (t.claimedById ? `ID ${t.claimedById}` : null)
+        });
+        ticketsByUser.set(t.userId, list);
+    }
+
+    const memberMap = new Map();
     for (const m of guild.members.cache.values()) {
         if (!m || m.user?.bot) continue;
         memberMap.set(m.id, m);
@@ -377,6 +422,8 @@ function buildPlayersPayload(guild) {
                 ? member.communicationDisabledUntilTimestamp
                 : null;
             const userWarnings = warningsByUser[userId] || [];
+            const act = allActivity[userId] || null;
+            const lastSeenAt = Math.max(act?.lastMessageAt || 0, act?.lastVoiceAt || 0) || null;
 
             return {
                 userId,
@@ -393,6 +440,12 @@ function buildPlayersPayload(guild) {
                 inGuild: Boolean(member),
                 avatarUrl: member?.displayAvatarURL({ size: 64 })
                     || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                roles: formatMemberRoles(guild, member),
+                voice: formatMemberVoice(member),
+                lastSeenAt,
+                openTickets: ticketsByUser.get(userId) || [],
+                joinedAt: member?.joinedTimestamp || null,
+                createdAt: member?.user?.createdTimestamp || null,
                 warningsCount: userWarnings.length,
                 isTimedOut: Boolean(timeoutUntil),
                 timeoutUntil,
@@ -400,6 +453,7 @@ function buildPlayersPayload(guild) {
             };
         })
         .sort((a, b) => {
+            if (Boolean(a.voice) !== Boolean(b.voice)) return a.voice ? -1 : 1;
             if (a.isLinked !== b.isLinked) return a.isLinked ? -1 : 1;
             if (a.isLinked && b.isLinked) {
                 const diff = (b.elo ?? -1) - (a.elo ?? -1);
@@ -478,12 +532,13 @@ function getActorName(req) {
         || 'Dashboard';
 }
 
-function logDashboardAudit(req, message, level = 'info') {
+function logDashboardAudit(req, message, level = 'info', targetUserId = null) {
     addActivityLog({
         level,
         category: 'audit',
         message,
-        actor: getActorName(req)
+        actor: getActorName(req),
+        targetUserId
     });
 }
 
@@ -916,7 +971,7 @@ function startWebServer(client) {
         users[userId] = { steamId, elo: result.elo };
         saveUsers(users);
         updateBotStatus(client);
-        logDashboardAudit(req, `Prepojený hráč ${member.displayName} (${steamId}).`, 'success');
+        logDashboardAudit(req, `Prepojený hráč ${member.displayName} (${steamId}).`, 'success', userId);
 
         return res.json({
             ok: true,
@@ -924,39 +979,6 @@ function startWebServer(client) {
             steamId,
             elo: result.elo
         });
-    });
-
-    app.post('/api/players/:userId/update', async (req, res) => {
-        const { guild } = req.dashboardAuth;
-        const userId = req.params.userId;
-        const users = loadUsers();
-        const entry = users[userId];
-
-        if (!entry) {
-            return res.status(404).json({ error: 'Hráč nemá prepojený Steam účet.' });
-        }
-
-        const member = await guild.members.fetch(userId).catch(() => null);
-        if (!member) {
-            return res.status(404).json({ error: 'Hráč sa už nenachádza na Discord serveri.' });
-        }
-
-        const result = await updateMemberRank(member, entry.steamId, users);
-        if (result.error) {
-            return res.status(400).json({ error: result.error });
-        }
-
-        logDashboardAudit(req, `Aktualizovaný rank hráča ${member.displayName}.`);
-        return res.json({ ok: true, elo: result.elo });
-    });
-
-    app.post('/api/players/update-all', async (req, res) => {
-        const summary = await updateAllMemberRanks(client);
-        if (summary.alreadyRunning) {
-            return res.status(409).json({ error: 'Hromadná aktualizácia rankov práve prebieha.' });
-        }
-        logDashboardAudit(req, `Hromadná aktualizácia rankov (${summary.updated}/${summary.total}).`);
-        return res.json({ ok: true, ...summary });
     });
 
     app.delete('/api/players/:userId', async (req, res) => {
@@ -977,8 +999,228 @@ function startWebServer(client) {
             await removeRankRoles(member);
         }
 
-        logDashboardAudit(req, `Odpojený hráč ${member?.displayName || userId}.`, 'warn');
+        logDashboardAudit(req, `Odpojený hráč ${member?.displayName || userId}.`, 'warn', userId);
         return res.json({ ok: true });
+    });
+
+    app.get('/api/players/:userId/detail', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        if (!/^\d{15,22}$/.test(userId)) {
+            return res.status(400).json({ error: 'Neplatné ID používateľa.' });
+        }
+
+        const member = await guild.members.fetch(userId).catch(() => null);
+        const user = member?.user || await client.users.fetch(userId).catch(() => null);
+        const users = loadUsers();
+        const data = users[userId] || null;
+
+        if (!member && !user && !data) {
+            return res.status(404).json({ error: 'Hráč sa nenašiel.' });
+        }
+
+        const now = Date.now();
+        const timeoutUntil = member?.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > now
+            ? member.communicationDisabledUntilTimestamp
+            : null;
+        const isLinked = Boolean(data?.steamId);
+        const elo = isLinked && typeof data.elo === 'number' ? data.elo : null;
+        const rankObj = elo !== null ? getRankForElo(elo) : null;
+        const { eloHistory, weeklyDelta, lastDelta } = data
+            ? computeWeeklyEloStats(data)
+            : { eloHistory: [], weeklyDelta: 0, lastDelta: 0 };
+
+        const act = getPlayerActivity(userId);
+        const openTicketsMap = getAllOpenTickets();
+        const openTickets = [];
+        for (const [channelId, t] of Object.entries(openTicketsMap)) {
+            if (!t || t.guildId !== guild.id || t.userId !== userId) continue;
+            const ch = guild.channels.cache.get(channelId);
+            if (!ch) continue;
+            const claimer = t.claimedById ? guild.members.cache.get(t.claimedById) : null;
+            openTickets.push({
+                channelId,
+                number: Number(t.number || 0),
+                channelName: ch.name,
+                subject: t.subject || 'Bez predmetu',
+                claimedByName: claimer?.displayName || (t.claimedById ? `ID ${t.claimedById}` : null),
+                createdAt: t.createdAt || null
+            });
+        }
+
+        const displayName = member?.displayName || user?.globalName || user?.username || `Používateľ ${userId}`;
+        const username = user?.username || 'Neznámy';
+        const matchTokens = [userId, username, user?.tag, displayName]
+            .filter(Boolean)
+            .map(s => String(s).toLowerCase());
+
+        const logItems = getActivityLogs({ limit: 500 })
+            .filter(entry => {
+                if (entry.targetUserId) return entry.targetUserId === userId;
+                const msgLower = String(entry.message || '').toLowerCase();
+                return matchTokens.some(tok => tok.length >= 3 && msgLower.includes(tok));
+            })
+            .map(entry => ({
+                timestamp: entry.timestamp,
+                category: entry.category,
+                level: entry.level,
+                message: entry.message,
+                actor: entry.actor || null
+            }));
+
+        const voiceItems = (act.voiceHistory || []).map(v => {
+            const prefix = v.type === 'join' ? 'Pripojenie do VC ' : (v.type === 'leave' ? 'Odpojenie z VC ' : 'Presun VC ');
+            return {
+                timestamp: v.timestamp,
+                category: 'voice',
+                level: 'info',
+                message: `${prefix}${v.channelName}`,
+                actor: null
+            };
+        });
+
+        const timeline = [...logItems, ...voiceItems]
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+            .slice(0, 60);
+
+        return res.json({
+            player: {
+                userId,
+                displayName,
+                username,
+                inGuild: Boolean(member),
+                avatarUrl: member?.displayAvatarURL({ size: 128 })
+                    || user?.displayAvatarURL?.({ size: 128 })
+                    || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                isTimedOut: Boolean(timeoutUntil),
+                timeoutUntil,
+                isOwner: userId === OWNER_ID || userId === guild.ownerId
+            },
+            account: {
+                createdAt: user?.createdTimestamp || null,
+                joinedAt: member?.joinedTimestamp || null,
+                boostSince: member?.premiumSinceTimestamp || null,
+                nickname: member?.nickname || null,
+                canManageNick: Boolean(member && member.manageable && guild.members.me?.permissions.has(PermissionFlagsBits.ManageNicknames)),
+                canMoveVoice: Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.MoveMembers))
+            },
+            roles: formatMemberRoles(guild, member),
+            voice: formatMemberVoice(member),
+            activity: act,
+            openTickets,
+            cs2: {
+                isLinked,
+                steamId: data?.steamId || null,
+                leetifyUrl: isLinked ? `https://leetify.com/app/profile/${data.steamId}` : null,
+                elo,
+                eloHistory,
+                weeklyDelta,
+                lastDelta,
+                rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080'
+            },
+            warnings: getUserWarnings(userId),
+            timeline
+        });
+    });
+
+    app.post('/api/players/:userId/roles', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const roleId = String(req.body?.roleId || '').trim();
+
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) {
+            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+        }
+
+        const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+        const check = validateAssignableRole(guild, role);
+        if (!check.ok) {
+            return res.status(400).json({ error: check.reason });
+        }
+
+        await member.roles.add(role, `Pridané cez dashboard (${getActorName(req)})`);
+        logDashboardAudit(req, `Pridaná rola ${role.name} pre ${member.displayName}.`, 'info', userId);
+        return res.json({ ok: true });
+    });
+
+    app.delete('/api/players/:userId/roles/:roleId', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const roleId = String(req.params.roleId || '').trim();
+
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) {
+            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+        }
+
+        const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+        const check = validateAssignableRole(guild, role);
+        if (!check.ok) {
+            return res.status(400).json({ error: check.reason });
+        }
+
+        await member.roles.remove(role, `Odobraté cez dashboard (${getActorName(req)})`);
+        logDashboardAudit(req, `Odobratá rola ${role.name} pre ${member.displayName}.`, 'info', userId);
+        return res.json({ ok: true });
+    });
+
+    app.put('/api/players/:userId/nickname', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const rawNick = typeof req.body?.nickname === 'string' ? req.body.nickname.trim().slice(0, 32) : '';
+        const nextNick = rawNick || null;
+
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) {
+            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+        }
+        if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageNicknames) || !member.manageable) {
+            return res.status(400).json({ error: 'Bot nemá oprávnenie meniť prezývku tomuto hráčovi.' });
+        }
+
+        await member.setNickname(nextNick, `Upravené cez dashboard (${getActorName(req)})`);
+        logDashboardAudit(req, nextNick ? `Zmenená prezývka ${member.user.username} na ${nextNick}.` : `Resetovaná prezývka pre ${member.user.username}.`, 'info', userId);
+        return res.json({ ok: true, nickname: nextNick });
+    });
+
+    app.post('/api/players/:userId/voice', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const action = String(req.body?.action || '').trim();
+        const channelId = req.body?.channelId ? String(req.body.channelId).trim() : null;
+
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) {
+            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+        }
+        if (!member.voice?.channelId) {
+            return res.status(400).json({ error: 'Hráč nie je vo voice kanáli.' });
+        }
+        if (!guild.members.me?.permissions.has(PermissionFlagsBits.MoveMembers)) {
+            return res.status(400).json({ error: 'Bot nemá právo Move Members.' });
+        }
+
+        if (action === 'disconnect') {
+            await member.voice.disconnect(`Odpojený cez dashboard (${getActorName(req)})`);
+            logDashboardAudit(req, `Odpojený ${member.displayName} z voice.`, 'warn', userId);
+            return res.json({ ok: true });
+        }
+
+        if (action === 'move') {
+            if (!channelId) {
+                return res.status(400).json({ error: 'Vyber cieľový voice kanál.' });
+            }
+            const targetChannel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+            if (!targetChannel || targetChannel.type !== ChannelType.GuildVoice) {
+                return res.status(400).json({ error: 'Vybraný voice kanál neexistuje.' });
+            }
+            await member.voice.setChannel(targetChannel, `Presunutý cez dashboard (${getActorName(req)})`);
+            logDashboardAudit(req, `Presunutý ${member.displayName} do ${targetChannel.name}.`, 'info', userId);
+            return res.json({ ok: true });
+        }
+
+        return res.status(400).json({ error: 'Neznáma voice akcia.' });
     });
 
     // --- Nastavenia (Všeobecné + CS2 Rank roly) ---
@@ -2168,7 +2410,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: resWarn.error });
         }
 
-        logDashboardAudit(req, `Udelený warn #${resWarn.warning.id} pre ${targetUser?.tag || userId}.`, 'warn');
+        logDashboardAudit(req, `Udelený warn #${resWarn.warning.id} pre ${targetUser?.tag || userId}.`, 'warn', userId);
         return res.json({
             ok: true,
             warning: resWarn.warning,
@@ -2197,7 +2439,7 @@ function startWebServer(client) {
             return res.status(404).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Zmazaný warn #${warningId} pre ${targetMember?.displayName || userId}.`);
+        logDashboardAudit(req, `Zmazaný warn #${warningId} pre ${targetMember?.displayName || userId}.`, 'info', userId);
         return res.json({ ok: true, warnings: getUserWarnings(userId) });
     });
 
@@ -2218,7 +2460,7 @@ function startWebServer(client) {
             return res.status(404).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Vymazané všetky varovania (${result.removedCount}) pre ${targetMember?.displayName || userId}.`);
+        logDashboardAudit(req, `Vymazané všetky varovania (${result.removedCount}) pre ${targetMember?.displayName || userId}.`, 'info', userId);
         return res.json({ ok: true, removedCount: result.removedCount, warnings: [] });
     });
 
@@ -2243,7 +2485,7 @@ function startWebServer(client) {
                 actorMember
             });
             if (!resRm.ok) return res.status(400).json({ error: resRm.error });
-            logDashboardAudit(req, `Zrušený timeout pre ${targetMember.displayName}.`);
+            logDashboardAudit(req, `Zrušený timeout pre ${targetMember.displayName}.`, 'info', userId);
             return res.json({ ok: true });
         }
 
@@ -2260,7 +2502,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Timeout (${result.durationLabel}) pre ${targetMember.displayName}.`, 'warn');
+        logDashboardAudit(req, `Timeout (${result.durationLabel}) pre ${targetMember.displayName}.`, 'warn', userId);
         return res.json({ ok: true, durationLabel: result.durationLabel });
     });
 
@@ -2286,7 +2528,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Kick pre ${targetMember.displayName}.`, 'warn');
+        logDashboardAudit(req, `Kick pre ${targetMember.displayName}.`, 'warn', userId);
         return res.json({ ok: true });
     });
 
@@ -2317,7 +2559,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Ban pre ${result.targetTag}.`, 'warn');
+        logDashboardAudit(req, `Ban pre ${result.targetTag}.`, 'warn', userId);
         return res.json({ ok: true });
     });
 

@@ -2,11 +2,14 @@ const { Events } = require('discord.js');
 const { getTempVoiceSettings, getTempRoom } = require('../storage/settingsStore');
 const { createTempRoom, handleRoomLeave } = require('../services/tempVoice');
 const { logVoiceState } = require('../services/adminLog');
+const { recordVoiceActivity } = require('../services/playerActivity');
 
 module.exports = {
     name: Events.VoiceStateUpdate,
     async execute(oldState, newState) {
         if (oldState.channelId === newState.channelId) return;
+
+        recordVoiceActivity(oldState, newState);
 
         // 0. Admin Log voice aktivity
         await logVoiceState(oldState, newState).catch(err => {

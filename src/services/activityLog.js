@@ -20,7 +20,8 @@ function loadPersistedLogs() {
                 level: typeof item.level === 'string' ? item.level : 'info',
                 category: typeof item.category === 'string' ? item.category : 'system',
                 message: String(item.message).slice(0, 500),
-                actor: item.actor ? String(item.actor).slice(0, 80) : null
+                actor: item.actor ? String(item.actor).slice(0, 80) : null,
+                targetUserId: item.targetUserId ? String(item.targetUserId).trim() : null
             }));
 
         const maxId = valid.reduce((max, item) => (item.id > max ? item.id : max), 0);
@@ -60,7 +61,7 @@ function schedulePersist() {
     }
 }
 
-function addActivityLog({ level = 'info', category = 'system', message = '', actor = null } = {}) {
+function addActivityLog({ level = 'info', category = 'system', message = '', actor = null, targetUserId = null } = {}) {
     if (!message) return null;
 
     const entry = {
@@ -69,7 +70,8 @@ function addActivityLog({ level = 'info', category = 'system', message = '', act
         level,
         category,
         message: String(message).slice(0, 500),
-        actor: actor ? String(actor).slice(0, 80) : null
+        actor: actor ? String(actor).slice(0, 80) : null,
+        targetUserId: targetUserId ? String(targetUserId).trim() : null
     };
 
     logs.unshift(entry);

@@ -19,6 +19,7 @@ const DB_FILE = path.join(__dirname, '..', 'users.json');
 const SETTINGS_FILE = path.join(__dirname, '..', 'settings.json');
 const ACTIVITY_LOG_FILE = path.join(__dirname, '..', 'activity.json');
 const WARNINGS_FILE = path.join(__dirname, '..', 'warnings.json');
+const PLAYER_ACTIVITY_FILE = path.join(__dirname, '..', 'player_activity.json');
 const TEMPVOICE_DB_FILE = path.join(__dirname, '..', 'tempvoice.json');
 const PATCHBOT_DB_FILE = path.join(__dirname, '..', 'patchbot.json');
 const JOINROLES_DB_FILE = path.join(__dirname, '..', 'joinroles.json');
@@ -63,6 +64,7 @@ module.exports = {
     SETTINGS_FILE,
     ACTIVITY_LOG_FILE,
     WARNINGS_FILE,
+    PLAYER_ACTIVITY_FILE,
     TEMPVOICE_DB_FILE,
     PATCHBOT_DB_FILE,
     JOINROLES_DB_FILE,
