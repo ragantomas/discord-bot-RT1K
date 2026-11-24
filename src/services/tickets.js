@@ -8,7 +8,8 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    AttachmentBuilder
+    AttachmentBuilder,
+    MessageFlags
 } = require('discord.js');
 const { OWNER_ID } = require('../config');
 const {
@@ -129,18 +130,24 @@ async function fetchTranscriptLines(channel) {
     const col = await channel.messages.fetch({ limit: 100 }).catch(() => null);
     if (!col) return { lines: ['(Nepodarilo sa načítať správy)'], count: 0 };
 
-    const sorted = [...col.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+    const sorted = [...col.values()]
+        .filter(m => !m.flags?.has(MessageFlags.Loading))
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
     const lines = sorted.map(m => {
         const ts = new Date(m.createdTimestamp).toLocaleString('sk-SK');
         const author = m.author?.tag || 'Neznámy';
         const textParts = [];
-        if (m.content) textParts.push(m.content);
+        const bodyText = (m.cleanContent || m.content || '').trim();
+        if (bodyText) textParts.push(bodyText);
         if (m.embeds?.length) {
             const titles = m.embeds.map(e => e.title || e.description?.slice(0, 60)).filter(Boolean);
             if (titles.length) textParts.push(`[Embed: ${titles.join(' | ')}]`);
         }
         if (m.attachments?.size) {
             textParts.push(`[Prílohy: ${[...m.attachments.values()].map(a => a.url).join(', ')}]`);
+        }
+        if (m.stickers?.size) {
+            textParts.push(`[Nálepky: ${[...m.stickers.values()].map(s => s.name).join(', ')}]`);
         }
         return `[${ts}] ${author}: ${textParts.join(' ') || '(prázdna správa)'}`;
     });
@@ -445,7 +452,7 @@ async function handleTicketInteraction(interaction) {
             return interaction.reply({ content: 'Ticket môže zatvoriť iba jeho autor alebo support tím.', ephemeral: true });
         }
 
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         return closeTicketChannel(interaction.client, interaction.channelId, interaction.user.tag, interaction);
     }
 }
