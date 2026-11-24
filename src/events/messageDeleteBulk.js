@@ -5,7 +5,7 @@ const {
 } = require('../storage/settingsStore');
 
 module.exports = {
-    name: Events.MessageDeleteBulk,
+    name: Events.MessageBulkDelete,
     execute(messages) {
         if (!messages || typeof messages.keys !== 'function') return;
 
