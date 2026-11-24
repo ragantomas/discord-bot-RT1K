@@ -1600,7 +1600,7 @@ function readTempVoiceDraftFromDom() {
         id: card.dataset.setupId || `tv_${idx + 1}`,
         enabled: card.querySelector('.tv-setup-enabled').checked,
         triggerChannelId: card.querySelector('.tv-setup-trigger').value || null,
-        createTriggerChannel: card.querySelector('.tv-setup-create').checked,
+        createTriggerChannel: card.dataset.triggerMode === 'new',
         categoryId: card.querySelector('.tv-setup-category').value || null,
         triggerName: card.querySelector('.tv-setup-trigger-name').value,
         roomNameTemplate: card.querySelector('.tv-setup-template').value,
@@ -1634,8 +1634,10 @@ function buildTempVoiceSetupCardsHtml() {
         return `<div class="p-6 rounded-xl bg-bg-elevated/60 border border-slate-800 text-center text-sm text-slate-400">Žiadna konfigurácia.</div>`;
     }
 
-    return state.tvDraftSetups.map((setup, idx) => `
-        <div class="tv-setup-card p-5 rounded-2xl bg-bg-elevated/70 border border-slate-800 space-y-4" data-setup-id="${escapeHtml(setup.id)}">
+    return state.tvDraftSetups.map((setup, idx) => {
+        const isNewMode = Boolean(setup.createTriggerChannel);
+        return `
+        <div class="tv-setup-card p-5 rounded-2xl bg-bg-elevated/70 border border-slate-800 space-y-4" data-setup-id="${escapeHtml(setup.id)}" data-trigger-mode="${isNewMode ? 'new' : 'existing'}">
             <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
                 <div class="flex items-center gap-3">
                     <span class="w-7 h-7 rounded-lg bg-brand/15 text-brand text-xs font-bold flex items-center justify-center">#${idx + 1}</span>
@@ -1652,41 +1654,41 @@ function buildTempVoiceSetupCardsHtml() {
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Spúšťací kanál</label>
-                    <select class="tv-setup-trigger input-field">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div class="md:col-span-6 space-y-1.5">
+                    <div class="flex items-center justify-between gap-2 min-h-[24px]">
+                        <label class="text-xs font-medium text-slate-400">Spúšťací kanál</label>
+                        <div class="inline-flex items-center rounded-lg bg-bg-base border border-slate-800 p-0.5 text-[11px] font-medium">
+                            <button type="button" data-tv-trigger-mode="existing" class="px-2 py-0.5 rounded-md transition ${!isNewMode ? 'bg-brand text-white' : 'text-slate-400 hover:text-white'}">Existujúci</button>
+                            <button type="button" data-tv-trigger-mode="new" class="px-2 py-0.5 rounded-md transition ${isNewMode ? 'bg-brand text-white' : 'text-slate-400 hover:text-white'}">Nový</button>
+                        </div>
+                    </div>
+                    <select class="tv-setup-trigger input-field ${isNewMode ? 'hidden' : ''}">
                         ${buildVoiceChannelOptions(setup.triggerChannelId)}
                     </select>
-                    <div class="flex items-center justify-between gap-3 pt-1.5">
-                        <span class="text-xs text-slate-300">Vytvoriť nový kanál</span>
-                        ${renderToggleSwitch('', setup.createTriggerChannel, 'tv-setup-create')}
-                    </div>
+                    <input type="text" maxlength="100" ${isNewMode ? 'required' : ''} placeholder="➕ Vytvoriť miestnosť" class="tv-setup-trigger-name input-field ${isNewMode ? '' : 'hidden'}" value="${escapeHtml(setup.triggerName || '➕ Vytvoriť miestnosť')}" />
                 </div>
 
-                <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Kategória</label>
+                <div class="md:col-span-6 space-y-1.5">
+                    <div class="flex items-center min-h-[24px]">
+                        <label class="text-xs font-medium text-slate-400">Kategória</label>
+                    </div>
                     <select class="tv-setup-category input-field">
                         ${buildCategoryOptions(setup.categoryId)}
                     </select>
                 </div>
 
-                <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Názov spúšťacieho kanála</label>
-                    <input type="text" maxlength="100" required class="tv-setup-trigger-name input-field" value="${escapeHtml(setup.triggerName || '➕ Vytvoriť miestnosť')}" />
-                </div>
-
-                <div class="space-y-1.5">
+                <div class="md:col-span-6 space-y-1.5">
                     <label class="text-xs font-medium text-slate-400">Šablóna názvu · <code class="text-slate-300">{user}</code> <code class="text-slate-300">{username}</code></label>
                     <input type="text" maxlength="100" required class="tv-setup-template input-field" value="${escapeHtml(setup.roomNameTemplate || '🎮 {user}')}" />
                 </div>
 
-                <div class="space-y-1.5">
-                    <label class="text-xs font-medium text-slate-400">Limit hráčov · 0 = bez limitu</label>
+                <div class="md:col-span-3 space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Limit hráčov · 0 = ∞</label>
                     <input type="number" min="0" max="99" required class="tv-setup-limit input-field" value="${Number(setup.userLimit ?? 0)}" />
                 </div>
 
-                <div class="space-y-1.5">
+                <div class="md:col-span-3 space-y-1.5">
                     <label class="text-xs font-medium text-slate-400">Bitrate · max ${maxBitrate} kbps</label>
                     <input type="number" min="8" max="384" required class="tv-setup-bitrate input-field" value="${Number(setup.bitrateKbps ?? 64)}" />
                 </div>
@@ -1712,10 +1714,41 @@ function buildTempVoiceSetupCardsHtml() {
                 </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function attachTempVoiceSetupListeners() {
+    document.querySelectorAll('[data-tv-trigger-mode]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const card = btn.closest('.tv-setup-card');
+            const nextMode = btn.dataset.tvTriggerMode === 'new' ? 'new' : 'existing';
+            if (!card || card.dataset.triggerMode === nextMode) return;
+
+            card.dataset.triggerMode = nextMode;
+            const isNew = nextMode === 'new';
+
+            card.querySelectorAll('[data-tv-trigger-mode]').forEach(tabBtn => {
+                const active = tabBtn.dataset.tvTriggerMode === nextMode;
+                tabBtn.className = `px-2 py-0.5 rounded-md transition ${active ? 'bg-brand text-white' : 'text-slate-400 hover:text-white'}`;
+            });
+
+            const selectEl = card.querySelector('.tv-setup-trigger');
+            const nameInput = card.querySelector('.tv-setup-trigger-name');
+            if (selectEl) selectEl.classList.toggle('hidden', isNew);
+            if (nameInput) {
+                nameInput.classList.toggle('hidden', !isNew);
+                nameInput.required = isNew;
+                if (isNew) {
+                    nameInput.focus();
+                    nameInput.select();
+                }
+            }
+
+            setDirty(true, 'tv-settings-form');
+        });
+    });
+
     document.querySelectorAll('.tv-setup-lock-on-disable').forEach(toggle => {
         toggle.addEventListener('change', () => {
             const card = toggle.closest('.tv-setup-card');

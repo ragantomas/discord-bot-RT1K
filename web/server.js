@@ -930,14 +930,16 @@ function startWebServer(client) {
             const setupEnabled = Boolean(raw.enabled);
             const createTriggerChannel = Boolean(raw.createTriggerChannel);
 
-            const triggerName = String(raw.triggerName ?? def.triggerName).trim();
+            let triggerName = String(raw.triggerName ?? def.triggerName).trim();
             const roomNameTemplate = String(raw.roomNameTemplate ?? def.roomNameTemplate).trim();
             const bitrateKbps = Number(raw.bitrateKbps ?? def.bitrateKbps);
             const userLimit = Number(raw.userLimit ?? def.userLimit);
             const categoryId = raw.categoryId ? String(raw.categoryId).trim() : null;
-            let triggerChannelId = raw.triggerChannelId ? String(raw.triggerChannelId).trim() : null;
+            let triggerChannelId = createTriggerChannel
+                ? null
+                : (raw.triggerChannelId ? String(raw.triggerChannelId).trim() : null);
 
-            if (!triggerName || triggerName.length > 100) {
+            if (createTriggerChannel && (!triggerName || triggerName.length > 100)) {
                 return res.status(400).json({ error: `TempVoice #${i + 1}: Názov spúšťacieho kanála musí mať 1 až 100 znakov.` });
             }
             if (!roomNameTemplate || roomNameTemplate.length > 100) {
@@ -969,20 +971,26 @@ function startWebServer(client) {
                     console.error('Chyba pri vytváraní TempVoice trigger kanála:', err);
                     return res.status(400).json({ error: `TempVoice #${i + 1}: Nepodarilo sa vytvoriť spúšťací VC (skontroluj právo Manage Channels).` });
                 }
-            } else if (moduleEnabled && setupEnabled) {
-                if (!triggerChannelId) {
-                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vyber spúšťací hlasový kanál alebo zaškrtni vytvorenie nového.` });
+            } else {
+                const triggerChannel = triggerChannelId
+                    ? (guild.channels.cache.get(triggerChannelId) || await guild.channels.fetch(triggerChannelId).catch(() => null))
+                    : null;
+
+                if (moduleEnabled && setupEnabled) {
+                    if (!triggerChannelId) {
+                        return res.status(400).json({ error: `TempVoice #${i + 1}: Vyber spúšťací kanál alebo prepni na vytvorenie nového.` });
+                    }
+                    if (!triggerChannel || triggerChannel.type !== ChannelType.GuildVoice) {
+                        return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraný spúšťací hlasový kanál neexistuje.` });
+                    }
                 }
-                const triggerChannel = guild.channels.cache.get(triggerChannelId)
-                    || await guild.channels.fetch(triggerChannelId).catch(() => null);
-                if (!triggerChannel || triggerChannel.type !== ChannelType.GuildVoice) {
-                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraný spúšťací hlasový kanál neexistuje.` });
-                }
-                if (triggerChannel.name !== triggerName) {
-                    await triggerChannel.setName(triggerName).catch(() => null);
-                }
-                if ((triggerChannel.parentId || null) !== categoryId) {
-                    await triggerChannel.setParent(categoryId, { lockPermissions: false }).catch(() => null);
+
+                if (triggerChannel && triggerChannel.type === ChannelType.GuildVoice) {
+                    triggerName = triggerChannel.name.slice(0, 100);
+                } else if (!triggerName) {
+                    triggerName = def.triggerName;
+                } else {
+                    triggerName = triggerName.slice(0, 100);
                 }
             }
 
