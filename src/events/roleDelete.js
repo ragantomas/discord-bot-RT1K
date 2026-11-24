@@ -14,13 +14,15 @@ module.exports = {
             setup => (setup.lockRoleIds || []).includes(role.id)
                 || Boolean(setup.lockedRolePrevConnect && Object.prototype.hasOwnProperty.call(setup.lockedRolePrevConnect, role.id))
         );
+        const hasTicketSupportRole = (current.tickets?.supportRoleIds || []).includes(role.id);
 
         const needsUpdate =
             hasDashboardRole ||
             current.patchBot?.roleId === role.id ||
             hasMemberRole ||
             hasBotRole ||
-            hasTempVoiceLockRole;
+            hasTempVoiceLockRole ||
+            hasTicketSupportRole;
 
         if (!needsUpdate) return;
 
@@ -51,6 +53,10 @@ module.exports = {
                     }
                 }
                 console.warn(`Rola pre zamknutie TempVoice (${role.id}) bola zmazaná.`);
+            }
+            if (hasTicketSupportRole && settings.tickets) {
+                settings.tickets.supportRoleIds = (settings.tickets.supportRoleIds || []).filter(id => id !== role.id);
+                console.warn(`Support rola pre tickety (${role.id}) bola zmazaná.`);
             }
         });
     }

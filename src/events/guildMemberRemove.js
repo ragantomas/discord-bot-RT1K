@@ -2,6 +2,7 @@ const { Events } = require('discord.js');
 const { loadUsers, saveUsers } = require('../storage/usersStore');
 const { updateBotStatus } = require('../services/botStatus');
 const { logMemberLeave } = require('../services/adminLog');
+const { handleMemberGoodbye } = require('../services/welcome');
 
 module.exports = {
     name: Events.GuildMemberRemove,
@@ -12,6 +13,12 @@ module.exports = {
             saveUsers(users);
             updateBotStatus(member.client);
             console.log(`Hráč ${member.user.tag} odišiel zo servera a bol odstránený z users.json.`);
+        }
+
+        try {
+            await handleMemberGoodbye(member);
+        } catch (err) {
+            console.error('Chyba pri rozlúčkovej správe:', err);
         }
 
         try {

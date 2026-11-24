@@ -1,6 +1,6 @@
 const { INTERVALS } = require('../config');
 const { fetchLeetifyProfile } = require('./leetify');
-const { loadUsers, saveUsers } = require('../storage/usersStore');
+const { loadUsers, saveUsers, appendEloHistory } = require('../storage/usersStore');
 const { getRankSettings } = require('../storage/settingsStore');
 const { notifyRankChange } = require('./rankFeed');
 const { addActivityLog } = require('./activityLog');
@@ -56,6 +56,7 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
         // Uloží aktuálne Elo pre /leaderboard a dashboard
         if (users && users[member.id]) {
             users[member.id].elo = finalElo;
+            appendEloHistory(users[member.id], finalElo);
             saveUsers(users);
         }
 

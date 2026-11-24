@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { loadUsers, saveUsers } = require('../../storage/usersStore');
+const { loadUsers, saveUsers, appendEloHistory } = require('../../storage/usersStore');
 const { fetchLeetifyProfile } = require('../../services/leetify');
 const { getRankForElo } = require('../../services/ranks');
 
@@ -36,8 +36,9 @@ module.exports = {
         const rankObj = getRankForElo(premierElo);
         const embedColor = rankObj ? rankObj.color : 0x808080;
 
-        // Aktualizuje cached Elo pre leaderboard
+        // Aktualizuje cached Elo pre leaderboard a históriu
         users[targetUser.id].elo = typeof premierElo === 'number' && premierElo >= 1000 ? premierElo : null;
+        appendEloHistory(users[targetUser.id], users[targetUser.id].elo);
         saveUsers(users);
 
         const leetifyRating = typeof data?.ranks?.leetify === 'number'

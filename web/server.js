@@ -5,7 +5,7 @@ const cookieParser = require('cookie-parser');
 const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 const { OWNER_ID, DB_FILE, SETTINGS_FILE } = require('../src/config');
-const { loadUsers, saveUsers, usersFileExists } = require('../src/storage/usersStore');
+const { loadUsers, saveUsers, usersFileExists, normalizeEloHistory } = require('../src/storage/usersStore');
 const {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -32,7 +32,13 @@ const {
     getAnnouncementsHistory,
     addAnnouncementHistory,
     removeAnnouncementHistory,
-    setAnnouncementsHistory
+    setAnnouncementsHistory,
+    getWelcomeSettings,
+    updateWelcomeSettings,
+    getTicketsSettings,
+    updateTicketsSettings,
+    getAllOpenTickets,
+    deleteOpenTicket
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank, updateAllMemberRanks } = require('../src/services/ranks');
@@ -52,6 +58,8 @@ const { parseIntervalSeconds, updateGuildStatusMessage } = require('../src/servi
 const { addActivityLog, getActivityLogs, clearActivityLogs } = require('../src/services/activityLog');
 const { sendTestRankFeedMessage } = require('../src/services/rankFeed');
 const { sendTestAdminLogMessage } = require('../src/services/adminLog');
+const { sendTestWelcome } = require('../src/services/welcome');
+const { sendOrUpdateTicketPanel, closeTicketChannel } = require('../src/services/tickets');
 
 const SESSION_COOKIE = 'rt1k_session';
 const OAUTH_STATE_COOKIE = 'rt1k_oauth_state';
@@ -149,10 +157,35 @@ function buildOverviewPayload(client, guild) {
         ((settings.joinRoles.memberRoleIds || []).length > 0 || (settings.joinRoles.botRoleIds || []).length > 0)
     );
 
-    const topElo = Object.values(users).reduce(
-        (max, u) => (typeof u?.elo === 'number' && u.elo > max ? u.elo : max),
-        0
+    const wlActive = Boolean(
+        settings.welcome?.enabled && (
+            (settings.welcome?.channelEnabled && settings.welcome?.channelId) ||
+            settings.welcome?.dmEnabled ||
+            (settings.welcome?.goodbyeEnabled && settings.welcome?.goodbyeChannelId)
+        )
     );
+
+    const openTicketsCount = Object.values(settings.tickets?.openTickets || {})
+        .filter(t => t && t.guildId === guild.id && guild.channels.cache.has(t.channelId))
+        .length;
+
+    let topElo = 0;
+    let topClimber = null;
+    for (const [userId, u] of Object.entries(users)) {
+        if (typeof u?.elo === 'number' && u.elo > topElo) {
+            topElo = u.elo;
+        }
+        const stats = computeWeeklyEloStats(u);
+        if (stats.weeklyDelta > 0 && (!topClimber || stats.weeklyDelta > topClimber.delta)) {
+            const member = guild.members.cache.get(userId);
+            topClimber = {
+                userId,
+                displayName: member?.displayName || `Používateľ ${userId}`,
+                delta: stats.weeklyDelta,
+                elo: typeof u?.elo === 'number' ? u.elo : null
+            };
+        }
+    }
 
     return {
         bot: {
@@ -171,7 +204,9 @@ function buildOverviewPayload(client, guild) {
         stats: {
             linkedPlayersCount: Object.keys(users).length,
             activeTempRoomsCount,
-            topElo
+            openTicketsCount,
+            topElo,
+            topClimber
         },
         modules: {
             tempVoiceEnabled: tvActive,
@@ -179,10 +214,27 @@ function buildOverviewPayload(client, guild) {
             joinRolesEnabled: jrActive,
             csStatusEnabled: Boolean(settings.csStatus.enabled && settings.csStatus.channelId),
             rankFeedEnabled: Boolean(settings.rankFeed?.enabled && settings.rankFeed?.channelId),
-            adminLogEnabled: Boolean(settings.adminLog?.enabled && settings.adminLog?.channelId)
+            adminLogEnabled: Boolean(settings.adminLog?.enabled && settings.adminLog?.channelId),
+            welcomeEnabled: wlActive,
+            ticketsEnabled: Boolean(settings.tickets?.enabled)
         },
         viewAuditLogGranted: Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.ViewAuditLog)),
         steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim())
+    };
+}
+
+function computeWeeklyEloStats(data) {
+    const eloHistory = normalizeEloHistory(data?.eloHistory);
+    if (eloHistory.length < 2) {
+        return { eloHistory, weeklyDelta: 0, lastDelta: 0 };
+    }
+    const latest = eloHistory[eloHistory.length - 1];
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const baseline = [...eloHistory].reverse().find(pt => pt.timestamp <= cutoff) || eloHistory[0];
+    return {
+        eloHistory,
+        weeklyDelta: latest.elo - baseline.elo,
+        lastDelta: latest.elo - eloHistory[eloHistory.length - 2].elo
     };
 }
 
@@ -193,11 +245,15 @@ function buildPlayersPayload(guild) {
             const member = guild.members.cache.get(userId);
             const elo = typeof data.elo === 'number' ? data.elo : null;
             const rankObj = elo !== null ? getRankForElo(elo) : null;
+            const { eloHistory, weeklyDelta, lastDelta } = computeWeeklyEloStats(data);
 
             return {
                 userId,
                 steamId: data.steamId,
                 elo,
+                eloHistory,
+                weeklyDelta,
+                lastDelta,
                 rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080',
                 displayName: member?.displayName || `Používateľ ${userId}`,
                 username: member?.user?.username || 'Neznámy na serveri',
@@ -208,6 +264,35 @@ function buildPlayersPayload(guild) {
             };
         })
         .sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1));
+}
+
+function buildOpenTicketsPayload(guild) {
+    const openMap = getAllOpenTickets();
+    const list = [];
+
+    for (const [channelId, ticket] of Object.entries(openMap)) {
+        if (!ticket || ticket.guildId !== guild.id) continue;
+        const channel = guild.channels.cache.get(channelId);
+        if (!channel) continue;
+
+        const creator = guild.members.cache.get(ticket.userId);
+        const claimer = ticket.claimedById ? guild.members.cache.get(ticket.claimedById) : null;
+
+        list.push({
+            channelId,
+            number: Number(ticket.number || 0),
+            channelName: channel.name,
+            userId: ticket.userId,
+            userName: creator?.displayName || `ID ${ticket.userId}`,
+            userAvatar: creator?.displayAvatarURL({ size: 64 }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
+            subject: ticket.subject || 'Bez predmetu',
+            claimedById: ticket.claimedById || null,
+            claimedByName: claimer?.displayName || (ticket.claimedById ? `ID ${ticket.claimedById}` : null),
+            createdAt: ticket.createdAt || Date.now()
+        });
+    }
+
+    return list.sort((a, b) => b.number - a.number);
 }
 
 function buildTempRoomsPayload(guild) {
@@ -546,9 +631,11 @@ function startWebServer(client) {
         } else if (section === 'tempvoice') {
             payload.rooms = buildTempRoomsPayload(guild);
         } else if (section === 'logs') {
-            payload.logs = getActivityLogs({ limit: 150 });
+            payload.logs = getActivityLogs({ limit: 500 });
         } else if (section === 'announcements') {
             payload.announcementsHistory = getAnnouncementsHistory();
+        } else if (section === 'tickets') {
+            payload.openTickets = buildOpenTicketsPayload(guild);
         }
 
         return res.json(payload);
@@ -1307,11 +1394,12 @@ function startWebServer(client) {
             for (const [uid, val] of Object.entries(rawMap)) {
                 if (!/^\d{15,22}$/.test(uid)) continue;
                 if (typeof val === 'string' && /^\d{17}$/.test(val)) {
-                    clean[uid] = { steamId: val, elo: null };
+                    clean[uid] = { steamId: val, elo: null, eloHistory: [] };
                 } else if (val && typeof val === 'object' && /^\d{17}$/.test(String(val.steamId || ''))) {
                     clean[uid] = {
                         steamId: String(val.steamId),
-                        elo: typeof val.elo === 'number' ? val.elo : null
+                        elo: typeof val.elo === 'number' ? val.elo : null,
+                        eloHistory: normalizeEloHistory(val.eloHistory)
                     };
                 }
             }
@@ -1325,7 +1413,8 @@ function startWebServer(client) {
             restored.push('users', 'settings');
         } else if (
             payload.tempVoice || payload.patchBot || payload.joinRoles ||
-            payload.csStatus || payload.rankRoles || payload.adminLog || payload.rankFeed
+            payload.csStatus || payload.rankRoles || payload.adminLog ||
+            payload.rankFeed || payload.welcome || payload.tickets
         ) {
             // 2. Samostatný settings.json
             saveSettings(payload);
@@ -1626,10 +1715,197 @@ function startWebServer(client) {
         return res.json({ ok: true, entry, history });
     });
 
+    // --- Uvítacie správy (Welcome / Goodbye) ---
+    app.put('/api/settings/welcome', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const body = req.body || {};
+
+        const enabled = Boolean(body.enabled);
+        const channelEnabled = Boolean(body.channelEnabled);
+        const channelId = body.channelId ? String(body.channelId).trim() : null;
+        const dmEnabled = Boolean(body.dmEnabled);
+        const goodbyeEnabled = Boolean(body.goodbyeEnabled);
+        const goodbyeChannelId = body.goodbyeChannelId ? String(body.goodbyeChannelId).trim() : null;
+        const ignoreBots = body.ignoreBots !== false;
+
+        async function validateTextChan(cid, label) {
+            const ch = guild.channels.cache.get(cid) || await guild.channels.fetch(cid).catch(() => null);
+            if (!ch || (ch.type !== ChannelType.GuildText && ch.type !== ChannelType.GuildAnnouncement)) {
+                return `Vybraný kanál pre ${label} neexistuje alebo nie je textový.`;
+            }
+            if (!hasChannelPermissions(guild, ch, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+                return `Bot nemá v kanáli #${ch.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`;
+            }
+            return null;
+        }
+
+        if (channelId) {
+            const errMsg = await validateTextChan(channelId, 'uvítanie do roomky');
+            if (errMsg) return res.status(400).json({ error: errMsg });
+        } else if (enabled && channelEnabled) {
+            return res.status(400).json({ error: 'Pre zapnutie uvítania do roomky vyber cieľový kanál.' });
+        }
+
+        if (goodbyeChannelId) {
+            const errMsg = await validateTextChan(goodbyeChannelId, 'rozlúčkovú správu');
+            if (errMsg) return res.status(400).json({ error: errMsg });
+        } else if (enabled && goodbyeEnabled) {
+            return res.status(400).json({ error: 'Pre zapnutie rozlúčkovej správy vyber cieľový kanál.' });
+        }
+
+        const current = getWelcomeSettings();
+        const normColor = (val, fallback) => (
+            typeof val === 'string' && /^#[0-9a-fA-F]{6}$/.test(val.trim()) ? val.trim() : fallback
+        );
+
+        const saved = updateWelcomeSettings({
+            enabled,
+            channelEnabled,
+            channelId,
+            channelTitle: typeof body.channelTitle === 'string' ? body.channelTitle.slice(0, 256) : current.channelTitle,
+            channelDescription: typeof body.channelDescription === 'string' ? body.channelDescription.slice(0, 4000) : current.channelDescription,
+            channelColor: normColor(body.channelColor, current.channelColor),
+            channelShowAvatar: typeof body.channelShowAvatar === 'boolean' ? body.channelShowAvatar : current.channelShowAvatar,
+            dmEnabled,
+            dmTitle: typeof body.dmTitle === 'string' ? body.dmTitle.slice(0, 256) : current.dmTitle,
+            dmDescription: typeof body.dmDescription === 'string' ? body.dmDescription.slice(0, 4000) : current.dmDescription,
+            dmColor: normColor(body.dmColor, current.dmColor),
+            goodbyeEnabled,
+            goodbyeChannelId,
+            goodbyeTitle: typeof body.goodbyeTitle === 'string' ? body.goodbyeTitle.slice(0, 256) : current.goodbyeTitle,
+            goodbyeDescription: typeof body.goodbyeDescription === 'string' ? body.goodbyeDescription.slice(0, 4000) : current.goodbyeDescription,
+            goodbyeColor: normColor(body.goodbyeColor, current.goodbyeColor),
+            ignoreBots
+        });
+
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: `Uvítacie správy ${enabled ? 'zapnuté' : 'vypnuté'}.`,
+            actor: getActorName(req)
+        });
+
+        return res.json({ ok: true, welcome: saved });
+    });
+
+    app.post('/api/welcome/test', async (req, res) => {
+        const { guild, member } = req.dashboardAuth;
+        const target = String(req.body?.target || 'channel');
+        const result = await sendTestWelcome(guild, member, target);
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+        return res.json({ ok: true });
+    });
+
+    // --- Ticket systém ---
+    app.put('/api/settings/tickets', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const body = req.body || {};
+
+        const enabled = Boolean(body.enabled);
+        const categoryId = body.categoryId ? String(body.categoryId).trim() : null;
+        const logChannelId = body.logChannelId ? String(body.logChannelId).trim() : null;
+        const panelChannelId = body.panelChannelId ? String(body.panelChannelId).trim() : null;
+        const supportRoleIds = uniqueStringIds(body.supportRoleIds);
+
+        if (categoryId) {
+            const cat = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
+            if (!cat || cat.type !== ChannelType.GuildCategory) {
+                return res.status(400).json({ error: 'Vybraná kategória pre tickety neexistuje.' });
+            }
+        }
+
+        for (const [cid, label] of [[logChannelId, 'log/transcript'], [panelChannelId, 'Ticket panel']]) {
+            if (!cid) continue;
+            const ch = guild.channels.cache.get(cid) || await guild.channels.fetch(cid).catch(() => null);
+            if (!ch || !ch.isTextBased()) {
+                return res.status(400).json({ error: `Vybraný kanál pre ${label} neexistuje alebo nie je textový.` });
+            }
+            if (!hasChannelPermissions(guild, ch, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+                return res.status(400).json({ error: `Bot nemá v kanáli #${ch.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.` });
+            }
+        }
+
+        for (const roleId of supportRoleIds) {
+            if (roleId === guild.id) {
+                return res.status(400).json({ error: 'Ako Support rolu pre tickety nie je možné nastaviť `@everyone`.' });
+            }
+            const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+            if (!role) {
+                return res.status(400).json({ error: 'Jedna z vybraných Support rolí neexistuje.' });
+            }
+        }
+
+        const current = getTicketsSettings();
+        const panelChannelChanged = current.panelChannelId !== panelChannelId;
+        const normColor = (val, fallback) => (
+            typeof val === 'string' && /^#[0-9a-fA-F]{6}$/.test(val.trim()) ? val.trim() : fallback
+        );
+
+        const saved = updateTicketsSettings({
+            enabled,
+            categoryId,
+            logChannelId,
+            supportRoleIds,
+            panelChannelId,
+            panelMessageId: panelChannelChanged ? null : current.panelMessageId,
+            panelTitle: typeof body.panelTitle === 'string' && body.panelTitle.trim()
+                ? body.panelTitle.trim().slice(0, 256)
+                : current.panelTitle,
+            panelDescription: typeof body.panelDescription === 'string' && body.panelDescription.trim()
+                ? body.panelDescription.trim().slice(0, 4000)
+                : current.panelDescription,
+            panelColor: normColor(body.panelColor, current.panelColor),
+            panelButtonLabel: typeof body.panelButtonLabel === 'string' && body.panelButtonLabel.trim()
+                ? body.panelButtonLabel.trim().slice(0, 80)
+                : current.panelButtonLabel
+        });
+
+        addActivityLog({
+            level: 'info',
+            category: 'dashboard',
+            message: `Ticket systém ${enabled ? 'zapnutý' : 'vypnutý'}.`,
+            actor: getActorName(req)
+        });
+
+        return res.json({ ok: true, tickets: saved });
+    });
+
+    app.post('/api/tickets/panel', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const result = await sendOrUpdateTicketPanel(guild);
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+        return res.json({ ok: true, messageId: result.messageId, tickets: getTicketsSettings() });
+    });
+
+    app.get('/api/tickets/open', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const openMap = getAllOpenTickets();
+        for (const channelId of Object.keys(openMap)) {
+            const ch = guild.channels.cache.get(channelId)
+                || await guild.channels.fetch(channelId).catch(() => null);
+            if (!ch) {
+                deleteOpenTicket(channelId);
+            }
+        }
+        return res.json({ openTickets: buildOpenTicketsPayload(guild) });
+    });
+
+    app.delete('/api/tickets/:channelId', async (req, res) => {
+        const result = await closeTicketChannel(client, req.params.channelId, getActorName(req));
+        if (!result.ok) {
+            return res.status(404).json({ error: 'Tento ticket už neexistuje alebo bol zatvorený.' });
+        }
+        return res.json({ ok: true });
+    });
+
     // --- Activity Log v dashboarde ---
     app.get('/api/logs', (req, res) => {
         const category = String(req.query.category || 'all');
-        const limit = Number(req.query.limit || 150);
+        const limit = Number(req.query.limit || 500);
         return res.json({ logs: getActivityLogs({ category, limit }) });
     });
 
@@ -1641,7 +1917,7 @@ function startWebServer(client) {
             message: 'Activity Log bol vyčistený.',
             actor: getActorName(req)
         });
-        return res.json({ ok: true, logs: getActivityLogs({ limit: 150 }) });
+        return res.json({ ok: true, logs: getActivityLogs({ limit: 500 }) });
     });
 
     // SPA fallback (mimo /api a /auth)

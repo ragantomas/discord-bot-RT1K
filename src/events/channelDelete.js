@@ -3,7 +3,9 @@ const {
     loadSettings,
     updateSettings,
     getTempRoom,
-    deleteTempRoom
+    deleteTempRoom,
+    getOpenTicket,
+    deleteOpenTicket
 } = require('../storage/settingsStore');
 
 module.exports = {
@@ -11,6 +13,9 @@ module.exports = {
     execute(channel) {
         if (getTempRoom(channel.id)) {
             deleteTempRoom(channel.id);
+        }
+        if (getOpenTicket(channel.id)) {
+            deleteOpenTicket(channel.id);
         }
 
         if (!channel.guildId) return;
@@ -29,7 +34,12 @@ module.exports = {
             annMatches ||
             current.csStatus?.channelId === channel.id ||
             current.rankFeed?.channelId === channel.id ||
-            current.adminLog?.channelId === channel.id;
+            current.adminLog?.channelId === channel.id ||
+            current.welcome?.channelId === channel.id ||
+            current.welcome?.goodbyeChannelId === channel.id ||
+            current.tickets?.categoryId === channel.id ||
+            current.tickets?.logChannelId === channel.id ||
+            current.tickets?.panelChannelId === channel.id;
 
         if (!needsUpdate) return;
 
@@ -78,6 +88,34 @@ module.exports = {
                 settings.adminLog.channelId = null;
                 settings.adminLog.enabled = false;
                 console.warn('Kanál pre Admin Log bol zmazaný.');
+            }
+
+            if (settings.welcome?.channelId === channel.id) {
+                settings.welcome.channelId = null;
+                settings.welcome.channelEnabled = false;
+                console.warn('Kanál pre uvítacie správy bol zmazaný.');
+            }
+
+            if (settings.welcome?.goodbyeChannelId === channel.id) {
+                settings.welcome.goodbyeChannelId = null;
+                settings.welcome.goodbyeEnabled = false;
+                console.warn('Kanál pre rozlúčkové správy bol zmazaný.');
+            }
+
+            if (settings.tickets?.categoryId === channel.id) {
+                settings.tickets.categoryId = null;
+                console.warn('Kategória pre tickety bola zmazaná.');
+            }
+
+            if (settings.tickets?.logChannelId === channel.id) {
+                settings.tickets.logChannelId = null;
+                console.warn('Kanál pre transcript logy ticketov bol zmazaný.');
+            }
+
+            if (settings.tickets?.panelChannelId === channel.id) {
+                settings.tickets.panelChannelId = null;
+                settings.tickets.panelMessageId = null;
+                console.warn('Kanál pre Ticket panel bol zmazaný.');
             }
 
             if (Array.isArray(settings.announcementsHistory) && settings.announcementsHistory.some(item => item.channelId === channel.id)) {

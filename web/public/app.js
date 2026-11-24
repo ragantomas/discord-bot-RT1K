@@ -13,6 +13,8 @@ const state = {
     jrDraftMemberRoleIds: [],
     jrDraftBotRoleIds: [],
     dashboardDraftRoleIds: [],
+    ticketDraftSupportRoleIds: [],
+    openTickets: [],
     logs: [],
     logCategory: 'all',
     logSearch: '',
@@ -33,6 +35,8 @@ const SECTION_TITLES = {
     csstatus: 'CS2 / Steam Status',
     rankfeed: 'Rank-Up / Derank',
     adminlog: 'Admin Log',
+    welcome: 'Uvítacie správy',
+    tickets: 'Ticket systém',
     settings: 'Nastavenia'
 };
 
@@ -59,6 +63,7 @@ let isLivePolling = false;
 let lastPlayersHtml = '';
 let lastRoomsHtml = '';
 let lastLogsHtml = '';
+let lastTicketsHtml = '';
 
 function escapeHtml(value) {
     return String(value ?? '')
@@ -138,6 +143,7 @@ function syncDraftsFromSettings() {
     state.jrDraftMemberRoleIds = [...(s.joinRoles?.memberRoleIds || [])];
     state.jrDraftBotRoleIds = [...(s.joinRoles?.botRoleIds || [])];
     state.dashboardDraftRoleIds = [...(s.dashboardRoleIds || [])];
+    state.ticketDraftSupportRoleIds = [...(s.tickets?.supportRoleIds || [])];
 }
 
 function showToast(message, type = 'success') {
@@ -381,7 +387,9 @@ function renderOverview() {
         { key: 'joinroles', label: 'Join Roles', enabled: ov.modules.joinRolesEnabled, icon: 'user-plus' },
         { key: 'csstatus', label: 'CS2 / Steam Status', enabled: ov.modules.csStatusEnabled, icon: 'activity' },
         { key: 'rankfeed', label: 'Rank-Up / Derank', enabled: ov.modules.rankFeedEnabled, icon: 'trending-up' },
-        { key: 'adminlog', label: 'Admin Log', enabled: ov.modules.adminLogEnabled, icon: 'shield-check' }
+        { key: 'adminlog', label: 'Admin Log', enabled: ov.modules.adminLogEnabled, icon: 'shield-check' },
+        { key: 'welcome', label: 'Uvítacie správy', enabled: ov.modules.welcomeEnabled, icon: 'hand' },
+        { key: 'tickets', label: 'Ticket systém', enabled: ov.modules.ticketsEnabled, icon: 'ticket' }
     ];
 
     container.innerHTML = `
@@ -425,57 +433,23 @@ function renderOverview() {
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="card p-6">
-                <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <i data-lucide="zap" class="w-4 h-4 text-brand-gold"></i>
-                    <span>Rýchle akcie, Záloha & Obnova</span>
-                </h3>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button id="ov-update-all" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-medium transition">
-                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                        <span>Aktualizovať všetky ranky</span>
+        <div class="card p-6">
+            <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4 text-brand"></i>
+                <span>Stav modulov</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${moduleRows.map(m => `
+                    <button type="button" data-jump="${m.key}" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-800 transition text-left">
+                        <span class="flex items-center gap-2.5 text-sm font-medium text-slate-200">
+                            <i data-lucide="${m.icon}" class="w-4 h-4 text-slate-400"></i>
+                            ${escapeHtml(m.label)}
+                        </span>
+                        <span data-module-badge="${m.key}" class="text-xs font-semibold px-2.5 py-1 rounded-full ${m.enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}">
+                            ${m.enabled ? 'Aktívny' : 'Vypnutý'}
+                        </span>
                     </button>
-                    <a href="/api/backup/download/all" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-200 text-sm font-medium transition">
-                        <i data-lucide="archive" class="w-4 h-4"></i>
-                        <span>Stiahnuť kompletnú zálohu</span>
-                    </a>
-                    <a href="/api/backup/download/users" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-200 text-sm font-medium transition">
-                        <i data-lucide="download" class="w-4 h-4"></i>
-                        <span>Stiahnuť users.json</span>
-                    </a>
-                    <a href="/api/backup/download/settings" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-200 text-sm font-medium transition">
-                        <i data-lucide="download" class="w-4 h-4"></i>
-                        <span>Stiahnuť settings.json</span>
-                    </a>
-                    <div class="sm:col-span-2 pt-1">
-                        <input id="ov-restore-file" type="file" accept=".json,application/json" class="hidden" />
-                        <button id="ov-restore-btn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-slate-700 hover:border-amber-400/70 bg-bg-elevated/60 hover:bg-amber-500/10 text-slate-200 text-sm font-medium transition">
-                            <i data-lucide="upload" class="w-4 h-4 text-amber-400"></i>
-                            <span>Obnoviť databázu zo zálohy (.json)</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card p-6">
-                <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-4 h-4 text-brand"></i>
-                    <span>Stav modulov</span>
-                </h3>
-                <div class="space-y-2.5">
-                    ${moduleRows.map(m => `
-                        <button type="button" data-jump="${m.key}" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-800 transition text-left">
-                            <span class="flex items-center gap-2.5 text-sm font-medium text-slate-200">
-                                <i data-lucide="${m.icon}" class="w-4 h-4 text-slate-400"></i>
-                                ${escapeHtml(m.label)}
-                            </span>
-                            <span data-module-badge="${m.key}" class="text-xs font-semibold px-2.5 py-1 rounded-full ${m.enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}">
-                                ${m.enabled ? 'Aktívny' : 'Vypnutý'}
-                            </span>
-                        </button>
-                    `).join('')}
-                </div>
+                `).join('')}
             </div>
         </div>
     `;
@@ -484,62 +458,201 @@ function renderOverview() {
         btn.addEventListener('click', () => switchSection(btn.dataset.jump));
     });
 
-    document.getElementById('ov-update-all').addEventListener('click', async e => {
-        const btn = e.currentTarget;
-        await setButtonLoading(btn, true, 'Aktualizujem...');
-        try {
-            const res = await apiFetch('/api/players/update-all', { method: 'POST' });
-            showToast(`Aktualizácia dokončená: ${res.updated}/${res.total} hráčov obnovených.`);
-            await refreshOverviewAndPlayers();
-        } catch (err) {
-            showToast(err.message, 'error');
-        } finally {
-            await setButtonLoading(btn, false);
-        }
-    });
-
-    const restoreInput = document.getElementById('ov-restore-file');
-    const restoreBtn = document.getElementById('ov-restore-btn');
-    restoreBtn.addEventListener('click', () => restoreInput.click());
-
-    restoreInput.addEventListener('change', async () => {
-        const file = restoreInput.files?.[0];
-        restoreInput.value = '';
-        if (!file) return;
-
-        let parsed;
-        try {
-            parsed = JSON.parse(await file.text());
-        } catch {
-            showToast('Vybraný súbor nie je platný JSON.', 'error');
-            return;
-        }
-
-        const ok = await confirmAction({
-            title: 'Obnoviť dáta zo zálohy?',
-            message: `Súbor „${file.name}“ prepíše zodpovedajúce dáta bota (users.json / settings.json).`,
-            confirmLabel: 'Obnoviť zálohu',
-            danger: true
-        });
-        if (!ok) return;
-
-        await setButtonLoading(restoreBtn, true, 'Obnovujem...');
-        try {
-            const res = await apiFetch('/api/backup/restore', {
-                method: 'POST',
-                body: JSON.stringify({ data: parsed })
-            });
-            await reloadAllDashboardData();
-            renderOverview();
-            showToast(`Záloha bola úspešne obnovená (${res.restored.join(' + ')}).`);
-        } catch (err) {
-            showToast(err.message, 'error');
-        } finally {
-            await setButtonLoading(restoreBtn, false);
-        }
-    });
-
     refreshIcons();
+}
+
+function openBackupModal() {
+    const modal = document.getElementById('backup-modal');
+    const closeBtn = document.getElementById('backup-modal-close');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    refreshIcons();
+
+    function close() {
+        modal.classList.add('hidden');
+        closeBtn?.removeEventListener('click', close);
+        modal.removeEventListener('click', onBackdrop);
+        modal.querySelectorAll('[data-backup-option]').forEach(link => {
+            link.removeEventListener('click', onOptionClick);
+        });
+    }
+    function onBackdrop(e) {
+        if (e.target === modal) close();
+    }
+    function onOptionClick() {
+        setTimeout(close, 120);
+    }
+
+    closeBtn?.addEventListener('click', close);
+    modal.addEventListener('click', onBackdrop);
+    modal.querySelectorAll('[data-backup-option]').forEach(link => {
+        link.addEventListener('click', onOptionClick);
+    });
+}
+
+function buildEloChartSvg(history, accentColor = '#5865F2') {
+    const W = 580;
+    const H = 200;
+    const padL = 52;
+    const padR = 18;
+    const padT = 18;
+    const padB = 28;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+
+    const elos = history.map(h => h.elo);
+    let minElo = Math.min(...elos);
+    let maxElo = Math.max(...elos);
+    const span = maxElo - minElo;
+    const padRange = Math.max(250, Math.round(span * 0.2));
+    minElo = Math.max(0, Math.floor((minElo - padRange) / 100) * 100);
+    maxElo = Math.ceil((maxElo + padRange) / 100) * 100;
+    if (maxElo === minElo) maxElo = minElo + 500;
+
+    const pts = history.map((pt, i) => {
+        const x = history.length === 1
+            ? padL + innerW / 2
+            : padL + (i / (history.length - 1)) * innerW;
+        const y = padT + (1 - (pt.elo - minElo) / (maxElo - minElo)) * innerH;
+        return { x, y, elo: pt.elo, timestamp: pt.timestamp };
+    });
+
+    const polyPoints = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPoints = `${pts[0].x.toFixed(1)},${(padT + innerH).toFixed(1)} ${polyPoints} ${pts[pts.length - 1].x.toFixed(1)},${(padT + innerH).toFixed(1)}`;
+
+    const yTicks = [0, 0.5, 1].map(t => {
+        const val = Math.round(minElo + t * (maxElo - minElo));
+        const y = padT + (1 - t) * innerH;
+        return { val, y };
+    });
+
+    const firstDate = new Date(history[0].timestamp).toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit' });
+    const lastDate = new Date(history[history.length - 1].timestamp).toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit' });
+    const strokeColor = accentColor && accentColor !== '#808080' ? accentColor : '#5865F2';
+
+    return `
+        <svg viewBox="0 0 ${W} ${H}" class="w-full h-48 overflow-visible select-none">
+            <defs>
+                <linearGradient id="eloAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="${escapeHtml(strokeColor)}" stop-opacity="0.35" />
+                    <stop offset="100%" stop-color="${escapeHtml(strokeColor)}" stop-opacity="0.02" />
+                </linearGradient>
+            </defs>
+            ${yTicks.map(t => `
+                <line x1="${padL}" y1="${t.y.toFixed(1)}" x2="${W - padR}" y2="${t.y.toFixed(1)}" stroke="#334155" stroke-dasharray="3 3" stroke-width="1" />
+                <text x="${padL - 8}" y="${(t.y + 4).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="11">${t.val.toLocaleString('sk-SK')}</text>
+            `).join('')}
+            ${pts.length > 1 ? `<polygon points="${areaPoints}" fill="url(#eloAreaGrad)" />` : ''}
+            ${pts.length > 1 ? `<polyline fill="none" stroke="${escapeHtml(strokeColor)}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${polyPoints}" />` : ''}
+            ${pts.map(p => `
+                <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#0f172a" stroke="${escapeHtml(strokeColor)}" stroke-width="2.2">
+                    <title>${p.elo.toLocaleString('sk-SK')} Elo (${new Date(p.timestamp).toLocaleString('sk-SK')})</title>
+                </circle>
+            `).join('')}
+            <text x="${padL}" y="${H - 6}" text-anchor="start" fill="#64748b" font-size="11">${escapeHtml(firstDate)}</text>
+            <text x="${W - padR}" y="${H - 6}" text-anchor="end" fill="#64748b" font-size="11">${escapeHtml(lastDate)}</text>
+        </svg>
+    `;
+}
+
+function openEloHistoryModal(player) {
+    const modal = document.getElementById('elo-history-modal');
+    const avatarEl = document.getElementById('elo-modal-avatar');
+    const nameEl = document.getElementById('elo-modal-name');
+    const subEl = document.getElementById('elo-modal-sub');
+    const bodyEl = document.getElementById('elo-modal-body');
+    const closeBtn = document.getElementById('elo-modal-close');
+    if (!modal || !player) return;
+
+    avatarEl.src = player.avatarUrl;
+    nameEl.textContent = `${player.displayName} — História Elo`;
+    subEl.textContent = `@${player.username} • Steam64: ${player.steamId}`;
+
+    const history = Array.isArray(player.eloHistory) ? player.eloHistory : [];
+    const deltaText = player.weeklyDelta > 0
+        ? `+${player.weeklyDelta.toLocaleString('sk-SK')}`
+        : player.weeklyDelta < 0
+            ? player.weeklyDelta.toLocaleString('sk-SK')
+            : '0';
+    const deltaColor = player.weeklyDelta > 0
+        ? 'text-emerald-400'
+        : player.weeklyDelta < 0
+            ? 'text-red-400'
+            : 'text-slate-300';
+
+    if (history.length === 0) {
+        bodyEl.innerHTML = `
+            <div class="p-6 rounded-xl bg-bg-elevated border border-slate-800 text-center space-y-2">
+                <p class="text-sm text-slate-300 font-medium">Pre tohto hráča zatiaľ nie sú uložené historické body Elo.</p>
+                <p class="text-xs text-slate-400">Body sa automaticky zaznamenávajú pri každej aktualizácii rankov (`/update`, `/stats` alebo hodinový cyklus).</p>
+            </div>
+        `;
+    } else {
+        const minVal = Math.min(...history.map(h => h.elo));
+        const maxVal = Math.max(...history.map(h => h.elo));
+        const recentRows = [...history].reverse().slice(0, 12);
+
+        bodyEl.innerHTML = `
+            <div class="grid grid-cols-3 gap-3">
+                <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Aktuálne Elo</div>
+                    <div class="text-lg font-bold text-white mt-0.5">${typeof player.elo === 'number' ? player.elo.toLocaleString('sk-SK') : 'Unranked'}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400">7-dňová zmena</div>
+                    <div class="text-lg font-bold mt-0.5 ${deltaColor}">${escapeHtml(deltaText)}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
+                    <div class="text-[11px] uppercase tracking-wider text-slate-400">Rozsah (Min / Max)</div>
+                    <div class="text-sm font-semibold text-slate-200 mt-1">${minVal.toLocaleString('sk-SK')} / ${maxVal.toLocaleString('sk-SK')}</div>
+                </div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-bg-elevated/70 border border-slate-800">
+                ${history.length === 1 ? `<p class="text-xs text-slate-400 mb-2">Zatiaľ iba 1 záznam — pri ďalšej zmene Elo sa vykreslí krivka.</p>` : ''}
+                ${buildEloChartSvg(history, player.rankColor)}
+            </div>
+
+            <div class="space-y-1.5">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-400">Posledné zmeny (${history.length})</div>
+                <div class="rounded-xl border border-slate-800 divide-y divide-slate-800/80 max-h-44 overflow-y-auto bg-bg-base/50">
+                    ${recentRows.map((pt, idx) => {
+                        const prev = recentRows[idx + 1];
+                        const diff = prev ? pt.elo - prev.elo : 0;
+                        const diffBadge = diff > 0
+                            ? `<span class="text-xs font-semibold text-emerald-400">+${diff.toLocaleString('sk-SK')}</span>`
+                            : diff < 0
+                                ? `<span class="text-xs font-semibold text-red-400">${diff.toLocaleString('sk-SK')}</span>`
+                                : `<span class="text-xs text-slate-500">—</span>`;
+                        return `
+                            <div class="flex items-center justify-between px-3.5 py-2 text-xs">
+                                <span class="font-semibold text-white">${pt.elo.toLocaleString('sk-SK')} Elo</span>
+                                <div class="flex items-center gap-3">
+                                    ${diffBadge}
+                                    <span class="text-slate-400">${escapeHtml(new Date(pt.timestamp).toLocaleString('sk-SK'))}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    modal.classList.remove('hidden');
+    refreshIcons();
+
+    function close() {
+        modal.classList.add('hidden');
+        closeBtn.removeEventListener('click', close);
+        modal.removeEventListener('click', onBackdrop);
+    }
+    function onBackdrop(e) {
+        if (e.target === modal) close();
+    }
+    closeBtn.addEventListener('click', close);
+    modal.addEventListener('click', onBackdrop);
 }
 
 function renderPlayersTableRows() {
@@ -561,6 +674,12 @@ function renderPlayersTableRows() {
             ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString('sk-SK')}</span>`
             : `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">Unranked</span>`;
 
+        const deltaPill = p.weeklyDelta > 0
+            ? `<span class="ml-1.5 text-[11px] font-semibold text-emerald-400" title="Zmena za posledných 7 dní">+${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
+            : p.weeklyDelta < 0
+                ? `<span class="ml-1.5 text-[11px] font-semibold text-red-400" title="Zmena za posledných 7 dní">${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
+                : '';
+
         return `
             <tr class="border-t border-slate-800/80 hover:bg-bg-elevated/50 transition">
                 <td class="px-4 py-3">
@@ -578,9 +697,13 @@ function renderPlayersTableRows() {
                         <i data-lucide="external-link" class="w-3 h-3"></i>
                     </a>
                 </td>
-                <td class="px-4 py-3">${eloBadge}</td>
+                <td class="px-4 py-3 whitespace-nowrap">${eloBadge}${deltaPill}</td>
                 <td class="px-4 py-3 text-right">
                     <div class="inline-flex items-center gap-2">
+                        <button type="button" data-player-history="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-sky-300 transition" title="Zobraziť históriu a graf Elo">
+                            <i data-lucide="line-chart" class="w-3.5 h-3.5"></i>
+                            <span>Graf</span>
+                        </button>
                         <button type="button" data-player-update="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                             <span>Update</span>
@@ -599,6 +722,15 @@ function renderPlayersTableRows() {
 function attachPlayerTableListeners() {
     const tbody = document.getElementById('players-tbody');
     if (!tbody) return;
+
+    tbody.querySelectorAll('[data-player-history]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const player = (state.players || []).find(p => p.userId === btn.dataset.playerHistory);
+            if (player) {
+                openEloHistoryModal(player);
+            }
+        });
+    });
 
     tbody.querySelectorAll('[data-player-update]').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -644,8 +776,24 @@ function attachPlayerTableListeners() {
 
 function renderPlayers() {
     const container = document.getElementById('section-players');
+    const climber = state.overview?.stats?.topClimber;
 
     container.innerHTML = `
+        ${climber ? `
+            <div class="card p-4 bg-gradient-to-r from-emerald-500/10 via-bg-surface to-bg-surface border-emerald-500/30 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                        <i data-lucide="trending-up" class="w-5 h-5"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-xs uppercase tracking-wider font-semibold text-emerald-400">Skokan týždňa</div>
+                        <div class="text-sm font-bold text-white truncate">${escapeHtml(climber.displayName)} <span class="text-emerald-300 font-semibold">(+${climber.delta.toLocaleString('sk-SK')} Elo za 7 dní)</span></div>
+                    </div>
+                </div>
+                ${typeof climber.elo === 'number' ? `<span class="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-200 shrink-0">${climber.elo.toLocaleString('sk-SK')} Elo</span>` : ''}
+            </div>
+        ` : ''}
+
         <div class="card p-6">
             <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
                 <i data-lucide="link" class="w-4 h-4 text-brand"></i>
@@ -1193,6 +1341,8 @@ function buildLogsListHtml() {
         patchbot: 'PatchBot',
         joinroles: 'Join Roles',
         adminlog: 'Admin Log',
+        welcome: 'Uvítanie',
+        tickets: 'Tickety',
         system: 'Systém'
     };
 
@@ -1231,7 +1381,9 @@ function renderLogs() {
         { id: 'tempvoice', label: 'TempVoice' },
         { id: 'patchbot', label: 'PatchBot' },
         { id: 'joinroles', label: 'Join Roles' },
-        { id: 'adminlog', label: 'Admin Log' }
+        { id: 'adminlog', label: 'Admin Log' },
+        { id: 'welcome', label: 'Uvítanie' },
+        { id: 'tickets', label: 'Tickety' }
     ];
 
     container.innerHTML = `
@@ -1243,7 +1395,7 @@ function renderLogs() {
                             <i data-lucide="scroll-text" class="w-4 h-4 text-brand"></i>
                             <span>Živý Activity Log bota</span>
                         </h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Posledných 150 udalostí od štartu bota (automaticky sa obnovuje každých 5 s).</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Posledných 500 udalostí (uložené aj po reštarte bota, obnovuje sa každých 5 s).</p>
                     </div>
                     <div class="flex items-center gap-2">
                         <input id="logs-search" type="text" placeholder="Hľadať v logu..." class="input-field sm:w-56" value="${escapeHtml(state.logSearch)}" />
@@ -2476,6 +2628,586 @@ function renderAdminLog() {
     refreshIcons();
 }
 
+// --- UVÍTACIE SPRÁVY (WELCOME / GOODBYE) ---
+
+function renderWelcome() {
+    const container = document.getElementById('section-welcome');
+    const w = state.settings?.welcome || {};
+    const welcomeVars = [
+        { token: '{user}', label: 'Mention (@člen)' },
+        { token: '{displayname}', label: 'Meno na serveri' },
+        { token: '{username}', label: 'Discord username' },
+        { token: '{server}', label: 'Názov servera' },
+        { token: '{members}', label: 'Počet členov' }
+    ];
+
+    container.innerHTML = `
+        <form id="wl-form" class="space-y-6">
+            <div class="card p-6 space-y-4">
+                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                    <i data-lucide="hand" class="w-4 h-4 text-emerald-400"></i>
+                    <span>Uvítacie a rozlúčkové správy</span>
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Zapnúť modul Uvítacie správy</div>
+                            <div class="text-xs text-slate-400">Pri vypnutí ostanú všetky texty aj kanály uložené.</div>
+                        </div>
+                        ${renderToggleSwitch('wl-enabled', w.enabled)}
+                    </div>
+
+                    <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Ignorovať botov</div>
+                            <div class="text-xs text-slate-400">Neposielať uvítanie ani rozlúčku pre bot účty.</div>
+                        </div>
+                        ${renderToggleSwitch('wl-ignore-bots', w.ignoreBots !== false)}
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2">
+                    <div class="text-xs font-medium text-slate-400">Kliknutím vložíš premennú do posledného aktívneho poľa:</div>
+                    <div class="flex flex-wrap gap-2">
+                        ${welcomeVars.map(v => `
+                            <button type="button" class="wl-var-chip inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-bg-base hover:bg-bg-hover border border-slate-700/80 hover:border-brand/60 text-xs transition" data-var="${escapeHtml(v.token)}">
+                                <code class="text-sky-300 font-semibold">${escapeHtml(v.token)}</code>
+                                <span class="text-slate-400">${escapeHtml(v.label)}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                    <p class="text-xs text-slate-400">Skloňovanie členov: <code class="text-sky-300">{members:člen|členovia|členov}</code></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card p-6 space-y-4">
+                    <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <div>
+                            <h4 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <i data-lucide="hash" class="w-4 h-4 text-brand"></i>
+                                <span>Uvítanie do roomky (kanála)</span>
+                            </h4>
+                            <p class="text-xs text-slate-400 mt-0.5">Verejný uvítací embed vo vybranom textovom kanáli.</p>
+                        </div>
+                        ${renderToggleSwitch('wl-chan-enabled', w.channelEnabled)}
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Cieľový kanál</label>
+                        <select id="wl-chan-id" class="input-field">
+                            ${buildTextChannelOptions(w.channelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-12 gap-3">
+                        <div class="col-span-9 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Nadpis embedu</label>
+                            <input id="wl-chan-title" type="text" maxlength="256" class="wl-target-input input-field" value="${escapeHtml(w.channelTitle || '')}" />
+                        </div>
+                        <div class="col-span-3 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Farba</label>
+                            <input id="wl-chan-color" type="color" class="w-full h-[42px] rounded-xl bg-bg-base border border-slate-700 cursor-pointer p-1" value="${escapeHtml(w.channelColor || '#5865F2')}" />
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Text správy do roomky</label>
+                        <textarea id="wl-chan-desc" rows="4" maxlength="4000" class="wl-target-input input-field resize-y">${escapeHtml(w.channelDescription || '')}</textarea>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3 pt-1">
+                        <span class="text-xs text-slate-300">Zobraziť avatar nového člena</span>
+                        ${renderToggleSwitch('wl-chan-avatar', w.channelShowAvatar !== false)}
+                    </div>
+
+                    <div class="flex justify-end pt-2">
+                        <button type="button" data-wl-test="channel" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
+                            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                            <span>Test do roomky</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card p-6 space-y-4">
+                    <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                        <div>
+                            <h4 class="text-sm font-semibold text-white flex items-center gap-2">
+                                <i data-lucide="mail" class="w-4 h-4 text-emerald-400"></i>
+                                <span>Uvítanie do DM (súkromnej správy)</span>
+                            </h4>
+                            <p class="text-xs text-slate-400 mt-0.5">Súkromný embed do správ (môže mať úplne iný text ako roomka).</p>
+                        </div>
+                        ${renderToggleSwitch('wl-dm-enabled', w.dmEnabled)}
+                    </div>
+
+                    <div class="grid grid-cols-12 gap-3">
+                        <div class="col-span-9 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Nadpis DM embedu</label>
+                            <input id="wl-dm-title" type="text" maxlength="256" class="wl-target-input input-field" value="${escapeHtml(w.dmTitle || '')}" />
+                        </div>
+                        <div class="col-span-3 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Farba</label>
+                            <input id="wl-dm-color" type="color" class="w-full h-[42px] rounded-xl bg-bg-base border border-slate-700 cursor-pointer p-1" value="${escapeHtml(w.dmColor || '#57F287')}" />
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Text DM správy</label>
+                        <textarea id="wl-dm-desc" rows="5" maxlength="4000" class="wl-target-input input-field resize-y">${escapeHtml(w.dmDescription || '')}</textarea>
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-start gap-2">
+                        <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5 text-amber-400"></i>
+                        <span>Ak má člen zakázané súkromné správy od ľudí zo servera, Discord DM ticho preskočí bez chyby.</span>
+                    </div>
+
+                    <div class="flex justify-end pt-1">
+                        <button type="button" data-wl-test="dm" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
+                            <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                            <span>Poslať test do môjho DM</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-6 space-y-4">
+                <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                    <div>
+                        <h4 class="text-sm font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="log-out" class="w-4 h-4 text-red-400"></i>
+                            <span>Rozlúčková správa pri odchode (voliteľné)</span>
+                        </h4>
+                        <p class="text-xs text-slate-400 mt-0.5">Oznámenie do vybraného kanála, keď niekto opustí server.</p>
+                    </div>
+                    ${renderToggleSwitch('wl-gb-enabled', w.goodbyeEnabled)}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div class="md:col-span-4 space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Kanál pre rozlúčku</label>
+                        <select id="wl-gb-id" class="input-field">
+                            ${buildTextChannelOptions(w.goodbyeChannelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
+                        </select>
+                    </div>
+                    <div class="md:col-span-6 space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Nadpis embedu</label>
+                        <input id="wl-gb-title" type="text" maxlength="256" class="wl-target-input input-field" value="${escapeHtml(w.goodbyeTitle || '')}" />
+                    </div>
+                    <div class="md:col-span-2 space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Farba</label>
+                        <input id="wl-gb-color" type="color" class="w-full h-[42px] rounded-xl bg-bg-base border border-slate-700 cursor-pointer p-1" value="${escapeHtml(w.goodbyeColor || '#ED4245')}" />
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-xs font-medium text-slate-400">Text rozlúčkovej správy</label>
+                    <textarea id="wl-gb-desc" rows="2" maxlength="4000" class="wl-target-input input-field resize-y">${escapeHtml(w.goodbyeDescription || '')}</textarea>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-end gap-3 pt-1">
+                    <button type="button" data-wl-test="goodbye" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
+                        <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                        <span>Test rozlúčky</span>
+                    </button>
+                    <button id="wl-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
+                        <i data-lucide="save" class="w-4 h-4"></i>
+                        <span>Uložiť Uvítacie správy</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    `;
+
+    let lastFocusedEl = document.getElementById('wl-chan-desc');
+    container.querySelectorAll('.wl-target-input').forEach(el => {
+        el.addEventListener('focus', () => { lastFocusedEl = el; });
+    });
+
+    container.querySelectorAll('.wl-var-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const target = lastFocusedEl || document.getElementById('wl-chan-desc');
+            if (!target) return;
+            const token = chip.dataset.var || '';
+            const start = typeof target.selectionStart === 'number' ? target.selectionStart : target.value.length;
+            const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : target.value.length;
+            target.value = `${target.value.slice(0, start)}${token}${target.value.slice(end)}`;
+            target.focus();
+            const pos = start + token.length;
+            target.setSelectionRange(pos, pos);
+            setDirty(true, 'wl-form');
+        });
+    });
+
+    container.querySelectorAll('[data-wl-test]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const target = btn.dataset.wlTest;
+            await setButtonLoading(btn, true, 'Posielam...');
+            try {
+                await apiFetch('/api/welcome/test', {
+                    method: 'POST',
+                    body: JSON.stringify({ target })
+                });
+                showToast(target === 'dm' ? 'Testovacia DM správa odoslaná.' : 'Testovacia správa bola odoslaná do kanála.');
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                await setButtonLoading(btn, false);
+            }
+        });
+    });
+
+    document.getElementById('wl-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('wl-save-btn');
+        await setButtonLoading(btn, true, 'Ukladám...');
+        try {
+            const res = await apiFetch('/api/settings/welcome', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    enabled: document.getElementById('wl-enabled').checked,
+                    ignoreBots: document.getElementById('wl-ignore-bots').checked,
+                    channelEnabled: document.getElementById('wl-chan-enabled').checked,
+                    channelId: document.getElementById('wl-chan-id').value || null,
+                    channelTitle: document.getElementById('wl-chan-title').value,
+                    channelColor: document.getElementById('wl-chan-color').value,
+                    channelDescription: document.getElementById('wl-chan-desc').value,
+                    channelShowAvatar: document.getElementById('wl-chan-avatar').checked,
+                    dmEnabled: document.getElementById('wl-dm-enabled').checked,
+                    dmTitle: document.getElementById('wl-dm-title').value,
+                    dmColor: document.getElementById('wl-dm-color').value,
+                    dmDescription: document.getElementById('wl-dm-desc').value,
+                    goodbyeEnabled: document.getElementById('wl-gb-enabled').checked,
+                    goodbyeChannelId: document.getElementById('wl-gb-id').value || null,
+                    goodbyeTitle: document.getElementById('wl-gb-title').value,
+                    goodbyeColor: document.getElementById('wl-gb-color').value,
+                    goodbyeDescription: document.getElementById('wl-gb-desc').value
+                })
+            });
+            state.settings.welcome = res.welcome;
+            setDirty(false);
+            await refreshOverviewOnly();
+            showToast('Nastavenia uvítacích správ boli uložené.');
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    bindDirtyForm('wl-form');
+    refreshIcons();
+}
+
+// --- TICKET SYSTÉM ---
+
+function readTicketRolesDraftFromDom() {
+    const selects = document.querySelectorAll('#tk-roles-list .tk-role-select');
+    if (document.getElementById('tk-roles-list')) {
+        state.ticketDraftSupportRoleIds = [...selects].map(s => s.value);
+    }
+}
+
+function buildTicketSupportRoleRowsHtml(roleIds) {
+    if (!Array.isArray(roleIds) || roleIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-1.5">Zatiaľ žiadna Support rola (tickety uvidia len admini a majiteľ bota).</p>`;
+    }
+
+    return roleIds.map((roleId, idx) => `
+        <div class="flex items-center gap-2">
+            <select class="tk-role-select input-field flex-1">
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber Support rolu —' })}
+            </select>
+            <button type="button" data-tk-remove-role="${idx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function attachTicketRoleListeners() {
+    document.querySelectorAll('[data-tk-remove-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readTicketRolesDraftFromDom();
+            state.ticketDraftSupportRoleIds.splice(Number(btn.dataset.tkRemoveRole), 1);
+            document.getElementById('tk-roles-list').innerHTML = buildTicketSupportRoleRowsHtml(state.ticketDraftSupportRoleIds);
+            attachTicketRoleListeners();
+            setDirty(true, 'tk-form');
+            refreshIcons();
+        });
+    });
+}
+
+function renderOpenTicketsList() {
+    const list = state.openTickets || [];
+    if (list.length === 0) {
+        return `<p class="text-sm text-slate-400 py-4 text-center">Momentálne nie sú otvorené žiadne tickety.</p>`;
+    }
+
+    return list.map(t => `
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated/80 border border-slate-800">
+            <div class="flex items-start gap-3 min-w-0">
+                <img src="${escapeHtml(t.userAvatar)}" alt="" class="w-9 h-9 rounded-full object-cover bg-bg-base shrink-0" />
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2 py-0.5 rounded-md bg-brand/15 text-brand text-xs font-bold">#${String(t.number).padStart(3, '0')}</span>
+                        <span class="font-semibold text-white text-sm truncate">${escapeHtml(t.subject)}</span>
+                        ${t.claimedByName ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">Prevzal: ${escapeHtml(t.claimedByName)}</span>` : `<span class="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-300">Čaká na prevzatie</span>`}
+                    </div>
+                    <div class="text-xs text-slate-400 mt-1">
+                        Autor: <span class="text-slate-200">${escapeHtml(t.userName)}</span> • Kanál: <span class="font-mono text-slate-300">#${escapeHtml(t.channelName)}</span> • ${escapeHtml(new Date(t.createdAt).toLocaleString('sk-SK'))}
+                    </div>
+                </div>
+            </div>
+            <div class="shrink-0">
+                <button type="button" data-tk-close="${escapeHtml(t.channelId)}" data-tk-num="${String(t.number).padStart(3, '0')}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition">
+                    <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                    <span>Zatvoriť & Transcript</span>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function attachOpenTicketListeners() {
+    document.querySelectorAll('[data-tk-close]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const channelId = btn.dataset.tkClose;
+            const num = btn.dataset.tkNum;
+            const ok = await confirmAction({
+                title: `Zatvoriť ticket #${num}?`,
+                message: 'Bot uloží prepis (transcript) do log kanála (ak je nastavený) a vymaže kanál ticketu.',
+                confirmLabel: 'Zatvoriť ticket'
+            });
+            if (!ok) return;
+
+            await setButtonLoading(btn, true, 'Zatváram...');
+            try {
+                await apiFetch(`/api/tickets/${encodeURIComponent(channelId)}`, { method: 'DELETE' });
+                await refreshOpenTickets();
+                showToast(`Ticket #${num} bol zatvorený.`);
+            } catch (err) {
+                showToast(err.message, 'error');
+                await setButtonLoading(btn, false);
+            }
+        });
+    });
+}
+
+function patchOpenTicketsDom() {
+    const heading = document.getElementById('tk-open-heading');
+    if (heading) {
+        heading.textContent = `Otvorené tickety (${state.openTickets.length})`;
+    }
+    const listEl = document.getElementById('tk-open-list');
+    if (!listEl || listEl.querySelector('button:disabled')) return;
+
+    const nextHtml = renderOpenTicketsList();
+    if (nextHtml !== lastTicketsHtml) {
+        lastTicketsHtml = nextHtml;
+        listEl.innerHTML = nextHtml;
+        attachOpenTicketListeners();
+        refreshIcons();
+    }
+}
+
+async function refreshOpenTickets() {
+    const data = await apiFetch('/api/tickets/open');
+    state.openTickets = data.openTickets || [];
+    if (document.getElementById('tk-open-list')) {
+        patchOpenTicketsDom();
+    }
+}
+
+function renderTickets() {
+    const container = document.getElementById('section-tickets');
+    const tk = state.settings?.tickets || {};
+
+    container.innerHTML = `
+        <div class="card p-6">
+            <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
+                <i data-lucide="ticket" class="w-4 h-4 text-brand"></i>
+                <span>Nastavenia Ticket systému</span>
+            </h3>
+
+            <form id="tk-form" class="space-y-5">
+                <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
+                    <div>
+                        <div class="text-sm font-semibold text-white">Zapnúť Ticket systém</div>
+                        <div class="text-xs text-slate-400">Hráči môžu cez tlačidlo v paneli vytvárať súkromné support tickety. Pri vypnutí sa nič nevymaže.</div>
+                    </div>
+                    ${renderToggleSwitch('tk-enabled', tk.enabled)}
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Kategória pre nové tickety</label>
+                        <select id="tk-category" class="input-field">
+                            ${buildCategoryOptions(tk.categoryId)}
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Log kanál pre prepisy (Transcript)</label>
+                        <select id="tk-log-channel" class="input-field">
+                            ${buildTextChannelOptions(tk.logChannelId, { allowNone: true, noneLabel: '— Bez ukladania prepisov —' })}
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Kanál pre Ticket panel</label>
+                        <select id="tk-panel-channel" class="input-field">
+                            ${buildTextChannelOptions(tk.panelChannelId, { allowNone: true, noneLabel: '— Vyber kanál —' })}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                    <div class="flex items-center gap-2 text-sm font-semibold text-white">
+                        <i data-lucide="shield" class="w-4 h-4 text-sky-400"></i>
+                        <span>Support roly (vidia každý ticket a môžu ho prevziať)</span>
+                    </div>
+                    <div id="tk-roles-list" class="space-y-2">
+                        ${buildTicketSupportRoleRowsHtml(state.ticketDraftSupportRoleIds)}
+                    </div>
+                    ${renderAddButtonHtml('tk-add-role-btn', 'Pridať Support rolu')}
+                </div>
+
+                <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-4">
+                    <div class="text-sm font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="layout-template" class="w-4 h-4 text-brand-gold"></i>
+                        <span>Vzhľad Ticket panelu na Discorde</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        <div class="md:col-span-6 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Nadpis panelu</label>
+                            <input id="tk-panel-title" type="text" maxlength="256" required class="input-field" value="${escapeHtml(tk.panelTitle || '')}" />
+                        </div>
+                        <div class="md:col-span-4 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Text tlačidla</label>
+                            <input id="tk-panel-btn" type="text" maxlength="80" required class="input-field" value="${escapeHtml(tk.panelButtonLabel || '')}" />
+                        </div>
+                        <div class="md:col-span-2 space-y-1.5">
+                            <label class="text-xs font-medium text-slate-400">Farba</label>
+                            <input id="tk-panel-color" type="color" class="w-full h-[42px] rounded-xl bg-bg-base border border-slate-700 cursor-pointer p-1" value="${escapeHtml(tk.panelColor || '#5865F2')}" />
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-400">Popis v embede panelu</label>
+                        <textarea id="tk-panel-desc" rows="3" maxlength="4000" required class="input-field resize-y">${escapeHtml(tk.panelDescription || '')}</textarea>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-end gap-3 pt-1">
+                    <button id="tk-send-panel-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-200 transition">
+                        <i data-lucide="send" class="w-4 h-4 text-sky-400"></i>
+                        <span>${tk.panelMessageId ? 'Aktualizovať panel v kanáli' : 'Odoslať panel do kanála'}</span>
+                    </button>
+                    <button id="tk-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
+                        <i data-lucide="save" class="w-4 h-4"></i>
+                        <span>Uložiť Ticket nastavenia</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <div>
+                    <h3 id="tk-open-heading" class="text-base font-semibold text-white">Otvorené tickety (${state.openTickets.length})</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Live prehľad aktívnych ticketov s možnosťou diaľkového zatvorenia a uloženia prepisu.</p>
+                </div>
+                <button id="tk-refresh-open" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    <span>Obnoviť</span>
+                </button>
+            </div>
+            <div id="tk-open-list" class="space-y-3">${renderOpenTicketsList()}</div>
+        </div>
+    `;
+
+    document.getElementById('tk-add-role-btn').addEventListener('click', () => {
+        readTicketRolesDraftFromDom();
+        state.ticketDraftSupportRoleIds.push('');
+        document.getElementById('tk-roles-list').innerHTML = buildTicketSupportRoleRowsHtml(state.ticketDraftSupportRoleIds);
+        attachTicketRoleListeners();
+        setDirty(true, 'tk-form');
+        refreshIcons();
+    });
+
+    async function saveTicketConfig() {
+        readTicketRolesDraftFromDom();
+        const res = await apiFetch('/api/settings/tickets', {
+            method: 'PUT',
+            body: JSON.stringify({
+                enabled: document.getElementById('tk-enabled').checked,
+                categoryId: document.getElementById('tk-category').value || null,
+                logChannelId: document.getElementById('tk-log-channel').value || null,
+                panelChannelId: document.getElementById('tk-panel-channel').value || null,
+                supportRoleIds: state.ticketDraftSupportRoleIds.filter(Boolean),
+                panelTitle: document.getElementById('tk-panel-title').value,
+                panelButtonLabel: document.getElementById('tk-panel-btn').value,
+                panelColor: document.getElementById('tk-panel-color').value,
+                panelDescription: document.getElementById('tk-panel-desc').value
+            })
+        });
+        state.settings.tickets = res.tickets;
+        syncDraftsFromSettings();
+        setDirty(false);
+    }
+
+    document.getElementById('tk-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('tk-save-btn');
+        await setButtonLoading(btn, true, 'Ukladám...');
+        try {
+            await saveTicketConfig();
+            await refreshOverviewOnly();
+            renderTickets();
+            showToast('Nastavenia Ticket systému boli uložené.');
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    document.getElementById('tk-send-panel-btn').addEventListener('click', async e => {
+        const btn = e.currentTarget;
+        await setButtonLoading(btn, true, 'Odosielam...');
+        try {
+            await saveTicketConfig();
+            const res = await apiFetch('/api/tickets/panel', { method: 'POST' });
+            state.settings.tickets = res.tickets;
+            renderTickets();
+            showToast('Ticket panel bol odoslaný / aktualizovaný v kanáli.');
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    document.getElementById('tk-refresh-open').addEventListener('click', async e => {
+        const btn = e.currentTarget;
+        await setButtonLoading(btn, true, '...');
+        try {
+            await refreshOpenTickets();
+            showToast('Zoznam otvorených ticketov obnovený.', 'info');
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    attachTicketRoleListeners();
+    attachOpenTicketListeners();
+    bindDirtyForm('tk-form');
+    refreshIcons();
+}
+
 // --- VŠEOBECNÉ NASTAVENIA + BOT STATUS + RANK ROLY ---
 
 function readDashboardRolesDraftFromDom() {
@@ -2643,6 +3375,31 @@ function renderSettings() {
                 </div>
             </div>
         </form>
+
+        <div class="card p-6 space-y-4">
+            <div>
+                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                    <i data-lucide="archive" class="w-4 h-4 text-emerald-400"></i>
+                    <span>Záloha a obnova databázy</span>
+                </h3>
+                <p class="text-xs text-slate-400 mt-0.5">Stiahni si zálohu nastavení alebo hráčov, prípadne obnov dáta zo zálohy (.json).</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button id="set-backup-btn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-200 text-sm font-medium transition">
+                    <i data-lucide="archive" class="w-4 h-4"></i>
+                    <span>Zálohovať</span>
+                </button>
+
+                <div>
+                    <input id="set-restore-file" type="file" accept=".json,application/json" class="hidden" />
+                    <button id="set-restore-btn" type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-dashed border-slate-700 hover:border-amber-400/70 bg-bg-elevated/60 hover:bg-amber-500/10 text-slate-200 text-sm font-medium transition">
+                        <i data-lucide="upload" class="w-4 h-4 text-amber-400"></i>
+                        <span>Obnoviť zo zálohy (.json)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     `;
 
     const textInput = document.getElementById('set-status-text');
@@ -2744,6 +3501,49 @@ function renderSettings() {
         }
     });
 
+    document.getElementById('set-backup-btn').addEventListener('click', openBackupModal);
+
+    const restoreInput = document.getElementById('set-restore-file');
+    const restoreBtn = document.getElementById('set-restore-btn');
+    restoreBtn.addEventListener('click', () => restoreInput.click());
+
+    restoreInput.addEventListener('change', async () => {
+        const file = restoreInput.files?.[0];
+        restoreInput.value = '';
+        if (!file) return;
+
+        let parsed;
+        try {
+            parsed = JSON.parse(await file.text());
+        } catch {
+            showToast('Vybraný súbor nie je platný JSON.', 'error');
+            return;
+        }
+
+        const ok = await confirmAction({
+            title: 'Obnoviť dáta zo zálohy?',
+            message: `Súbor „${file.name}“ prepíše zodpovedajúce dáta bota (users.json / settings.json).`,
+            confirmLabel: 'Obnoviť zálohu',
+            danger: true
+        });
+        if (!ok) return;
+
+        await setButtonLoading(restoreBtn, true, 'Obnovujem...');
+        try {
+            const res = await apiFetch('/api/backup/restore', {
+                method: 'POST',
+                body: JSON.stringify({ data: parsed })
+            });
+            await reloadAllDashboardData();
+            renderSettings();
+            showToast(`Záloha bola úspešne obnovená (${res.restored.join(' + ')}).`);
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            await setButtonLoading(restoreBtn, false);
+        }
+    });
+
     bindDirtyForm('general-settings-form');
     refreshIcons();
 }
@@ -2836,7 +3636,9 @@ function patchOverviewDom() {
         joinroles: ov.modules.joinRolesEnabled,
         csstatus: ov.modules.csStatusEnabled,
         rankfeed: ov.modules.rankFeedEnabled,
-        adminlog: ov.modules.adminLogEnabled
+        adminlog: ov.modules.adminLogEnabled,
+        welcome: ov.modules.welcomeEnabled,
+        tickets: ov.modules.ticketsEnabled
     };
 
     Object.entries(moduleMap).forEach(([key, enabled]) => {
@@ -2906,6 +3708,10 @@ async function pollLiveUpdates() {
         if (Array.isArray(data.logs) && state.activeSection === 'logs') {
             state.logs = data.logs;
             patchLogsDom();
+        }
+        if (Array.isArray(data.openTickets) && state.activeSection === 'tickets') {
+            state.openTickets = data.openTickets;
+            patchOpenTicketsDom();
         }
         if (Array.isArray(data.announcementsHistory) && state.activeSection === 'announcements') {
             const prevSig = JSON.stringify((state.announcementsHistory || []).map(h => `${h.channelId}:${h.messageId}:${h.sentAt || 0}`));
@@ -2986,14 +3792,15 @@ async function refreshMetaAndOverview() {
 }
 
 async function reloadAllDashboardData() {
-    const [overview, meta, playersRes, settingsRes, roomsRes, logsRes, annRes] = await Promise.all([
+    const [overview, meta, playersRes, settingsRes, roomsRes, logsRes, annRes, ticketsRes] = await Promise.all([
         apiFetch('/api/overview'),
         apiFetch('/api/guild/meta'),
         apiFetch('/api/players'),
         apiFetch('/api/settings'),
         apiFetch('/api/tempvoice/rooms'),
         apiFetch('/api/logs'),
-        apiFetch('/api/announcements/history')
+        apiFetch('/api/announcements/history'),
+        apiFetch('/api/tickets/open')
     ]);
 
     state.overview = overview;
@@ -3004,6 +3811,7 @@ async function reloadAllDashboardData() {
     state.tempRooms = roomsRes.rooms || [];
     state.logs = logsRes.logs || [];
     state.announcementsHistory = annRes.history || [];
+    state.openTickets = ticketsRes.openTickets || [];
     syncDraftsFromSettings();
     updateHeaderBotBadge(overview.bot);
 }
@@ -3020,6 +3828,8 @@ function renderActiveSection() {
         csstatus: renderCsStatus,
         rankfeed: renderRankFeed,
         adminlog: renderAdminLog,
+        welcome: renderWelcome,
+        tickets: renderTickets,
         settings: renderSettings
     };
     (map[state.activeSection] || renderOverview)();
@@ -3031,6 +3841,9 @@ function renderActiveSection() {
     }
     if (state.activeSection === 'logs') {
         lastLogsHtml = document.getElementById('logs-list')?.innerHTML || '';
+    }
+    if (state.activeSection === 'tickets') {
+        lastTicketsHtml = document.getElementById('tk-open-list')?.innerHTML || '';
     }
 }
 

@@ -85,6 +85,75 @@
         </form>
     </div>
 
+    <!-- Elo History Chart Modal -->
+    <div id="elo-history-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-bg-surface border border-slate-700/70 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <img id="elo-modal-avatar" src="" alt="" class="w-10 h-10 rounded-full object-cover bg-bg-elevated shrink-0" />
+                    <div class="min-w-0">
+                        <h3 id="elo-modal-name" class="text-lg font-semibold text-white truncate">História Elo</h3>
+                        <p id="elo-modal-sub" class="text-xs text-slate-400 truncate"></p>
+                    </div>
+                </div>
+                <button id="elo-modal-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div id="elo-modal-body" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <!-- Backup Picker Modal -->
+    <div id="backup-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-bg-surface border border-slate-700/70 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="archive" class="w-5 h-5 text-emerald-400"></i>
+                        <span>Stiahnuť zálohu</span>
+                    </h3>
+                    <p class="text-xs text-slate-400 mt-1">Vyber, ktoré dáta bota chceš stiahnuť ako zálohu (.json).</p>
+                </div>
+                <button id="backup-modal-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="space-y-2.5">
+                <a href="/api/backup/download/all" data-backup-option="all" class="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/35 transition">
+                    <div class="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <i data-lucide="archive" class="w-4 h-4"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold text-white">Kompletná záloha (odporúčané)</div>
+                        <div class="text-xs text-slate-300 mt-0.5">Všetky nastavenia modulov aj prepojení hráči s históriou Elo v jednom súbore.</div>
+                    </div>
+                </a>
+
+                <a href="/api/backup/download/settings" data-backup-option="settings" class="flex items-start gap-3 p-4 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700/80 transition">
+                    <div class="w-9 h-9 rounded-lg bg-brand/15 text-brand flex items-center justify-center shrink-0 mt-0.5">
+                        <i data-lucide="sliders" class="w-4 h-4"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold text-white">Iba nastavenia modulov</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Konfigurácia TempVoice, PatchBot, Join Roles, CS2 Status, Rank-Up, Admin Log, Uvítanie, Tickety, status bota a rank roly.</div>
+                    </div>
+                </a>
+
+                <a href="/api/backup/download/users" data-backup-option="users" class="flex items-start gap-3 p-4 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700/80 transition">
+                    <div class="w-9 h-9 rounded-lg bg-sky-500/15 text-sky-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold text-white">Iba prepojení hráči a Elo</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Zoznam prepojených Steam účtov, aktuálne Premier Elo a história Elo.</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Splash -->
     <div id="view-loading" class="min-h-screen flex items-center justify-center p-6">
         <div class="flex flex-col items-center gap-3 text-slate-400">
@@ -204,6 +273,14 @@
                     <i data-lucide="shield-check" class="w-4 h-4 shrink-0"></i>
                     <span>Admin Log</span>
                 </button>
+                <button data-section="welcome" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="hand" class="w-4 h-4 shrink-0"></i>
+                    <span>Uvítacie správy</span>
+                </button>
+                <button data-section="tickets" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="ticket" class="w-4 h-4 shrink-0"></i>
+                    <span>Tickety</span>
+                </button>
 
                 <div class="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Systém</div>
                 <button data-section="settings" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
@@ -257,6 +334,8 @@
                 <section id="section-csstatus" class="hidden space-y-6"></section>
                 <section id="section-rankfeed" class="hidden space-y-6"></section>
                 <section id="section-adminlog" class="hidden space-y-6"></section>
+                <section id="section-welcome" class="hidden space-y-6"></section>
+                <section id="section-tickets" class="hidden space-y-6"></section>
                 <section id="section-settings" class="hidden space-y-6"></section>
             </main>
         </div>

@@ -1,5 +1,6 @@
 const { Events } = require('discord.js');
 const { handleTempVoiceInteraction } = require('../services/tempVoicePanel');
+const { handleTicketInteraction } = require('../services/tickets');
 const { loadSettings } = require('../storage/settingsStore');
 
 async function sendInteractionError(interaction, message) {
@@ -24,6 +25,13 @@ module.exports = {
                 } catch (err) {
                     console.error(`Chyba pri TempVoice interakcii (${interaction.customId}):`, err);
                     await sendInteractionError(interaction, 'Pri vykonávaní akcie nastala neočakávaná chyba.');
+                }
+            } else if (interaction.customId.startsWith('ticket:')) {
+                try {
+                    await handleTicketInteraction(interaction);
+                } catch (err) {
+                    console.error(`Chyba pri Ticket interakcii (${interaction.customId}):`, err);
+                    await sendInteractionError(interaction, 'Pri spracovaní ticketu nastala neočakávaná chyba.');
                 }
             }
             return;

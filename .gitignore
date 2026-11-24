@@ -2,6 +2,7 @@ node_modules/
 env.txt
 users.json
 settings.json
+activity.json
 .DS_Store
 __MACOSX/
 .vscode/

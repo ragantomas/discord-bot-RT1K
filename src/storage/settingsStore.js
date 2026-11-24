@@ -96,7 +96,40 @@ function getDefaultSettings() {
                 voiceActivity: false
             }
         },
-        announcementsHistory: []
+        announcementsHistory: [],
+        welcome: {
+            enabled: false,
+            channelEnabled: false,
+            channelId: null,
+            channelTitle: 'Vitaj na serveri {server}!',
+            channelDescription: 'Ahoj {user}! Si náš **{members}.** člen. Prepoj si CS2 účet príkazom `/link`.',
+            channelColor: '#5865F2',
+            channelShowAvatar: true,
+            dmEnabled: false,
+            dmTitle: 'Vitaj na {server}!',
+            dmDescription: 'Ahoj {displayname}, vitaj medzi nami! Ak hráš CS2, prepoj si účet príkazom `/link` pre automatickú rank rolu.',
+            dmColor: '#57F287',
+            goodbyeEnabled: false,
+            goodbyeChannelId: null,
+            goodbyeTitle: 'Člen opustil server',
+            goodbyeDescription: '**{displayname}** ({username}) opustil server. Teraz nás je {members} {members:člen|členovia|členov}.',
+            goodbyeColor: '#ED4245',
+            ignoreBots: true
+        },
+        tickets: {
+            enabled: false,
+            categoryId: null,
+            logChannelId: null,
+            supportRoleIds: [],
+            panelChannelId: null,
+            panelMessageId: null,
+            panelTitle: '🎫 Podpora a nahlásenia',
+            panelDescription: 'Potrebuješ pomoc od admin tímu alebo chceš niečo nahlásiť? Klikni na tlačidlo nižšie a otvorí sa ti súkromný ticket.',
+            panelColor: '#5865F2',
+            panelButtonLabel: 'Otvoriť ticket',
+            ticketCounter: 0,
+            openTickets: {}
+        }
     };
 }
 
@@ -168,6 +201,11 @@ function normalizeSettings(raw) {
     const rf = src.rankFeed && typeof src.rankFeed === 'object' ? src.rankFeed : {};
     const al = src.adminLog && typeof src.adminLog === 'object' ? src.adminLog : {};
     const alEvents = al.events && typeof al.events === 'object' ? al.events : {};
+    const wl = src.welcome && typeof src.welcome === 'object' ? src.welcome : {};
+    const tk = src.tickets && typeof src.tickets === 'object' ? src.tickets : {};
+    const normalizeHex = (val, fallback) => (
+        typeof val === 'string' && /^#[0-9a-fA-F]{6}$/.test(val.trim()) ? val.trim() : fallback
+    );
     const rawBotStatusText = typeof bs.text === 'string'
         ? bs.text
         : (bs.mode === 'custom' && typeof bs.customText === 'string' ? bs.customText : '');
@@ -281,7 +319,50 @@ function normalizeSettings(raw) {
         },
         announcementsHistory: Array.isArray(src.announcementsHistory)
             ? src.announcementsHistory.filter(item => item && item.channelId && item.messageId).slice(0, 15)
-            : []
+            : [],
+        welcome: {
+            enabled: typeof wl.enabled === 'boolean' ? wl.enabled : false,
+            channelEnabled: typeof wl.channelEnabled === 'boolean' ? wl.channelEnabled : false,
+            channelId: wl.channelId || null,
+            channelTitle: typeof wl.channelTitle === 'string' ? wl.channelTitle.slice(0, 256) : defaults.welcome.channelTitle,
+            channelDescription: typeof wl.channelDescription === 'string' ? wl.channelDescription.slice(0, 4000) : defaults.welcome.channelDescription,
+            channelColor: normalizeHex(wl.channelColor, defaults.welcome.channelColor),
+            channelShowAvatar: typeof wl.channelShowAvatar === 'boolean' ? wl.channelShowAvatar : true,
+            dmEnabled: typeof wl.dmEnabled === 'boolean' ? wl.dmEnabled : false,
+            dmTitle: typeof wl.dmTitle === 'string' ? wl.dmTitle.slice(0, 256) : defaults.welcome.dmTitle,
+            dmDescription: typeof wl.dmDescription === 'string' ? wl.dmDescription.slice(0, 4000) : defaults.welcome.dmDescription,
+            dmColor: normalizeHex(wl.dmColor, defaults.welcome.dmColor),
+            goodbyeEnabled: typeof wl.goodbyeEnabled === 'boolean' ? wl.goodbyeEnabled : false,
+            goodbyeChannelId: wl.goodbyeChannelId || null,
+            goodbyeTitle: typeof wl.goodbyeTitle === 'string' ? wl.goodbyeTitle.slice(0, 256) : defaults.welcome.goodbyeTitle,
+            goodbyeDescription: typeof wl.goodbyeDescription === 'string' ? wl.goodbyeDescription.slice(0, 4000) : defaults.welcome.goodbyeDescription,
+            goodbyeColor: normalizeHex(wl.goodbyeColor, defaults.welcome.goodbyeColor),
+            ignoreBots: typeof wl.ignoreBots === 'boolean' ? wl.ignoreBots : true
+        },
+        tickets: {
+            enabled: typeof tk.enabled === 'boolean' ? tk.enabled : false,
+            categoryId: tk.categoryId || null,
+            logChannelId: tk.logChannelId || null,
+            supportRoleIds: uniqueStringIds(tk.supportRoleIds),
+            panelChannelId: tk.panelChannelId || null,
+            panelMessageId: tk.panelMessageId || null,
+            panelTitle: typeof tk.panelTitle === 'string' && tk.panelTitle.trim()
+                ? tk.panelTitle.trim().slice(0, 256)
+                : defaults.tickets.panelTitle,
+            panelDescription: typeof tk.panelDescription === 'string' && tk.panelDescription.trim()
+                ? tk.panelDescription.trim().slice(0, 4000)
+                : defaults.tickets.panelDescription,
+            panelColor: normalizeHex(tk.panelColor, defaults.tickets.panelColor),
+            panelButtonLabel: typeof tk.panelButtonLabel === 'string' && tk.panelButtonLabel.trim()
+                ? tk.panelButtonLabel.trim().slice(0, 80)
+                : defaults.tickets.panelButtonLabel,
+            ticketCounter: typeof tk.ticketCounter === 'number' && Number.isFinite(tk.ticketCounter) && tk.ticketCounter >= 0
+                ? Math.round(tk.ticketCounter)
+                : 0,
+            openTickets: tk.openTickets && typeof tk.openTickets === 'object' && !Array.isArray(tk.openTickets)
+                ? tk.openTickets
+                : {}
+        }
     };
 }
 
@@ -594,6 +675,52 @@ function setAnnouncementsHistory(entries) {
     }).announcementsHistory;
 }
 
+function getWelcomeSettings() {
+    return loadSettings().welcome;
+}
+
+function updateWelcomeSettings(patch) {
+    return updateSettings(s => {
+        s.welcome = { ...s.welcome, ...patch };
+    }).welcome;
+}
+
+function getTicketsSettings() {
+    return loadSettings().tickets;
+}
+
+function updateTicketsSettings(patch) {
+    return updateSettings(s => {
+        s.tickets = { ...s.tickets, ...patch };
+    }).tickets;
+}
+
+function getOpenTicket(channelId) {
+    return loadSettings().tickets.openTickets[channelId] || null;
+}
+
+function setOpenTicket(channelId, ticket) {
+    updateSettings(s => {
+        s.tickets.openTickets[channelId] = ticket;
+    });
+    return ticket;
+}
+
+function deleteOpenTicket(channelId) {
+    let existed = false;
+    updateSettings(s => {
+        if (s.tickets.openTickets[channelId]) {
+            existed = true;
+            delete s.tickets.openTickets[channelId];
+        }
+    });
+    return existed;
+}
+
+function getAllOpenTickets() {
+    return loadSettings().tickets.openTickets || {};
+}
+
 module.exports = {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -631,5 +758,13 @@ module.exports = {
     removeAnnouncementHistory,
     removeAnnouncementsByIds,
     removeAnnouncementsByChannel,
-    setAnnouncementsHistory
+    setAnnouncementsHistory,
+    getWelcomeSettings,
+    updateWelcomeSettings,
+    getTicketsSettings,
+    updateTicketsSettings,
+    getOpenTicket,
+    setOpenTicket,
+    deleteOpenTicket,
+    getAllOpenTickets
 };
