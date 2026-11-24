@@ -47,6 +47,7 @@ function getDefaultSettings() {
     return {
         dashboardRoleIds: [],
         allowedChannelId: null,
+        allowedChannelBypassRoleIds: [],
         unrankedRoleId: UNRANKED_ROLE_ID,
         rankRoles: RANK_ROLES.map(r => ({ ...r })),
         tempVoice: {
@@ -262,6 +263,7 @@ function normalizeSettings(raw) {
     return {
         dashboardRoleIds,
         allowedChannelId: src.allowedChannelId || null,
+        allowedChannelBypassRoleIds: uniqueStringIds(src.allowedChannelBypassRoleIds),
         unrankedRoleId: src.unrankedRoleId || defaults.unrankedRoleId,
         rankRoles: normalizeRankRoles(src.rankRoles),
         tempVoice: {

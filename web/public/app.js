@@ -13,6 +13,7 @@ const state = {
     jrDraftMemberRoleIds: [],
     jrDraftBotRoleIds: [],
     dashboardDraftRoleIds: [],
+    allowedChannelBypassDraftRoleIds: [],
     ticketDraftSupportRoleIds: [],
     openTickets: [],
     logs: [],
@@ -143,6 +144,7 @@ function syncDraftsFromSettings() {
     state.jrDraftMemberRoleIds = [...(s.joinRoles?.memberRoleIds || [])];
     state.jrDraftBotRoleIds = [...(s.joinRoles?.botRoleIds || [])];
     state.dashboardDraftRoleIds = [...(s.dashboardRoleIds || [])];
+    state.allowedChannelBypassDraftRoleIds = [...(s.allowedChannelBypassRoleIds || [])];
     state.ticketDraftSupportRoleIds = [...(s.tickets?.supportRoleIds || [])];
 }
 
@@ -3209,6 +3211,45 @@ function attachDashboardRoleRowListeners() {
     });
 }
 
+function readAllowedChannelBypassRolesDraftFromDom() {
+    const selects = document.querySelectorAll('#set-bypass-roles-list .set-bypass-role-select');
+    if (document.getElementById('set-bypass-roles-list')) {
+        state.allowedChannelBypassDraftRoleIds = [...selects].map(s => s.value);
+    }
+}
+
+function buildAllowedChannelBypassRoleRowsHtml(roleIds) {
+    if (roleIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-2">Žiadna rola.</p>`;
+    }
+
+    return roleIds.map((roleId, idx) => `
+        <div class="flex items-center gap-2">
+            <select class="set-bypass-role-select input-field flex-1">
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber rolu —' })}
+            </select>
+            <button type="button" data-set-remove-bypass-role="${idx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function attachAllowedChannelBypassRoleRowListeners() {
+    document.querySelectorAll('[data-set-remove-bypass-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readAllowedChannelBypassRolesDraftFromDom();
+            state.allowedChannelBypassDraftRoleIds.splice(Number(btn.dataset.setRemoveBypassRole), 1);
+            document.getElementById('set-bypass-roles-list').innerHTML = buildAllowedChannelBypassRoleRowsHtml(
+                state.allowedChannelBypassDraftRoleIds
+            );
+            attachAllowedChannelBypassRoleRowListeners();
+            setDirty(true, 'general-settings-form');
+            refreshIcons();
+        });
+    });
+}
+
 function renderSettings() {
     const container = document.getElementById('section-settings');
     const s = state.settings || {};
@@ -3245,6 +3286,13 @@ function renderSettings() {
                         <select id="set-allowed-channel" class="input-field">
                             ${buildTextChannelOptions(s.allowedChannelId, { allowNone: true, noneLabel: '— Všetky kanály —' })}
                         </select>
+                        <div id="set-bypass-roles-wrap" class="pt-2 border-t border-slate-800/80 space-y-2.5 ${s.allowedChannelId ? '' : 'hidden'}">
+                            <div class="text-xs font-medium text-slate-400">Výnimky pre roly</div>
+                            <div id="set-bypass-roles-list" class="space-y-2">
+                                ${buildAllowedChannelBypassRoleRowsHtml(state.allowedChannelBypassDraftRoleIds)}
+                            </div>
+                            ${renderAddButtonHtml('set-add-bypass-role-btn', 'Pridať rolu')}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3400,7 +3448,26 @@ function renderSettings() {
         refreshIcons();
     });
 
+    document.getElementById('set-allowed-channel')?.addEventListener('change', e => {
+        const wrap = document.getElementById('set-bypass-roles-wrap');
+        if (wrap) {
+            wrap.classList.toggle('hidden', !e.target.value);
+        }
+    });
+
+    document.getElementById('set-add-bypass-role-btn')?.addEventListener('click', () => {
+        readAllowedChannelBypassRolesDraftFromDom();
+        state.allowedChannelBypassDraftRoleIds.push('');
+        document.getElementById('set-bypass-roles-list').innerHTML = buildAllowedChannelBypassRoleRowsHtml(
+            state.allowedChannelBypassDraftRoleIds
+        );
+        attachAllowedChannelBypassRoleRowListeners();
+        setDirty(true, 'general-settings-form');
+        refreshIcons();
+    });
+
     attachDashboardRoleRowListeners();
+    attachAllowedChannelBypassRoleRowListeners();
     attachRankRowDeleteListeners();
 
     document.getElementById('add-rank-row-btn').addEventListener('click', () => {
@@ -3418,6 +3485,7 @@ function renderSettings() {
         e.preventDefault();
         const btn = document.getElementById('settings-save-btn');
         readDashboardRolesDraftFromDom();
+        readAllowedChannelBypassRolesDraftFromDom();
 
         const rankRows = [...document.querySelectorAll('#rank-roles-tbody .rank-row')].map(row => ({
             color: row.querySelector('.rank-color-input').value,
@@ -3432,6 +3500,7 @@ function renderSettings() {
                 body: JSON.stringify({
                     dashboardRoleIds: state.dashboardDraftRoleIds.filter(Boolean),
                     allowedChannelId: document.getElementById('set-allowed-channel').value || null,
+                    allowedChannelBypassRoleIds: state.allowedChannelBypassDraftRoleIds.filter(Boolean),
                     unrankedRoleId: document.getElementById('set-unranked-role').value,
                     rankRoles: rankRows,
                     botStatus: {

@@ -829,6 +829,7 @@ function startWebServer(client) {
             : (body.dashboardRoleId ? [body.dashboardRoleId] : []);
         const dashboardRoleIds = uniqueStringIds(rawDashboardRoleIds);
         const allowedChannelId = body.allowedChannelId ? String(body.allowedChannelId).trim() : null;
+        const allowedChannelBypassRoleIds = uniqueStringIds(body.allowedChannelBypassRoleIds);
         const unrankedRoleId = body.unrankedRoleId ? String(body.unrankedRoleId).trim() : null;
         const rankRolesInput = Array.isArray(body.rankRoles) ? body.rankRoles : null;
 
@@ -839,6 +840,16 @@ function startWebServer(client) {
             const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
                 return res.status(400).json({ error: 'Vybraná rola pre prístup do dashboardu neexistuje.' });
+            }
+        }
+
+        for (const roleId of allowedChannelBypassRoleIds) {
+            if (roleId === guild.id) {
+                return res.status(400).json({ error: 'Ako výnimku pre kanál príkazov nie je možné nastaviť `@everyone`.' });
+            }
+            const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+            if (!role) {
+                return res.status(400).json({ error: 'Vybraná rola s výnimkou pre kanál príkazov neexistuje.' });
             }
         }
 
@@ -892,6 +903,7 @@ function startWebServer(client) {
         const updated = updateSettings(s => {
             s.dashboardRoleIds = dashboardRoleIds;
             s.allowedChannelId = allowedChannelId;
+            s.allowedChannelBypassRoleIds = allowedChannelBypassRoleIds;
             s.unrankedRoleId = unrankedRoleId;
             s.rankRoles = validatedRanks;
             if (nextBotStatus) {

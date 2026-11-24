@@ -42,12 +42,20 @@ module.exports = {
         const command = interaction.client.commands.get(interaction.commandName);
         if (!command) return;
 
-        const { allowedChannelId } = loadSettings();
+        const { allowedChannelId, allowedChannelBypassRoleIds = [] } = loadSettings();
         if (allowedChannelId && interaction.channelId !== allowedChannelId) {
-            return interaction.reply({
-                content: `Príkazy bota je možné používať iba v kanáli <#${allowedChannelId}>.`,
-                ephemeral: true
-            });
+            const memberRoles = interaction.member?.roles;
+            const hasBypassRole = Array.isArray(allowedChannelBypassRoleIds) && allowedChannelBypassRoleIds.length > 0 && (
+                memberRoles?.cache
+                    ? allowedChannelBypassRoleIds.some(roleId => memberRoles.cache.has(roleId))
+                    : Array.isArray(memberRoles) && allowedChannelBypassRoleIds.some(roleId => memberRoles.includes(roleId))
+            );
+            if (!hasBypassRole) {
+                return interaction.reply({
+                    content: `Príkazy bota je možné používať iba v kanáli <#${allowedChannelId}>.`,
+                    ephemeral: true
+                });
+            }
         }
 
         try {

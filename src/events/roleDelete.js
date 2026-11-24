@@ -8,6 +8,7 @@ module.exports = {
 
         const current = loadSettings();
         const hasDashboardRole = (current.dashboardRoleIds || []).includes(role.id);
+        const hasAllowedChannelBypassRole = (current.allowedChannelBypassRoleIds || []).includes(role.id);
         const hasMemberRole = (current.joinRoles?.memberRoleIds || []).includes(role.id);
         const hasBotRole = (current.joinRoles?.botRoleIds || []).includes(role.id);
         const hasTempVoiceLockRole = (current.tempVoice?.setups || []).some(
@@ -18,6 +19,7 @@ module.exports = {
 
         const needsUpdate =
             hasDashboardRole ||
+            hasAllowedChannelBypassRole ||
             current.patchBot?.roleId === role.id ||
             hasMemberRole ||
             hasBotRole ||
@@ -30,6 +32,10 @@ module.exports = {
             if (hasDashboardRole) {
                 settings.dashboardRoleIds = (settings.dashboardRoleIds || []).filter(id => id !== role.id);
                 console.warn(`Rola pre prístup do dashboardu (${role.id}) bola zmazaná.`);
+            }
+            if (hasAllowedChannelBypassRole) {
+                settings.allowedChannelBypassRoleIds = (settings.allowedChannelBypassRoleIds || []).filter(id => id !== role.id);
+                console.warn(`Rola s výnimkou pre kanál príkazov (${role.id}) bola zmazaná.`);
             }
             if (settings.patchBot.roleId === role.id) {
                 settings.patchBot.roleId = null;
