@@ -51,7 +51,14 @@ async function registerCommands(client) {
     return client.application.commands.set(commands);
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function syncAdminCommandPermissions(client, guild, registeredCommands, userAccessToken) {
+    if (!registeredCommands) {
+        return { synced: false, reason: 'register_failed' };
+    }
     if (!guild || !client?.user?.id || !userAccessToken) {
         return { synced: false, reason: 'no_token' };
     }
@@ -60,36 +67,95 @@ async function syncAdminCommandPermissions(client, guild, registeredCommands, us
     const permissions = [
         { id: guild.id, type: 1, permission: false },
         { id: OWNER_ID, type: 2, permission: true },
-        ...(mod.adminRoleIds || []).slice(0, 95).map(roleId => ({
-            id: roleId,
-            type: 1,
-            permission: true
-        }))
+        ...(mod.adminRoleIds || [])
+            .filter(id => id && id !== guild.id)
+            .slice(0, 95)
+            .map(roleId => ({
+                id: roleId,
+                type: 1,
+                permission: true
+            }))
     ];
 
-    const list = registeredCommands ? [...registeredCommands.values()] : [];
+    const list = [...registeredCommands.values()];
     const adminCmds = list.filter(cmd => client.commands.get(cmd.name)?.adminOnly);
     let syncedCount = 0;
 
     for (const cmd of adminCmds) {
-        try {
-            const res = await fetch(
-                `https://discord.com/api/v10/applications/${client.user.id}/guilds/${guild.id}/commands/${cmd.id}/permissions`,
-                {
+        const url = `https://discord.com/api/v10/applications/${client.user.id}/guilds/${guild.id}/commands/${cmd.id}/permissions`;
+        let done = false;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                const res = await fetch(url, {
                     method: 'PUT',
                     headers: {
                         Authorization: `Bearer ${userAccessToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ permissions })
+                });
+
+                if (res.status === 429) {
+                    const rlData = await res.json().catch(() => ({}));
+                    const retryHeader = Number(res.headers.get('retry-after'));
+                    const retrySec = Number(rlData.retry_after) || (Number.isFinite(retryHeader) ? retryHeader : 1);
+                    await sleep(Math.ceil(retrySec * 1000) + 200);
+                    continue;
                 }
-            );
-            if (!res.ok) {
-                return { synced: false, reason: 'api_error', status: res.status };
+
+                if (res.ok) {
+                    syncedCount++;
+                    const remaining = res.headers.get('x-ratelimit-remaining');
+                    if (remaining === '0') {
+                        const resetAfter = Number(res.headers.get('x-ratelimit-reset-after')) || 1;
+                        await sleep(Math.ceil(resetAfter * 1000) + 150);
+                    }
+                    done = true;
+                    break;
+                }
+
+                const errText = await res.text().catch(() => '');
+                let errBody = null;
+                try {
+                    errBody = JSON.parse(errText);
+                } catch {
+                    errBody = null;
+                }
+
+                if (errBody?.code === 10063 && attempt < 2) {
+                    await sleep(1200);
+                    continue;
+                }
+
+                console.error(`[Moderation] Sync oprávnení zlyhal pre /${cmd.name}:`, res.status, errBody || errText);
+                return {
+                    synced: false,
+                    reason: 'api_error',
+                    status: res.status,
+                    code: errBody?.code || null,
+                    detail: errBody?.message || errText || ''
+                };
+            } catch (err) {
+                console.error(`[Moderation] Sync oprávnení sieťová chyba pre /${cmd.name}:`, err);
+                return {
+                    synced: false,
+                    reason: 'api_error',
+                    status: 0,
+                    code: null,
+                    detail: err?.message || ''
+                };
             }
-            syncedCount++;
-        } catch {
-            return { synced: false, reason: 'api_error', status: 0 };
+        }
+
+        if (!done) {
+            return {
+                synced: false,
+                reason: 'api_error',
+                status: 429,
+                code: null,
+                detail: 'Rate limit'
+            };
         }
     }
 

@@ -533,8 +533,7 @@ function startWebServer(client) {
             redirect_uri: oauth.redirectUri,
             response_type: 'code',
             scope: 'identify applications.commands.permissions.update',
-            state,
-            prompt: 'none'
+            state
         });
 
         return res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
@@ -598,8 +597,10 @@ function startWebServer(client) {
 
             if (tokenData.access_token) {
                 const expiresInSec = Number(tokenData.expires_in) || 604800;
+                const scopes = String(tokenData.scope || '').split(/\s+/).filter(Boolean);
                 userOAuthTokens.set(discordUser.id, {
                     accessToken: tokenData.access_token,
+                    scopes,
                     expiresAt: Date.now() + expiresInSec * 1000
                 });
             }
@@ -2040,12 +2041,28 @@ function startWebServer(client) {
         });
 
         const tokenEntry = userOAuthTokens.get(sessionUser.id);
-        const validToken = tokenEntry && tokenEntry.expiresAt > Date.now() ? tokenEntry.accessToken : null;
-        const commandSync = await syncAdminCommandPermissions(client, guild, registered, validToken);
+        let commandSync;
+        if (!tokenEntry || tokenEntry.expiresAt <= Date.now()) {
+            commandSync = { synced: false, reason: 'no_token' };
+        } else if (!Array.isArray(tokenEntry.scopes) || !tokenEntry.scopes.includes('applications.commands.permissions.update')) {
+            commandSync = { synced: false, reason: 'missing_scope' };
+        } else {
+            commandSync = await syncAdminCommandPermissions(client, guild, registered, tokenEntry.accessToken);
+        }
 
         const warnings = [];
         if (enabled && !commandSync.synced) {
-            warnings.push('Oprávnenia slash príkazov v Discorde sa nezosynchronizovali (odhlás sa a znova prihlás cez Discord).');
+            if (commandSync.reason === 'no_token' || commandSync.reason === 'missing_scope' || commandSync.status === 401) {
+                warnings.push('Oprávnenia príkazov sa nezosynchronizovali — odhlás sa a znova prihlás cez Discord (potvrď nové oprávnenie).');
+            } else if (commandSync.reason === 'register_failed') {
+                warnings.push('Nepodarilo sa zaregistrovať slash príkazy v Discorde.');
+            } else if (commandSync.status === 403) {
+                warnings.push('Discord zamietol úpravu oprávnení (403) — prihlásený účet potrebuje práva Manage Server a Manage Roles.');
+            } else {
+                const codePart = commandSync.code ? `, kód ${commandSync.code}` : '';
+                const detailPart = commandSync.detail ? `: ${commandSync.detail}` : '';
+                warnings.push(`Synchronizácia oprávnení zlyhala (HTTP ${commandSync.status}${codePart}${detailPart}).`);
+            }
         }
 
         logDashboardAudit(req, `Moderácia ${enabled ? 'zapnutá' : 'vypnutá'}.`);
