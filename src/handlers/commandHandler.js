@@ -81,7 +81,8 @@ async function syncAdminCommandPermissions(client, guild, registeredCommands, us
     const adminCmds = list.filter(cmd => client.commands.get(cmd.name)?.adminOnly);
     let syncedCount = 0;
 
-    for (const cmd of adminCmds) {
+    for (let i = 0; i < adminCmds.length; i++) {
+        const cmd = adminCmds[i];
         const url = `https://discord.com/api/v10/applications/${client.user.id}/guilds/${guild.id}/commands/${cmd.id}/permissions`;
         let done = false;
 
@@ -93,23 +94,37 @@ async function syncAdminCommandPermissions(client, guild, registeredCommands, us
                         Authorization: `Bearer ${userAccessToken}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ permissions })
+                    body: JSON.stringify({ permissions }),
+                    signal: AbortSignal.timeout(10000)
                 });
 
                 if (res.status === 429) {
                     const rlData = await res.json().catch(() => ({}));
                     const retryHeader = Number(res.headers.get('retry-after'));
                     const retrySec = Number(rlData.retry_after) || (Number.isFinite(retryHeader) ? retryHeader : 1);
-                    await sleep(Math.ceil(retrySec * 1000) + 200);
+                    const waitMs = Math.ceil(retrySec * 1000) + 200;
+                    if (waitMs > 15000) {
+                        return {
+                            synced: false,
+                            reason: 'api_error',
+                            status: 429,
+                            code: null,
+                            detail: `Rate limit (${Math.ceil(waitMs / 1000)} s)`
+                        };
+                    }
+                    await sleep(waitMs);
                     continue;
                 }
 
                 if (res.ok) {
                     syncedCount++;
                     const remaining = res.headers.get('x-ratelimit-remaining');
-                    if (remaining === '0') {
+                    if (remaining === '0' && i < adminCmds.length - 1) {
                         const resetAfter = Number(res.headers.get('x-ratelimit-reset-after')) || 1;
-                        await sleep(Math.ceil(resetAfter * 1000) + 150);
+                        const waitMs = Math.ceil(resetAfter * 1000) + 150;
+                        if (waitMs <= 15000) {
+                            await sleep(waitMs);
+                        }
                     }
                     done = true;
                     break;

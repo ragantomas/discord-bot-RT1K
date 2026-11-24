@@ -4026,7 +4026,7 @@ function buildModEscalationRulesHtml(rules) {
         return `
             <div class="mod-ae-row grid grid-cols-12 gap-2 items-center">
                 <div class="col-span-3">
-                    <input type="number" min="1" max="50" required placeholder="Warny" class="mod-ae-threshold input-field text-xs" value="${Number(r.threshold ?? 3)}" />
+                    <input type="number" min="1" max="50" placeholder="Warny" class="mod-ae-threshold input-field text-xs" value="${Number(r.threshold ?? 3)}" />
                 </div>
                 <div class="${isTimeout ? 'col-span-5' : 'col-span-8'}">
                     <select class="mod-ae-action input-field text-xs">

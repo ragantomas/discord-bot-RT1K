@@ -86,6 +86,91 @@ const OAUTH_STATE_COOKIE = 'rt1k_oauth_state';
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const userOAuthTokens = new Map();
 
+let modSyncRunning = false;
+let modSyncQueued = null;
+
+async function runModerationCommandSyncJob({ client, guild, tokenEntry, actorName }) {
+    try {
+        const mod = getModerationSettings();
+        const registered = await registerCommands(client).catch(err => {
+            console.error('[Moderation] Registrácia príkazov zlyhala:', err);
+            return null;
+        });
+
+        if (!registered) {
+            addActivityLog({
+                level: 'warn',
+                category: 'moderation',
+                message: 'Nepodarilo sa zaregistrovať slash príkazy v Discorde.',
+                actor: actorName
+            });
+            return;
+        }
+
+        if (!mod?.enabled) {
+            addActivityLog({
+                level: 'info',
+                category: 'moderation',
+                message: 'Admin slash príkazy boli odstránené z Discordu.',
+                actor: actorName
+            });
+            return;
+        }
+
+        const hasToken = tokenEntry && tokenEntry.expiresAt > Date.now();
+        const hasScope = hasToken && Array.isArray(tokenEntry.scopes) && tokenEntry.scopes.includes('applications.commands.permissions.update');
+        if (!hasToken || !hasScope) {
+            return;
+        }
+
+        const syncRes = await syncAdminCommandPermissions(client, guild, registered, tokenEntry.accessToken);
+        if (syncRes.synced) {
+            addActivityLog({
+                level: 'success',
+                category: 'moderation',
+                message: `Oprávnenia admin príkazov zosynchronizované (${syncRes.count}).`,
+                actor: actorName
+            });
+        } else {
+            const codePart = syncRes.code ? `, kód ${syncRes.code}` : '';
+            const detailPart = syncRes.detail ? `: ${syncRes.detail}` : '';
+            const msg = syncRes.status === 403
+                ? 'Discord zamietol úpravu oprávnení (403) — účet potrebuje Manage Server a Manage Roles.'
+                : `Synchronizácia oprávnení zlyhala (HTTP ${syncRes.status}${codePart}${detailPart}).`;
+            console.error('[Moderation]', msg);
+            addActivityLog({
+                level: 'warn',
+                category: 'moderation',
+                message: msg,
+                actor: actorName
+            });
+        }
+    } catch (err) {
+        console.error('[Moderation] Neočakávaná chyba pri synchronizácii:', err);
+    }
+}
+
+function scheduleModerationCommandSync(client, guild, tokenEntry, actorName) {
+    if (modSyncRunning) {
+        modSyncQueued = { client, guild, tokenEntry, actorName };
+        return;
+    }
+
+    modSyncRunning = true;
+    (async () => {
+        try {
+            await runModerationCommandSyncJob({ client, guild, tokenEntry, actorName });
+            while (modSyncQueued) {
+                const next = modSyncQueued;
+                modSyncQueued = null;
+                await runModerationCommandSyncJob(next);
+            }
+        } finally {
+            modSyncRunning = false;
+        }
+    })();
+}
+
 function isSecureRequest(req) {
     const forwardedProto = String(req.headers['x-forwarded-proto'] || '')
         .split(',')[0]
@@ -2035,38 +2120,18 @@ function startWebServer(client) {
             }
         });
 
-        const registered = await registerCommands(client).catch(err => {
-            console.error('Chyba pri registrácii príkazov:', err);
-            return null;
-        });
-
         const tokenEntry = userOAuthTokens.get(sessionUser.id);
-        let commandSync;
-        if (!tokenEntry || tokenEntry.expiresAt <= Date.now()) {
-            commandSync = { synced: false, reason: 'no_token' };
-        } else if (!Array.isArray(tokenEntry.scopes) || !tokenEntry.scopes.includes('applications.commands.permissions.update')) {
-            commandSync = { synced: false, reason: 'missing_scope' };
-        } else {
-            commandSync = await syncAdminCommandPermissions(client, guild, registered, tokenEntry.accessToken);
-        }
+        const hasToken = tokenEntry && tokenEntry.expiresAt > Date.now();
+        const hasScope = hasToken && Array.isArray(tokenEntry.scopes) && tokenEntry.scopes.includes('applications.commands.permissions.update');
 
         const warnings = [];
-        if (enabled && !commandSync.synced) {
-            if (commandSync.reason === 'no_token' || commandSync.reason === 'missing_scope' || commandSync.status === 401) {
-                warnings.push('Oprávnenia príkazov sa nezosynchronizovali — odhlás sa a znova prihlás cez Discord (potvrď nové oprávnenie).');
-            } else if (commandSync.reason === 'register_failed') {
-                warnings.push('Nepodarilo sa zaregistrovať slash príkazy v Discorde.');
-            } else if (commandSync.status === 403) {
-                warnings.push('Discord zamietol úpravu oprávnení (403) — prihlásený účet potrebuje práva Manage Server a Manage Roles.');
-            } else {
-                const codePart = commandSync.code ? `, kód ${commandSync.code}` : '';
-                const detailPart = commandSync.detail ? `: ${commandSync.detail}` : '';
-                warnings.push(`Synchronizácia oprávnení zlyhala (HTTP ${commandSync.status}${codePart}${detailPart}).`);
-            }
+        if (enabled && (!hasToken || !hasScope)) {
+            warnings.push('Oprávnenia príkazov sa nezosynchronizovali — odhlás sa a znova prihlás cez Discord (potvrď nové oprávnenie).');
         }
 
+        scheduleModerationCommandSync(client, guild, tokenEntry, getActorName(req));
         logDashboardAudit(req, `Moderácia ${enabled ? 'zapnutá' : 'vypnutá'}.`);
-        return res.json({ ok: true, moderation: saved, commandSync, warnings });
+        return res.json({ ok: true, moderation: saved, warnings });
     });
 
     app.get('/api/moderation/warnings/:userId', (req, res) => {
