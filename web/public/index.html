@@ -151,6 +151,25 @@
         </div>
     </div>
 
+    <!-- Player Moderation Modal -->
+    <div id="player-mod-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="bg-bg-surface border border-slate-700/70 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <img id="pmod-avatar" src="" alt="" class="w-10 h-10 rounded-full object-cover bg-bg-elevated shrink-0" />
+                    <div class="min-w-0">
+                        <h3 id="pmod-name" class="text-lg font-semibold text-white truncate">Moderácia</h3>
+                        <p id="pmod-sub" class="text-xs text-slate-400 truncate"></p>
+                    </div>
+                </div>
+                <button id="pmod-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div id="pmod-body" class="space-y-4"></div>
+        </div>
+    </div>
+
     <!-- Loading Splash -->
     <div id="view-loading" class="min-h-screen flex items-center justify-center p-6">
         <div class="flex flex-col items-center gap-3 text-slate-400">
@@ -278,6 +297,10 @@
                     <i data-lucide="ticket" class="w-4 h-4 shrink-0"></i>
                     <span>Tickety</span>
                 </button>
+                <button data-section="moderation" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
+                    <i data-lucide="gavel" class="w-4 h-4 shrink-0"></i>
+                    <span>Moderácia</span>
+                </button>
 
                 <div class="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Systém</div>
                 <button data-section="settings" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
@@ -333,6 +356,7 @@
                 <section id="section-adminlog" class="hidden space-y-6"></section>
                 <section id="section-welcome" class="hidden space-y-6"></section>
                 <section id="section-tickets" class="hidden space-y-6"></section>
+                <section id="section-moderation" class="hidden space-y-6"></section>
                 <section id="section-settings" class="hidden space-y-6"></section>
             </main>
         </div>

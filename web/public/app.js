@@ -5,6 +5,7 @@ const state = {
     meta: null,
     players: [],
     playerSearch: '',
+    playerFilter: 'all',
     settings: null,
     steamApiKeyConfigured: false,
     tempRooms: [],
@@ -15,7 +16,10 @@ const state = {
     dashboardDraftRoleIds: [],
     allowedChannelBypassDraftRoleIds: [],
     ticketDraftSupportRoleIds: [],
+    modDraftAdminRoleIds: [],
+    modDraftEscalationRules: [],
     openTickets: [],
+    bans: [],
     logs: [],
     logCategory: 'all',
     logSearch: '',
@@ -38,6 +42,7 @@ const SECTION_TITLES = {
     adminlog: 'Admin Log',
     welcome: 'Uvítanie',
     tickets: 'Tickety',
+    moderation: 'Moderácia',
     settings: 'Nastavenia'
 };
 
@@ -146,6 +151,8 @@ function syncDraftsFromSettings() {
     state.dashboardDraftRoleIds = [...(s.dashboardRoleIds || [])];
     state.allowedChannelBypassDraftRoleIds = [...(s.allowedChannelBypassRoleIds || [])];
     state.ticketDraftSupportRoleIds = [...(s.tickets?.supportRoleIds || [])];
+    state.modDraftAdminRoleIds = [...(s.moderation?.adminRoleIds || [])];
+    state.modDraftEscalationRules = (s.moderation?.autoEscalation?.rules || []).map(r => ({ ...r }));
 }
 
 function showToast(message, type = 'success') {
@@ -391,7 +398,8 @@ function renderOverview() {
         { key: 'rankfeed', label: 'Rank-Up / Derank', enabled: ov.modules.rankFeedEnabled, icon: 'trending-up' },
         { key: 'adminlog', label: 'Admin Log', enabled: ov.modules.adminLogEnabled, icon: 'shield-check' },
         { key: 'welcome', label: 'Uvítanie', enabled: ov.modules.welcomeEnabled, icon: 'hand' },
-        { key: 'tickets', label: 'Tickety', enabled: ov.modules.ticketsEnabled, icon: 'ticket' }
+        { key: 'tickets', label: 'Tickety', enabled: ov.modules.ticketsEnabled, icon: 'ticket' },
+        { key: 'moderation', label: 'Moderácia', enabled: ov.modules.moderationEnabled, icon: 'gavel' }
     ];
 
     container.innerHTML = `
@@ -655,28 +663,44 @@ function openEloHistoryModal(player) {
 
 function renderPlayersTableRows() {
     const q = state.playerSearch.trim().toLowerCase();
-    const list = q
-        ? state.players.filter(p =>
+    const list = state.players.filter(p => {
+        if (state.playerFilter === 'linked' && !p.isLinked) return false;
+        if (state.playerFilter === 'unlinked' && p.isLinked) return false;
+        if (state.playerFilter === 'warned' && !(p.warningsCount > 0)) return false;
+
+        if (!q) return true;
+        return (
             p.displayName.toLowerCase().includes(q)
             || p.username.toLowerCase().includes(q)
-            || p.steamId.includes(q)
-        )
-        : state.players;
+            || p.userId.includes(q)
+            || (p.steamId && p.steamId.includes(q))
+        );
+    });
 
     if (list.length === 0) {
-        return `<tr><td colspan="4" class="px-4 py-8 text-center text-sm text-slate-400">Žiadni prepojení hráči nezodpovedajú hľadaniu.</td></tr>`;
+        return `<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-400">Žiadni hráči nezodpovedajú filtru.</td></tr>`;
     }
 
     return list.map(p => {
-        const eloBadge = typeof p.elo === 'number'
-            ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString('sk-SK')}</span>`
-            : `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">Unranked</span>`;
+        const eloBadge = !p.isLinked
+            ? `<span class="text-xs text-slate-500">Neprepojený</span>`
+            : (typeof p.elo === 'number'
+                ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString('sk-SK')}</span>`
+                : `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">Unranked</span>`);
 
-        const deltaPill = p.weeklyDelta > 0
-            ? `<span class="ml-1.5 text-[11px] font-semibold text-emerald-400" title="Zmena za posledných 7 dní">+${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
-            : p.weeklyDelta < 0
-                ? `<span class="ml-1.5 text-[11px] font-semibold text-red-400" title="Zmena za posledných 7 dní">${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
+        const deltaPill = p.isLinked && p.weeklyDelta > 0
+            ? `<span class="ml-1.5 text-[11px] font-semibold text-emerald-400" title="Zmena za 7 dní">+${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
+            : p.isLinked && p.weeklyDelta < 0
+                ? `<span class="ml-1.5 text-[11px] font-semibold text-red-400" title="Zmena za 7 dní">${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
                 : '';
+
+        const warnBadge = p.warningsCount > 0
+            ? `<button type="button" data-player-mod="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 transition">${p.warningsCount}</button>`
+            : `<span class="text-xs text-slate-500">0</span>`;
+
+        const timeoutBadge = p.isTimedOut
+            ? `<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-300 border border-red-500/30">🔇 Timeout</span>`
+            : '';
 
         return `
             <tr class="border-t border-slate-800/80 hover:bg-bg-elevated/50 transition">
@@ -684,37 +708,332 @@ function renderPlayersTableRows() {
                     <div class="flex items-center gap-3">
                         <img src="${escapeHtml(p.avatarUrl)}" alt="" class="w-9 h-9 rounded-full object-cover bg-bg-elevated" />
                         <div class="min-w-0">
-                            <div class="text-sm font-semibold text-white truncate">${escapeHtml(p.displayName)}</div>
+                            <div class="text-sm font-semibold text-white truncate flex items-center">${escapeHtml(p.displayName)}${timeoutBadge}</div>
                             <div class="text-xs text-slate-400 truncate">@${escapeHtml(p.username)}${p.inGuild ? '' : ' • mimo servera'}</div>
                         </div>
                     </div>
                 </td>
                 <td class="px-4 py-3 text-xs font-mono">
-                    <a href="${escapeHtml(p.leetifyUrl)}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:underline inline-flex items-center gap-1">
-                        <span>${escapeHtml(p.steamId)}</span>
-                        <i data-lucide="external-link" class="w-3 h-3"></i>
-                    </a>
+                    ${p.isLinked ? `
+                        <a href="${escapeHtml(p.leetifyUrl)}" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:underline inline-flex items-center gap-1">
+                            <span>${escapeHtml(p.steamId)}</span>
+                            <i data-lucide="external-link" class="w-3 h-3"></i>
+                        </a>
+                    ` : `<span class="text-slate-500">—</span>`}
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">${eloBadge}${deltaPill}</td>
+                <td class="px-4 py-3 whitespace-nowrap">${warnBadge}</td>
                 <td class="px-4 py-3 text-right">
-                    <div class="inline-flex items-center gap-2">
-                        <button type="button" data-player-history="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-sky-300 transition" title="Zobraziť históriu a graf Elo">
-                            <i data-lucide="line-chart" class="w-3.5 h-3.5"></i>
-                            <span>Graf</span>
-                        </button>
-                        <button type="button" data-player-update="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
-                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                            <span>Update</span>
-                        </button>
-                        <button type="button" data-player-unlink="${escapeHtml(p.userId)}" data-player-name="${escapeHtml(p.displayName)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition">
-                            <i data-lucide="unlink" class="w-3.5 h-3.5"></i>
-                            <span>Odpojiť</span>
+                    <div class="inline-flex items-center gap-2 flex-wrap justify-end">
+                        ${p.isLinked ? `
+                            <button type="button" data-player-history="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-sky-300 transition" title="Graf Elo">
+                                <i data-lucide="line-chart" class="w-3.5 h-3.5"></i>
+                                <span>Graf</span>
+                            </button>
+                            <button type="button" data-player-update="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                <span>Update</span>
+                            </button>
+                            <button type="button" data-player-unlink="${escapeHtml(p.userId)}" data-player-name="${escapeHtml(p.displayName)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition">
+                                <i data-lucide="unlink" class="w-3.5 h-3.5"></i>
+                                <span>Odpojiť</span>
+                            </button>
+                        ` : ''}
+                        <button type="button" data-player-mod="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-amber-300 transition">
+                            <i data-lucide="gavel" class="w-3.5 h-3.5"></i>
+                            <span>Moderácia</span>
                         </button>
                     </div>
                 </td>
             </tr>
         `;
     }).join('');
+}
+
+async function openPlayerModModal(userId) {
+    const modal = document.getElementById('player-mod-modal');
+    const avatarEl = document.getElementById('pmod-avatar');
+    const nameEl = document.getElementById('pmod-name');
+    const subEl = document.getElementById('pmod-sub');
+    const bodyEl = document.getElementById('pmod-body');
+    const closeBtn = document.getElementById('pmod-close');
+
+    const getPlayer = () => (state.players || []).find(p => p.userId === userId);
+    const player = getPlayer();
+    if (!modal || !player) return;
+
+    function close() {
+        modal.classList.add('hidden');
+        closeBtn?.removeEventListener('click', close);
+        modal.removeEventListener('click', onBackdrop);
+    }
+    function onBackdrop(e) {
+        if (e.target === modal) close();
+    }
+
+    closeBtn?.removeEventListener('click', close);
+    modal.removeEventListener('click', onBackdrop);
+    closeBtn?.addEventListener('click', close);
+    modal.addEventListener('click', onBackdrop);
+
+    avatarEl.src = player.avatarUrl;
+    nameEl.textContent = player.displayName;
+    subEl.textContent = `@${player.username} • ${player.userId}`;
+    bodyEl.innerHTML = `<div class="py-8 text-center text-sm text-slate-400">Načítavam...</div>`;
+    modal.classList.remove('hidden');
+
+    let warnings = [];
+    try {
+        const res = await apiFetch(`/api/moderation/warnings/${encodeURIComponent(userId)}`);
+        warnings = res.warnings || [];
+    } catch (err) {
+        bodyEl.innerHTML = `<div class="p-4 rounded-xl bg-red-500/15 border border-red-500/30 text-sm text-red-300">${escapeHtml(err.message)}</div>`;
+        return;
+    }
+
+    const currentPlayer = getPlayer() || player;
+    const isOwnerTarget = Boolean(currentPlayer.isOwner);
+    const inGuild = Boolean(currentPlayer.inGuild);
+
+    bodyEl.innerHTML = `
+        ${currentPlayer.isTimedOut ? `
+            <div class="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between gap-3">
+                <div class="text-xs text-red-200">
+                    <strong>Aktívny timeout</strong> do ${escapeHtml(new Date(currentPlayer.timeoutUntil).toLocaleString('sk-SK'))}
+                </div>
+                <button id="pmod-untimeout-btn" type="button" class="px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-white transition">
+                    Zrušiť timeout
+                </button>
+            </div>
+        ` : ''}
+
+        <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+                <div class="text-sm font-semibold text-white">Varovania (${warnings.length})</div>
+                ${warnings.length > 0 ? `
+                    <button id="pmod-clear-warns" type="button" class="px-3 py-1 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition">
+                        Vymazať všetky
+                    </button>
+                ` : ''}
+            </div>
+
+            ${warnings.length === 0 ? `
+                <p class="text-xs text-slate-400">Žiadne varovania.</p>
+            ` : `
+                <div class="rounded-xl border border-slate-800 divide-y divide-slate-800/80 max-h-52 overflow-y-auto bg-bg-base/50">
+                    ${[...warnings].reverse().map(w => `
+                        <div class="flex items-start justify-between gap-3 px-3.5 py-2.5 text-xs">
+                            <div class="min-w-0 flex-1 space-y-0.5">
+                                <div class="text-slate-200 font-medium break-words">
+                                    <span class="text-amber-300 font-semibold">#${w.id}</span> ${escapeHtml(w.reason)}
+                                </div>
+                                <div class="text-slate-400">
+                                    ${escapeHtml(w.moderatorTag)} • ${escapeHtml(new Date(w.createdAt).toLocaleString('sk-SK'))}
+                                </div>
+                            </div>
+                            <button type="button" data-pmod-del-warn="${w.id}" title="Zmazať" class="p-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            `}
+
+            ${!isOwnerTarget ? `
+                <form id="pmod-warn-form" class="flex items-center gap-2 pt-1">
+                    <input id="pmod-warn-reason" type="text" required maxlength="400" placeholder="Dôvod varovania..." class="input-field flex-1" />
+                    <button id="pmod-warn-submit" type="submit" class="px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-xs font-semibold transition shrink-0">
+                        Warn
+                    </button>
+                </form>
+            ` : ''}
+        </div>
+
+        ${isOwnerTarget ? `
+            <p class="text-xs text-slate-400 text-center">Majiteľa servera nie je možné moderovať.</p>
+        ` : `
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                ${inGuild ? `
+                    <form id="pmod-timeout-form" class="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2.5">
+                        <div class="text-xs font-semibold text-white">Timeout</div>
+                        <select id="pmod-timeout-duration" class="input-field text-xs">
+                            <option value="5">5 min</option>
+                            <option value="15">15 min</option>
+                            <option value="60" selected>1 hod</option>
+                            <option value="360">6 hod</option>
+                            <option value="1440">1 deň</option>
+                            <option value="10080">7 dní</option>
+                        </select>
+                        <input id="pmod-timeout-reason" type="text" maxlength="400" placeholder="Dôvod..." class="input-field text-xs" />
+                        <button type="submit" class="w-full px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-amber-200 text-xs font-semibold transition">
+                            Udeliť timeout
+                        </button>
+                    </form>
+
+                    <form id="pmod-kick-form" class="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2.5 flex flex-col justify-between">
+                        <div class="space-y-2.5">
+                            <div class="text-xs font-semibold text-white">Kick</div>
+                            <input id="pmod-kick-reason" type="text" maxlength="400" placeholder="Dôvod..." class="input-field text-xs" />
+                        </div>
+                        <button type="submit" class="w-full px-3 py-2 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/35 text-orange-200 text-xs font-semibold transition">
+                            Vyhodiť
+                        </button>
+                    </form>
+                ` : ''}
+
+                <form id="pmod-ban-form" class="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2.5 ${inGuild ? '' : 'md:col-span-3'}">
+                    <div class="text-xs font-semibold text-white">Ban</div>
+                    <select id="pmod-ban-delete" class="input-field text-xs">
+                        <option value="0">Nemazať správy</option>
+                        <option value="3600">Zmazať 1 hod</option>
+                        <option value="86400">Zmazať 24 hod</option>
+                        <option value="604800">Zmazať 7 dní</option>
+                    </select>
+                    <input id="pmod-ban-reason" type="text" maxlength="400" placeholder="Dôvod..." class="input-field text-xs" />
+                    <button type="submit" class="w-full px-3 py-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/35 text-red-300 text-xs font-semibold transition">
+                        Zabanovať
+                    </button>
+                </form>
+            </div>
+        `}
+    `;
+
+    refreshIcons();
+
+    document.getElementById('pmod-untimeout-btn')?.addEventListener('click', async e => {
+        const btn = e.currentTarget;
+        await setButtonLoading(btn, true, '...');
+        try {
+            await apiFetch('/api/moderation/timeout', {
+                method: 'POST',
+                body: JSON.stringify({ userId, durationMinutes: 0 })
+            });
+            showToast('Timeout zrušený.');
+            await refreshOverviewAndPlayers();
+            await openPlayerModModal(userId);
+        } catch (err) {
+            showToast(err.message, 'error');
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    document.getElementById('pmod-clear-warns')?.addEventListener('click', async e => {
+        const ok = await confirmAction({
+            title: 'Vymazať všetky varovania?',
+            message: `Vymažú sa všetky varovania hráča ${currentPlayer.displayName}.`,
+            confirmLabel: 'Vymazať'
+        });
+        if (!ok) return;
+        try {
+            await apiFetch(`/api/moderation/warnings/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+            showToast('Varovania vymazané.');
+            await refreshOverviewAndPlayers();
+            await openPlayerModModal(userId);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    bodyEl.querySelectorAll('[data-pmod-del-warn]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const wid = btn.dataset.pmodDelWarn;
+            try {
+                await apiFetch(`/api/moderation/warnings/${encodeURIComponent(userId)}/${encodeURIComponent(wid)}`, { method: 'DELETE' });
+                showToast(`Varovanie #${wid} zmazané.`);
+                await refreshOverviewAndPlayers();
+                await openPlayerModModal(userId);
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    });
+
+    document.getElementById('pmod-warn-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const reason = document.getElementById('pmod-warn-reason').value.trim();
+        const btn = document.getElementById('pmod-warn-submit');
+        if (!reason) return;
+        await setButtonLoading(btn, true, '...');
+        try {
+            const res = await apiFetch('/api/moderation/warn', {
+                method: 'POST',
+                body: JSON.stringify({ userId, reason })
+            });
+            showToast(res.escalation
+                ? `Varovanie #${res.warning.id} udelené + auto-eskalácia (${res.escalation.action}).`
+                : `Varovanie #${res.warning.id} udelené.`);
+            await refreshOverviewAndPlayers();
+            await openPlayerModModal(userId);
+        } catch (err) {
+            showToast(err.message, 'error');
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    document.getElementById('pmod-timeout-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const durationMinutes = Number(document.getElementById('pmod-timeout-duration').value);
+        const reason = document.getElementById('pmod-timeout-reason').value.trim();
+        const btn = e.currentTarget.querySelector('button[type="submit"]');
+        await setButtonLoading(btn, true, '...');
+        try {
+            const res = await apiFetch('/api/moderation/timeout', {
+                method: 'POST',
+                body: JSON.stringify({ userId, durationMinutes, reason })
+            });
+            showToast(`Timeout udelený (${res.durationLabel}).`);
+            await refreshOverviewAndPlayers();
+            await openPlayerModModal(userId);
+        } catch (err) {
+            showToast(err.message, 'error');
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    document.getElementById('pmod-kick-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const reason = document.getElementById('pmod-kick-reason').value.trim();
+        const ok = await confirmAction({
+            title: 'Vyhodiť hráča?',
+            message: `${currentPlayer.displayName} bude vyhodený zo servera.`,
+            confirmLabel: 'Vyhodiť'
+        });
+        if (!ok) return;
+        try {
+            await apiFetch('/api/moderation/kick', {
+                method: 'POST',
+                body: JSON.stringify({ userId, reason })
+            });
+            showToast(`Hráč ${currentPlayer.displayName} bol vyhodený.`);
+            close();
+            await refreshOverviewAndPlayers();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
+
+    document.getElementById('pmod-ban-form')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const reason = document.getElementById('pmod-ban-reason').value.trim();
+        const deleteMessageSeconds = Number(document.getElementById('pmod-ban-delete').value);
+        const ok = await confirmAction({
+            title: 'Zabanovať hráča?',
+            message: `${currentPlayer.displayName} dostane ban na serveri.`,
+            confirmLabel: 'Zabanovať'
+        });
+        if (!ok) return;
+        try {
+            await apiFetch('/api/moderation/ban', {
+                method: 'POST',
+                body: JSON.stringify({ userId, reason, deleteMessageSeconds })
+            });
+            showToast(`${currentPlayer.displayName} bol zabanovaný.`);
+            close();
+            await refreshOverviewAndPlayers();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    });
 }
 
 function attachPlayerTableListeners() {
@@ -727,6 +1046,12 @@ function attachPlayerTableListeners() {
             if (player) {
                 openEloHistoryModal(player);
             }
+        });
+    });
+
+    tbody.querySelectorAll('[data-player-mod]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            openPlayerModModal(btn.dataset.playerMod);
         });
     });
 
@@ -775,6 +1100,12 @@ function attachPlayerTableListeners() {
 function renderPlayers() {
     const container = document.getElementById('section-players');
     const climber = state.overview?.stats?.topClimber;
+    const filters = [
+        { id: 'all', label: 'Všetci' },
+        { id: 'linked', label: 'Prepojení' },
+        { id: 'unlinked', label: 'Neprepojení' },
+        { id: 'warned', label: 'Varovania' }
+    ];
 
     container.innerHTML = `
         ${climber ? `
@@ -823,14 +1154,23 @@ function renderPlayers() {
         </div>
 
         <div class="card overflow-hidden">
-            <div class="p-5 border-b border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <h3 id="players-count-heading" class="text-base font-semibold text-white">Hráči (${state.players.length})</h3>
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    <input id="players-search" type="text" placeholder="Hľadať..." class="input-field sm:w-64" value="${escapeHtml(state.playerSearch)}" />
-                    <button id="players-update-all" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-100 transition shrink-0">
-                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                        <span>Aktualizovať všetkých</span>
-                    </button>
+            <div class="p-5 border-b border-slate-800/90 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <h3 id="players-count-heading" class="text-base font-semibold text-white">Hráči (${state.players.length})</h3>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                        <input id="players-search" type="text" placeholder="Hľadať..." class="input-field sm:w-64" value="${escapeHtml(state.playerSearch)}" />
+                        <button id="players-update-all" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-sm font-medium text-slate-100 transition shrink-0">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                            <span>Aktualizovať všetkých</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    ${filters.map(f => `
+                        <button type="button" data-player-filter="${f.id}" class="px-3 py-1.5 rounded-xl text-xs font-medium border transition ${state.playerFilter === f.id ? 'bg-brand text-white border-brand' : 'bg-bg-elevated hover:bg-bg-hover text-slate-300 border-slate-700'}">
+                            ${escapeHtml(f.label)}
+                        </button>
+                    `).join('')}
                 </div>
             </div>
 
@@ -841,6 +1181,7 @@ function renderPlayers() {
                             <th class="px-4 py-3 font-medium">Hráč</th>
                             <th class="px-4 py-3 font-medium">Steam / Leetify</th>
                             <th class="px-4 py-3 font-medium">Elo</th>
+                            <th class="px-4 py-3 font-medium">Varovania</th>
                             <th class="px-4 py-3 font-medium text-right">Akcie</th>
                         </tr>
                     </thead>
@@ -926,6 +1267,13 @@ function renderPlayers() {
         } finally {
             await setButtonLoading(btn, false);
         }
+    });
+
+    container.querySelectorAll('[data-player-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.playerFilter = btn.dataset.playerFilter;
+            renderPlayers();
+        });
     });
 
     document.getElementById('players-search').addEventListener('input', e => {
@@ -1313,7 +1661,13 @@ function renderAnnouncements() {
 function buildLogsListHtml() {
     const q = state.logSearch.trim().toLowerCase();
     const list = (state.logs || []).filter(item => {
-        if (state.logCategory !== 'all' && item.category !== state.logCategory) return false;
+        if (state.logCategory !== 'all') {
+            if (state.logCategory === 'audit') {
+                if (item.category !== 'audit' && item.category !== 'dashboard') return false;
+            } else if (item.category !== state.logCategory) {
+                return false;
+            }
+        }
         if (q && !item.message.toLowerCase().includes(q) && !(item.actor || '').toLowerCase().includes(q)) return false;
         return true;
     });
@@ -1330,7 +1684,9 @@ function buildLogsListHtml() {
     };
 
     const categoryLabels = {
-        dashboard: 'Dashboard',
+        audit: 'Audit Log',
+        dashboard: 'Audit Log',
+        moderation: 'Moderácia',
         elo: 'CS2 Elo',
         tempvoice: 'TempVoice',
         patchbot: 'PatchBot',
@@ -1351,7 +1707,7 @@ function buildLogsListHtml() {
             </div>
             <div class="flex items-center gap-2 text-xs text-slate-400 shrink-0">
                 ${item.actor ? `<span class="px-2 py-0.5 rounded-md bg-bg-elevated border border-slate-800 text-slate-300">${escapeHtml(item.actor)}</span>` : ''}
-                <span>${escapeHtml(new Date(item.timestamp).toLocaleTimeString('sk-SK'))}</span>
+                <span>${escapeHtml(new Date(item.timestamp).toLocaleString('sk-SK'))}</span>
             </div>
         </div>
     `).join('');
@@ -1371,7 +1727,8 @@ function renderLogs() {
     const container = document.getElementById('section-logs');
     const categories = [
         { id: 'all', label: 'Všetko' },
-        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'audit', label: 'Audit Log' },
+        { id: 'moderation', label: 'Moderácia' },
         { id: 'elo', label: 'CS2 Elo' },
         { id: 'tempvoice', label: 'TempVoice' },
         { id: 'patchbot', label: 'PatchBot' },
@@ -3607,6 +3964,377 @@ function attachRankRowDeleteListeners() {
     });
 }
 
+// --- MODERÁCIA ---
+
+function readModAdminRolesDraftFromDom() {
+    const selects = document.querySelectorAll('#mod-admin-roles-list .mod-admin-role-select');
+    if (document.getElementById('mod-admin-roles-list')) {
+        state.modDraftAdminRoleIds = [...selects].map(s => s.value);
+    }
+}
+
+function buildModAdminRoleRowsHtml(roleIds) {
+    if (roleIds.length === 0) {
+        return `<p class="text-xs text-slate-400 py-2">Žiadna rola.</p>`;
+    }
+
+    return roleIds.map((roleId, idx) => `
+        <div class="flex items-center gap-2">
+            <select class="mod-admin-role-select input-field flex-1">
+                ${buildRoleOptions(roleId, { allowNone: true, noneLabel: '— Vyber rolu —' })}
+            </select>
+            <button type="button" data-mod-remove-role="${idx}" title="Odobrať rolu" class="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function attachModAdminRoleRowListeners() {
+    document.querySelectorAll('[data-mod-remove-role]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readModAdminRolesDraftFromDom();
+            state.modDraftAdminRoleIds.splice(Number(btn.dataset.modRemoveRole), 1);
+            document.getElementById('mod-admin-roles-list').innerHTML = buildModAdminRoleRowsHtml(
+                state.modDraftAdminRoleIds
+            );
+            attachModAdminRoleRowListeners();
+            setDirty(true, 'mod-form');
+            refreshIcons();
+        });
+    });
+}
+
+function readModEscalationRulesDraftFromDom() {
+    const rows = document.querySelectorAll('#mod-ae-rules-list .mod-ae-row');
+    if (document.getElementById('mod-ae-rules-list')) {
+        state.modDraftEscalationRules = [...rows].map(row => ({
+            threshold: Number(row.querySelector('.mod-ae-threshold').value),
+            action: row.querySelector('.mod-ae-action').value,
+            durationMinutes: Number(row.querySelector('.mod-ae-duration').value) || 60
+        }));
+    }
+}
+
+function buildModEscalationRulesHtml(rules) {
+    if (!Array.isArray(rules) || rules.length === 0) {
+        return `<p class="text-xs text-slate-400 py-1.5">Žiadne pravidlo.</p>`;
+    }
+
+    return rules.map((r, idx) => {
+        const isTimeout = r.action !== 'kick' && r.action !== 'ban';
+        return `
+            <div class="mod-ae-row grid grid-cols-12 gap-2 items-center">
+                <div class="col-span-3">
+                    <input type="number" min="1" max="50" required placeholder="Warny" class="mod-ae-threshold input-field text-xs" value="${Number(r.threshold ?? 3)}" />
+                </div>
+                <div class="${isTimeout ? 'col-span-5' : 'col-span-8'}">
+                    <select class="mod-ae-action input-field text-xs">
+                        <option value="timeout" ${isTimeout ? 'selected' : ''}>Timeout</option>
+                        <option value="kick" ${r.action === 'kick' ? 'selected' : ''}>Kick</option>
+                        <option value="ban" ${r.action === 'ban' ? 'selected' : ''}>Ban</option>
+                    </select>
+                </div>
+                <div class="col-span-3 mod-ae-duration-wrap ${isTimeout ? '' : 'hidden'}">
+                    <input type="number" min="1" max="40320" placeholder="Min" class="mod-ae-duration input-field text-xs" value="${Number(r.durationMinutes ?? 60)}" />
+                </div>
+                <div class="col-span-1 flex justify-end">
+                    <button type="button" data-mod-ae-remove="${idx}" title="Odobrať" class="p-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function attachModEscalationRuleListeners() {
+    document.querySelectorAll('#mod-ae-rules-list .mod-ae-action').forEach(sel => {
+        sel.addEventListener('change', () => {
+            readModEscalationRulesDraftFromDom();
+            document.getElementById('mod-ae-rules-list').innerHTML = buildModEscalationRulesHtml(
+                state.modDraftEscalationRules
+            );
+            attachModEscalationRuleListeners();
+            setDirty(true, 'mod-form');
+            refreshIcons();
+        });
+    });
+
+    document.querySelectorAll('[data-mod-ae-remove]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            readModEscalationRulesDraftFromDom();
+            state.modDraftEscalationRules.splice(Number(btn.dataset.modAeRemove), 1);
+            document.getElementById('mod-ae-rules-list').innerHTML = buildModEscalationRulesHtml(
+                state.modDraftEscalationRules
+            );
+            attachModEscalationRuleListeners();
+            setDirty(true, 'mod-form');
+            refreshIcons();
+        });
+    });
+}
+
+function buildBansListHtml() {
+    if (!Array.isArray(state.bans) || state.bans.length === 0) {
+        return `<p class="text-sm text-slate-400 py-4 text-center">Žiadni zabanovaní používatelia.</p>`;
+    }
+
+    return `
+        <div class="divide-y divide-slate-800/80 rounded-xl border border-slate-800 bg-bg-base/40">
+            ${state.bans.map(b => `
+                <div class="flex items-center justify-between gap-3 px-4 py-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <img src="${escapeHtml(b.avatarUrl)}" alt="" class="w-8 h-8 rounded-full object-cover bg-bg-elevated shrink-0" />
+                        <div class="min-w-0">
+                            <div class="text-sm font-medium text-white truncate">${escapeHtml(b.tag || b.username)}</div>
+                            <div class="text-xs text-slate-400 truncate">${escapeHtml(b.userId)}${b.reason ? ` • ${escapeHtml(b.reason)}` : ''}</div>
+                        </div>
+                    </div>
+                    <button type="button" data-mod-unban="${escapeHtml(b.userId)}" data-mod-unban-name="${escapeHtml(b.tag || b.username)}" class="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-xs font-medium text-emerald-300 transition shrink-0">
+                        Unban
+                    </button>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function attachBanListListeners() {
+    document.querySelectorAll('[data-mod-unban]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const userId = btn.dataset.modUnban;
+            const name = btn.dataset.modUnbanName;
+            const ok = await confirmAction({
+                title: 'Zrušiť ban?',
+                message: `Používateľ ${name} sa bude môcť vrátiť na server.`,
+                confirmLabel: 'Unban',
+                danger: false
+            });
+            if (!ok) return;
+
+            await setButtonLoading(btn, true, '...');
+            try {
+                await apiFetch(`/api/moderation/bans/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+                showToast(`Ban pre ${name} bol zrušený.`);
+                await refreshBansList();
+            } catch (err) {
+                showToast(err.message, 'error');
+                await setButtonLoading(btn, false);
+            }
+        });
+    });
+}
+
+async function refreshBansList() {
+    const wrap = document.getElementById('mod-bans-list');
+    if (!wrap) return;
+    try {
+        const res = await apiFetch('/api/moderation/bans');
+        state.bans = res.bans || [];
+        if (document.getElementById('mod-bans-list')) {
+            document.getElementById('mod-bans-list').innerHTML = buildBansListHtml();
+            attachBanListListeners();
+            refreshIcons();
+        }
+    } catch (err) {
+        if (document.getElementById('mod-bans-list')) {
+            document.getElementById('mod-bans-list').innerHTML = `<p class="text-xs text-red-300 py-3">${escapeHtml(err.message)}</p>`;
+        }
+    }
+}
+
+function renderModeration() {
+    const container = document.getElementById('section-moderation');
+    const mod = state.settings?.moderation || {};
+    const cmds = mod.commands || {};
+    const ae = mod.autoEscalation || {};
+
+    const commandRows = [
+        { id: 'mod-cmd-warn', key: 'warn', title: '⚠️ Varovania' },
+        { id: 'mod-cmd-timeout', key: 'timeout', title: '🔇 Timeout' },
+        { id: 'mod-cmd-kick', key: 'kick', title: '👢 Kick' },
+        { id: 'mod-cmd-ban', key: 'ban', title: '🔨 Ban / Unban' },
+        { id: 'mod-cmd-clear', key: 'clear', title: '🧹 Mazanie správ' },
+        { id: 'mod-cmd-lock', key: 'lock', title: '🔒 Zamykanie kanálov' },
+        { id: 'mod-cmd-slowmode', key: 'slowmode', title: '⏱️ Slowmode' }
+    ];
+
+    container.innerHTML = `
+        <div class="card p-6">
+            <h3 class="text-base font-semibold text-white mb-5 flex items-center gap-2">
+                <i data-lucide="gavel" class="w-4 h-4 text-amber-400"></i>
+                <span>Moderácia</span>
+            </h3>
+
+            <form id="mod-form" class="space-y-5">
+                <div class="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
+                    <div class="text-sm font-semibold text-white">Zapnúť Moderáciu</div>
+                    ${renderToggleSwitch('mod-enabled', mod.enabled)}
+                </div>
+
+                <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                    <div class="text-sm font-semibold text-white">Roly pre admin príkazy</div>
+                    <div id="mod-admin-roles-list" class="space-y-2">
+                        ${buildModAdminRoleRowsHtml(state.modDraftAdminRoleIds)}
+                    </div>
+                    ${renderAddButtonHtml('mod-add-admin-role-btn', 'Pridať rolu')}
+                    <p class="text-xs text-slate-500">Majiteľ bota má prístup vždy.</p>
+                </div>
+
+                <div class="space-y-2.5">
+                    <label class="text-xs font-medium text-slate-400 block">Príkazy</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        ${commandRows.map(c => `
+                            <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                                <div class="text-sm font-medium text-white">${escapeHtml(c.title)}</div>
+                                ${renderToggleSwitch(c.id, cmds[c.key] !== false)}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="space-y-2.5">
+                    <label class="text-xs font-medium text-slate-400 block">Správanie</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                            <div class="text-sm font-medium text-white">Poslať dôvod do DM</div>
+                            ${renderToggleSwitch('mod-dm-user', mod.dmUser !== false)}
+                        </div>
+                        <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                            <div class="text-sm font-medium text-white">Zapisovať do Admin Logu</div>
+                            ${renderToggleSwitch('mod-log-adminlog', mod.logToAdminLog !== false)}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between gap-4">
+                        <div class="text-sm font-semibold text-white">Auto-eskalácia</div>
+                        ${renderToggleSwitch('mod-ae-enabled', ae.enabled)}
+                    </div>
+
+                    <div id="mod-ae-wrap" class="space-y-2.5 ${ae.enabled ? '' : 'hidden'}">
+                        <div id="mod-ae-rules-list" class="space-y-2">
+                            ${buildModEscalationRulesHtml(state.modDraftEscalationRules)}
+                        </div>
+                        ${renderAddButtonHtml('mod-ae-add-btn', 'Pridať pravidlo')}
+                    </div>
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button id="mod-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
+                        <i data-lucide="save" class="w-4 h-4"></i>
+                        <span>Uložiť</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card p-6 space-y-4">
+            <div class="flex items-center justify-between gap-3">
+                <h3 class="text-base font-semibold text-white">Zabanovaní používatelia</h3>
+                <button id="mod-bans-refresh" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    <span>Obnoviť</span>
+                </button>
+            </div>
+            <div id="mod-bans-list">${buildBansListHtml()}</div>
+        </div>
+    `;
+
+    document.getElementById('mod-add-admin-role-btn').addEventListener('click', () => {
+        readModAdminRolesDraftFromDom();
+        state.modDraftAdminRoleIds.push('');
+        document.getElementById('mod-admin-roles-list').innerHTML = buildModAdminRoleRowsHtml(
+            state.modDraftAdminRoleIds
+        );
+        attachModAdminRoleRowListeners();
+        setDirty(true, 'mod-form');
+        refreshIcons();
+    });
+
+    document.getElementById('mod-ae-enabled').addEventListener('change', e => {
+        document.getElementById('mod-ae-wrap')?.classList.toggle('hidden', !e.target.checked);
+    });
+
+    document.getElementById('mod-ae-add-btn').addEventListener('click', () => {
+        readModEscalationRulesDraftFromDom();
+        const used = new Set(state.modDraftEscalationRules.map(r => r.threshold));
+        let nextThreshold = 3;
+        while (used.has(nextThreshold)) nextThreshold++;
+        state.modDraftEscalationRules.push({ threshold: nextThreshold, action: 'timeout', durationMinutes: 60 });
+        document.getElementById('mod-ae-rules-list').innerHTML = buildModEscalationRulesHtml(
+            state.modDraftEscalationRules
+        );
+        attachModEscalationRuleListeners();
+        setDirty(true, 'mod-form');
+        refreshIcons();
+    });
+
+    document.getElementById('mod-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        readModAdminRolesDraftFromDom();
+        readModEscalationRulesDraftFromDom();
+        const btn = document.getElementById('mod-save-btn');
+        await setButtonLoading(btn, true, 'Ukladám...');
+        try {
+            const res = await apiFetch('/api/settings/moderation', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    enabled: document.getElementById('mod-enabled').checked,
+                    adminRoleIds: state.modDraftAdminRoleIds.filter(Boolean),
+                    dmUser: document.getElementById('mod-dm-user').checked,
+                    logToAdminLog: document.getElementById('mod-log-adminlog').checked,
+                    commands: {
+                        warn: document.getElementById('mod-cmd-warn').checked,
+                        timeout: document.getElementById('mod-cmd-timeout').checked,
+                        kick: document.getElementById('mod-cmd-kick').checked,
+                        ban: document.getElementById('mod-cmd-ban').checked,
+                        clear: document.getElementById('mod-cmd-clear').checked,
+                        lock: document.getElementById('mod-cmd-lock').checked,
+                        slowmode: document.getElementById('mod-cmd-slowmode').checked
+                    },
+                    autoEscalation: {
+                        enabled: document.getElementById('mod-ae-enabled').checked,
+                        rules: state.modDraftEscalationRules
+                    }
+                })
+            });
+            state.settings.moderation = res.moderation;
+            syncDraftsFromSettings();
+            setDirty(false);
+            await refreshOverviewOnly();
+            renderModeration();
+            showToast('Nastavenia moderácie boli uložené.');
+            if (Array.isArray(res.warnings)) {
+                res.warnings.forEach(w => showToast(w, 'error'));
+            }
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    document.getElementById('mod-bans-refresh').addEventListener('click', async e => {
+        const btn = e.currentTarget;
+        await setButtonLoading(btn, true, '...');
+        try {
+            await refreshBansList();
+            showToast('Zoznam banov obnovený.', 'info');
+        } finally {
+            await setButtonLoading(btn, false);
+        }
+    });
+
+    attachModAdminRoleRowListeners();
+    attachModEscalationRuleListeners();
+    attachBanListListeners();
+    bindDirtyForm('mod-form');
+    refreshIcons();
+}
+
 // --- DATA REFRESH, LIVE POLLING & NAVIGATION ---
 
 function updateHeaderBotBadge(bot) {
@@ -3657,7 +4385,8 @@ function patchOverviewDom() {
         rankfeed: ov.modules.rankFeedEnabled,
         adminlog: ov.modules.adminLogEnabled,
         welcome: ov.modules.welcomeEnabled,
-        tickets: ov.modules.ticketsEnabled
+        tickets: ov.modules.ticketsEnabled,
+        moderation: ov.modules.moderationEnabled
     };
 
     Object.entries(moduleMap).forEach(([key, enabled]) => {
@@ -3849,6 +4578,7 @@ function renderActiveSection() {
         adminlog: renderAdminLog,
         welcome: renderWelcome,
         tickets: renderTickets,
+        moderation: renderModeration,
         settings: renderSettings
     };
     (map[state.activeSection] || renderOverview)();
@@ -3883,6 +4613,8 @@ function switchSection(section) {
     renderActiveSection();
     if (section === 'announcements') {
         refreshAnnouncementsHistory();
+    } else if (section === 'moderation') {
+        refreshBansList();
     }
     closeMobileSidebar();
     pollLiveUpdates();

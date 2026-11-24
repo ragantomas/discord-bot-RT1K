@@ -7,6 +7,13 @@ const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js')
 const { OWNER_ID, DB_FILE, SETTINGS_FILE } = require('../src/config');
 const { loadUsers, saveUsers, usersFileExists, normalizeEloHistory } = require('../src/storage/usersStore');
 const {
+    normalizeWarningsData,
+    loadWarnings,
+    saveWarnings,
+    getUserWarnings,
+    getAllWarningsByUser
+} = require('../src/storage/warningsStore');
+const {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
     loadSettings,
@@ -38,7 +45,9 @@ const {
     getTicketsSettings,
     updateTicketsSettings,
     getAllOpenTickets,
-    deleteOpenTicket
+    deleteOpenTicket,
+    getModerationSettings,
+    updateModerationSettings
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank, updateAllMemberRanks } = require('../src/services/ranks');
@@ -60,10 +69,22 @@ const { sendTestRankFeedMessage } = require('../src/services/rankFeed');
 const { sendTestAdminLogMessage } = require('../src/services/adminLog');
 const { sendTestWelcome } = require('../src/services/welcome');
 const { sendOrUpdateTicketPanel, closeTicketChannel } = require('../src/services/tickets');
+const { registerCommands, syncAdminCommandPermissions } = require('../src/handlers/commandHandler');
+const {
+    issueWarning,
+    removeWarning,
+    clearAllWarnings,
+    applyTimeout,
+    removeTimeout,
+    kickMember,
+    banMember,
+    unbanUser
+} = require('../src/services/moderation');
 
 const SESSION_COOKIE = 'rt1k_session';
 const OAUTH_STATE_COOKIE = 'rt1k_oauth_state';
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const userOAuthTokens = new Map();
 
 function isSecureRequest(req) {
     const forwardedProto = String(req.headers['x-forwarded-proto'] || '')
@@ -216,7 +237,8 @@ function buildOverviewPayload(client, guild) {
             rankFeedEnabled: Boolean(settings.rankFeed?.enabled && settings.rankFeed?.channelId),
             adminLogEnabled: Boolean(settings.adminLog?.enabled && settings.adminLog?.channelId),
             welcomeEnabled: wlActive,
-            ticketsEnabled: Boolean(settings.tickets?.enabled)
+            ticketsEnabled: Boolean(settings.tickets?.enabled),
+            moderationEnabled: Boolean(settings.moderation?.enabled)
         },
         viewAuditLogGranted: Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.ViewAuditLog)),
         steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim())
@@ -240,16 +262,42 @@ function computeWeeklyEloStats(data) {
 
 function buildPlayersPayload(guild) {
     const users = loadUsers();
-    return Object.entries(users)
-        .map(([userId, data]) => {
-            const member = guild.members.cache.get(userId);
-            const elo = typeof data.elo === 'number' ? data.elo : null;
+    const warningsByUser = getAllWarningsByUser();
+    const now = Date.now();
+    const memberMap = new Map();
+
+    for (const m of guild.members.cache.values()) {
+        if (!m || m.user?.bot) continue;
+        memberMap.set(m.id, m);
+    }
+
+    const allUserIds = new Set([
+        ...memberMap.keys(),
+        ...Object.keys(users),
+        ...Object.keys(warningsByUser)
+    ]);
+
+    return [...allUserIds]
+        .map(userId => {
+            const member = memberMap.get(userId) || null;
+            const data = users[userId] || null;
+            const isLinked = Boolean(data?.steamId);
+            const elo = isLinked && typeof data.elo === 'number' ? data.elo : null;
             const rankObj = elo !== null ? getRankForElo(elo) : null;
-            const { eloHistory, weeklyDelta, lastDelta } = computeWeeklyEloStats(data);
+            const { eloHistory, weeklyDelta, lastDelta } = data
+                ? computeWeeklyEloStats(data)
+                : { eloHistory: [], weeklyDelta: 0, lastDelta: 0 };
+
+            const timeoutUntil = member?.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > now
+                ? member.communicationDisabledUntilTimestamp
+                : null;
+            const userWarnings = warningsByUser[userId] || [];
 
             return {
                 userId,
-                steamId: data.steamId,
+                isLinked,
+                steamId: data?.steamId || null,
+                leetifyUrl: isLinked ? `https://leetify.com/app/profile/${data.steamId}` : null,
                 elo,
                 eloHistory,
                 weeklyDelta,
@@ -260,10 +308,21 @@ function buildPlayersPayload(guild) {
                 inGuild: Boolean(member),
                 avatarUrl: member?.displayAvatarURL({ size: 64 })
                     || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                leetifyUrl: `https://leetify.com/app/profile/${data.steamId}`
+                warningsCount: userWarnings.length,
+                isTimedOut: Boolean(timeoutUntil),
+                timeoutUntil,
+                isOwner: userId === OWNER_ID || userId === guild.ownerId
             };
         })
-        .sort((a, b) => (b.elo ?? -1) - (a.elo ?? -1));
+        .sort((a, b) => {
+            if (a.isLinked !== b.isLinked) return a.isLinked ? -1 : 1;
+            if (a.isLinked && b.isLinked) {
+                const diff = (b.elo ?? -1) - (a.elo ?? -1);
+                if (diff !== 0) return diff;
+            }
+            if (a.inGuild !== b.inGuild) return a.inGuild ? -1 : 1;
+            return a.displayName.localeCompare(b.displayName, 'sk');
+        });
 }
 
 function buildOpenTicketsPayload(guild) {
@@ -332,6 +391,15 @@ function getActorName(req) {
     return req.dashboardAuth?.member?.displayName
         || req.dashboardAuth?.sessionUser?.username
         || 'Dashboard';
+}
+
+function logDashboardAudit(req, message, level = 'info') {
+    addActivityLog({
+        level,
+        category: 'audit',
+        message,
+        actor: getActorName(req)
+    });
 }
 
 function isValidHttpUrl(str) {
@@ -464,7 +532,7 @@ function startWebServer(client) {
             client_id: oauth.clientId,
             redirect_uri: oauth.redirectUri,
             response_type: 'code',
-            scope: 'identify',
+            scope: 'identify applications.commands.permissions.update',
             state,
             prompt: 'none'
         });
@@ -528,6 +596,14 @@ function startWebServer(client) {
                 avatar: discordUser.avatar || null
             };
 
+            if (tokenData.access_token) {
+                const expiresInSec = Number(tokenData.expires_in) || 604800;
+                userOAuthTokens.set(discordUser.id, {
+                    accessToken: tokenData.access_token,
+                    expiresAt: Date.now() + expiresInSec * 1000
+                });
+            }
+
             res.cookie(SESSION_COOKIE, sessionPayload, getCookieOptions(req, SESSION_MAX_AGE_MS));
             return res.redirect('/');
         } catch (err) {
@@ -537,6 +613,10 @@ function startWebServer(client) {
     });
 
     app.post('/api/logout', (req, res) => {
+        const sessionUser = req.signedCookies?.[SESSION_COOKIE];
+        if (sessionUser?.id) {
+            userOAuthTokens.delete(sessionUser.id);
+        }
         res.clearCookie(SESSION_COOKIE);
         return res.json({ ok: true });
     });
@@ -750,6 +830,7 @@ function startWebServer(client) {
         users[userId] = { steamId, elo: result.elo };
         saveUsers(users);
         updateBotStatus(client);
+        logDashboardAudit(req, `Prepojený hráč ${member.displayName} (${steamId}).`, 'success');
 
         return res.json({
             ok: true,
@@ -779,6 +860,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
+        logDashboardAudit(req, `Aktualizovaný rank hráča ${member.displayName}.`);
         return res.json({ ok: true, elo: result.elo });
     });
 
@@ -787,6 +869,7 @@ function startWebServer(client) {
         if (summary.alreadyRunning) {
             return res.status(409).json({ error: 'Hromadná aktualizácia rankov práve prebieha.' });
         }
+        logDashboardAudit(req, `Hromadná aktualizácia rankov (${summary.updated}/${summary.total}).`);
         return res.json({ ok: true, ...summary });
     });
 
@@ -808,6 +891,7 @@ function startWebServer(client) {
             await removeRankRoles(member);
         }
 
+        logDashboardAudit(req, `Odpojený hráč ${member?.displayName || userId}.`, 'warn');
         return res.json({ ok: true });
     });
 
@@ -912,12 +996,7 @@ function startWebServer(client) {
         });
 
         updateBotStatus(client, { force: true });
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: 'Aktualizované všeobecné nastavenia, status bota a CS2 rank roly.',
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, 'Aktualizované všeobecné nastavenia, status bota a CS2 rank roly.');
 
         return res.json({ ok: true, settings: updated });
     });
@@ -1065,6 +1144,7 @@ function startWebServer(client) {
             setups: normalizedSetups
         });
 
+        logDashboardAudit(req, `Upravené nastavenia TempVoice (${moduleEnabled ? 'zapnuté' : 'vypnuté'}).`);
         return res.json({ ok: true, tempVoice: saved, warnings });
     });
 
@@ -1088,6 +1168,7 @@ function startWebServer(client) {
         if (!result.ok) {
             return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
         }
+        logDashboardAudit(req, `${result.locked ? 'Zamknutá' : 'Odomknutá'} TempVoice miestnosť (${req.params.channelId}).`);
         return res.json({ ok: true, locked: result.locked });
     });
 
@@ -1096,12 +1177,7 @@ function startWebServer(client) {
         if (!result.ok) {
             return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
         }
-        addActivityLog({
-            level: 'warn',
-            category: 'tempvoice',
-            message: `Zatvorená dočasná miestnosť (${req.params.channelId}).`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Zatvorená dočasná miestnosť (${req.params.channelId}).`, 'warn');
         return res.json({ ok: true });
     });
 
@@ -1114,12 +1190,7 @@ function startWebServer(client) {
             }
             return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
         }
-        addActivityLog({
-            level: 'info',
-            category: 'tempvoice',
-            message: `Miestnosť premenovaná na „${result.name}“.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Miestnosť premenovaná na „${result.name}“.`);
         return res.json({ ok: true, name: result.name });
     });
 
@@ -1131,12 +1202,7 @@ function startWebServer(client) {
             }
             return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
         }
-        addActivityLog({
-            level: 'warn',
-            category: 'tempvoice',
-            message: `Hráč ${result.displayName} bol odpojený z TempVoice miestnosti.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Hráč ${result.displayName} bol odpojený z TempVoice miestnosti.`, 'warn');
         return res.json({ ok: true, displayName: result.displayName });
     });
 
@@ -1196,6 +1262,7 @@ function startWebServer(client) {
             postedGids
         });
 
+        logDashboardAudit(req, `PatchBot ${enabled ? 'zapnutý' : 'vypnutý'}.`);
         return res.json({ ok: true, patchBot: saved });
     });
 
@@ -1252,6 +1319,7 @@ function startWebServer(client) {
             updatedPatchBot = markPatchGidsPosted([String(latestItem.gid)], latestItem);
         }
 
+        logDashboardAudit(req, `Odoslaný najnovší CS2 update (${latestItem.title}) do ${sentCount} kanálov.`);
         return res.json({
             ok: true,
             title: latestItem.title,
@@ -1295,6 +1363,7 @@ function startWebServer(client) {
             botRoleIds
         });
 
+        logDashboardAudit(req, `Join Roles ${enabled ? 'zapnuté' : 'vypnuté'}.`);
         return res.json({ ok: true, joinRoles: saved });
     });
 
@@ -1343,6 +1412,8 @@ function startWebServer(client) {
             intervalSeconds
         });
 
+        logDashboardAudit(req, `CS2 Status ${enabled ? 'zapnutý' : 'vypnutý'}.`);
+
         if (enabled && channelId) {
             const refreshResult = await updateGuildStatusMessage(client, { forceNewMessage: channelChanged });
             if (!refreshResult.ok) {
@@ -1365,6 +1436,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: 'Nepodarilo sa obnoviť správu so stavom serverov (skontroluj kanál a oprávnenia).' });
         }
 
+        logDashboardAudit(req, 'Obnovený CS2 Status embed.');
         return res.json({ ok: true, csStatus: getCsStatusSettings() });
     });
 
@@ -1376,6 +1448,7 @@ function startWebServer(client) {
             if (!usersFileExists()) {
                 return res.status(404).json({ error: 'Súbor users.json zatiaľ neexistuje.' });
             }
+            logDashboardAudit(req, 'Stiahnutá záloha hráčov.');
             return res.download(DB_FILE, 'users.json');
         }
 
@@ -1383,6 +1456,7 @@ function startWebServer(client) {
             if (!settingsFileExists()) {
                 loadSettings();
             }
+            logDashboardAudit(req, 'Stiahnutá záloha nastavení.');
             return res.download(SETTINGS_FILE, 'settings.json');
         }
 
@@ -1390,9 +1464,11 @@ function startWebServer(client) {
             const payload = {
                 exportedAt: new Date().toISOString(),
                 users: loadUsers(),
-                settings: loadSettings()
+                settings: loadSettings(),
+                warnings: loadWarnings()
             };
             const dateTag = new Date().toISOString().slice(0, 10);
+            logDashboardAudit(req, 'Stiahnutá kompletná záloha.');
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="backup-bot-${dateTag}.json"`);
             return res.send(JSON.stringify(payload, null, 2));
@@ -1426,15 +1502,19 @@ function startWebServer(client) {
             return clean;
         }
 
-        // 1. Kompletná záloha { users, settings }
+        // 1. Kompletná záloha { users, settings, warnings? }
         if (payload.users && typeof payload.users === 'object' && payload.settings && typeof payload.settings === 'object') {
             saveUsers(normalizeUsersMap(payload.users));
             saveSettings(payload.settings);
             restored.push('users', 'settings');
+            if (payload.warnings && typeof payload.warnings === 'object') {
+                saveWarnings(normalizeWarningsData(payload.warnings));
+                restored.push('warnings');
+            }
         } else if (
             payload.tempVoice || payload.patchBot || payload.joinRoles ||
             payload.csStatus || payload.rankRoles || payload.adminLog ||
-            payload.rankFeed || payload.welcome || payload.tickets
+            payload.rankFeed || payload.welcome || payload.tickets || payload.moderation
         ) {
             // 2. Samostatný settings.json
             saveSettings(payload);
@@ -1456,12 +1536,7 @@ function startWebServer(client) {
         }
 
         updateBotStatus(client, { force: true });
-        addActivityLog({
-            level: 'warn',
-            category: 'dashboard',
-            message: `Obnovená záloha zo súboru (${restored.join(' + ')}).`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Obnovená záloha zo súboru (${restored.join(' + ')}).`, 'warn');
 
         return res.json({
             ok: true,
@@ -1505,12 +1580,7 @@ function startWebServer(client) {
             notifyDerank
         });
 
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: `Rank-Up / Derank oznámenia ${enabled ? 'zapnuté' : 'vypnuté'}.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Rank-Up / Derank oznámenia ${enabled ? 'zapnuté' : 'vypnuté'}.`);
 
         return res.json({ ok: true, rankFeed: saved });
     });
@@ -1564,12 +1634,7 @@ function startWebServer(client) {
             }
         });
 
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: `Admin Log ${enabled ? 'zapnutý' : 'vypnutý'}.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Admin Log ${enabled ? 'zapnutý' : 'vypnutý'}.`);
 
         return res.json({ ok: true, adminLog: saved });
     });
@@ -1672,12 +1737,7 @@ function startWebServer(client) {
         };
         const history = addAnnouncementHistory(entry);
 
-        addActivityLog({
-            level: 'success',
-            category: 'dashboard',
-            message: `Odoslané oznámenie do #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Odoslané oznámenie do #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`, 'success');
 
         return res.json({ ok: true, entry, history });
     });
@@ -1725,12 +1785,7 @@ function startWebServer(client) {
         };
         const history = addAnnouncementHistory(entry);
 
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: `Upravené oznámenie v #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Upravené oznámenie v #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`);
 
         return res.json({ ok: true, entry, history });
     });
@@ -1798,12 +1853,7 @@ function startWebServer(client) {
             ignoreBots
         });
 
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: `Uvítacie správy ${enabled ? 'zapnuté' : 'vypnuté'}.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Uvítanie ${enabled ? 'zapnuté' : 'vypnuté'}.`);
 
         return res.json({ ok: true, welcome: saved });
     });
@@ -1882,12 +1932,7 @@ function startWebServer(client) {
                 : current.panelButtonLabel
         });
 
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: `Ticket systém ${enabled ? 'zapnutý' : 'vypnutý'}.`,
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, `Tickety ${enabled ? 'zapnuté' : 'vypnuté'}.`);
 
         return res.json({ ok: true, tickets: saved });
     });
@@ -1898,6 +1943,7 @@ function startWebServer(client) {
         if (!result.ok) {
             return res.status(400).json({ error: result.error });
         }
+        logDashboardAudit(req, 'Odoslaný alebo aktualizovaný Ticket panel.');
         return res.json({ ok: true, messageId: result.messageId, tickets: getTicketsSettings() });
     });
 
@@ -1919,6 +1965,315 @@ function startWebServer(client) {
         if (!result.ok) {
             return res.status(404).json({ error: 'Tento ticket už neexistuje alebo bol zatvorený.' });
         }
+        logDashboardAudit(req, `Zatvorený ticket (${req.params.channelId}).`, 'warn');
+        return res.json({ ok: true });
+    });
+
+    // --- Moderácia ---
+    app.put('/api/settings/moderation', async (req, res) => {
+        const { guild, sessionUser } = req.dashboardAuth;
+        const body = req.body || {};
+
+        const enabled = Boolean(body.enabled);
+        const adminRoleIds = uniqueStringIds(body.adminRoleIds);
+        const dmUser = body.dmUser !== false;
+        const logToAdminLog = body.logToAdminLog !== false;
+
+        for (const roleId of adminRoleIds) {
+            if (roleId === guild.id) {
+                return res.status(400).json({ error: 'Ako admin rolu nie je možné nastaviť `@everyone`.' });
+            }
+            const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+            if (!role) {
+                return res.status(400).json({ error: 'Vybraná rola pre admin príkazy neexistuje.' });
+            }
+        }
+
+        const rawCmds = body.commands && typeof body.commands === 'object' ? body.commands : {};
+        const commands = {
+            warn: rawCmds.warn !== false,
+            timeout: rawCmds.timeout !== false,
+            kick: rawCmds.kick !== false,
+            ban: rawCmds.ban !== false,
+            clear: rawCmds.clear !== false,
+            lock: rawCmds.lock !== false,
+            slowmode: rawCmds.slowmode !== false
+        };
+
+        const rawAe = body.autoEscalation && typeof body.autoEscalation === 'object' ? body.autoEscalation : {};
+        const aeEnabled = Boolean(rawAe.enabled);
+        const rawRules = Array.isArray(rawAe.rules) ? rawAe.rules : [];
+        const rules = [];
+        const seenThresholds = new Set();
+
+        for (const item of rawRules) {
+            const threshold = Math.round(Number(item?.threshold));
+            if (!Number.isFinite(threshold) || threshold < 1 || threshold > 50) {
+                return res.status(400).json({ error: 'Počet varovaní pre auto-eskaláciu musí byť 1 až 50.' });
+            }
+            if (seenThresholds.has(threshold)) {
+                return res.status(400).json({ error: `Duplicitné pravidlo pre ${threshold} varovaní.` });
+            }
+            seenThresholds.add(threshold);
+
+            const action = item?.action === 'kick' || item?.action === 'ban' ? item.action : 'timeout';
+            const durationMinutes = Math.min(Math.max(Math.round(Number(item?.durationMinutes) || 60), 1), 40320);
+            rules.push({ threshold, action, durationMinutes });
+        }
+        rules.sort((a, b) => a.threshold - b.threshold);
+
+        const saved = updateModerationSettings({
+            enabled,
+            adminRoleIds,
+            dmUser,
+            logToAdminLog,
+            commands,
+            autoEscalation: {
+                enabled: aeEnabled,
+                rules
+            }
+        });
+
+        const registered = await registerCommands(client).catch(err => {
+            console.error('Chyba pri registrácii príkazov:', err);
+            return null;
+        });
+
+        const tokenEntry = userOAuthTokens.get(sessionUser.id);
+        const validToken = tokenEntry && tokenEntry.expiresAt > Date.now() ? tokenEntry.accessToken : null;
+        const commandSync = await syncAdminCommandPermissions(client, guild, registered, validToken);
+
+        const warnings = [];
+        if (enabled && !commandSync.synced) {
+            warnings.push('Oprávnenia slash príkazov v Discorde sa nezosynchronizovali (odhlás sa a znova prihlás cez Discord).');
+        }
+
+        logDashboardAudit(req, `Moderácia ${enabled ? 'zapnutá' : 'vypnutá'}.`);
+        return res.json({ ok: true, moderation: saved, commandSync, warnings });
+    });
+
+    app.get('/api/moderation/warnings/:userId', (req, res) => {
+        const userId = String(req.params.userId || '').trim();
+        return res.json({ warnings: getUserWarnings(userId) });
+    });
+
+    app.post('/api/moderation/warn', async (req, res) => {
+        const { guild, member: actorMember, sessionUser } = req.dashboardAuth;
+        const userId = String(req.body?.userId || '').trim();
+        const reason = String(req.body?.reason || '').trim();
+
+        if (!/^\d{15,22}$/.test(userId) || !reason) {
+            return res.status(400).json({ error: 'Vyber hráča a zadaj dôvod varovania.' });
+        }
+
+        const targetMember = await guild.members.fetch(userId).catch(() => null);
+        const targetUser = targetMember?.user || await client.users.fetch(userId).catch(() => null);
+        if (targetUser?.bot) {
+            return res.status(400).json({ error: 'Bota nie je možné varovať.' });
+        }
+
+        const resWarn = await issueWarning({
+            guild,
+            targetUser,
+            targetMember,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req),
+            actorMember,
+            reason
+        });
+
+        if (!resWarn.ok) {
+            return res.status(400).json({ error: resWarn.error });
+        }
+
+        logDashboardAudit(req, `Udelený warn #${resWarn.warning.id} pre ${targetUser?.tag || userId}.`, 'warn');
+        return res.json({
+            ok: true,
+            warning: resWarn.warning,
+            total: resWarn.total,
+            escalation: resWarn.escalation,
+            warnings: getUserWarnings(userId)
+        });
+    });
+
+    app.delete('/api/moderation/warnings/:userId/:warningId', async (req, res) => {
+        const { guild, sessionUser } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const warningId = Number(req.params.warningId);
+        const targetMember = guild.members.cache.get(userId);
+
+        const result = await removeWarning({
+            guild,
+            targetUserId: userId,
+            targetLabel: targetMember?.user?.tag || userId,
+            warningId,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req)
+        });
+
+        if (!result.ok) {
+            return res.status(404).json({ error: result.error });
+        }
+
+        logDashboardAudit(req, `Zmazaný warn #${warningId} pre ${targetMember?.displayName || userId}.`);
+        return res.json({ ok: true, warnings: getUserWarnings(userId) });
+    });
+
+    app.delete('/api/moderation/warnings/:userId', async (req, res) => {
+        const { guild, sessionUser } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const targetMember = guild.members.cache.get(userId);
+
+        const result = await clearAllWarnings({
+            guild,
+            targetUserId: userId,
+            targetLabel: targetMember?.user?.tag || userId,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req)
+        });
+
+        if (!result.ok) {
+            return res.status(404).json({ error: result.error });
+        }
+
+        logDashboardAudit(req, `Vymazané všetky varovania (${result.removedCount}) pre ${targetMember?.displayName || userId}.`);
+        return res.json({ ok: true, removedCount: result.removedCount, warnings: [] });
+    });
+
+    app.post('/api/moderation/timeout', async (req, res) => {
+        const { guild, member: actorMember, sessionUser } = req.dashboardAuth;
+        const userId = String(req.body?.userId || '').trim();
+        const durationMinutes = Number(req.body?.durationMinutes);
+        const reason = String(req.body?.reason || '').trim() || undefined;
+
+        const targetMember = await guild.members.fetch(userId).catch(() => null);
+        if (!targetMember) {
+            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+        }
+
+        if (durationMinutes === 0) {
+            const resRm = await removeTimeout({
+                guild,
+                targetMember,
+                reason,
+                moderatorId: sessionUser.id,
+                moderatorTag: getActorName(req),
+                actorMember
+            });
+            if (!resRm.ok) return res.status(400).json({ error: resRm.error });
+            logDashboardAudit(req, `Zrušený timeout pre ${targetMember.displayName}.`);
+            return res.json({ ok: true });
+        }
+
+        const result = await applyTimeout({
+            guild,
+            targetMember,
+            durationMinutes,
+            reason,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req),
+            actorMember
+        });
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        logDashboardAudit(req, `Timeout (${result.durationLabel}) pre ${targetMember.displayName}.`, 'warn');
+        return res.json({ ok: true, durationLabel: result.durationLabel });
+    });
+
+    app.post('/api/moderation/kick', async (req, res) => {
+        const { guild, member: actorMember, sessionUser } = req.dashboardAuth;
+        const userId = String(req.body?.userId || '').trim();
+        const reason = String(req.body?.reason || '').trim() || undefined;
+
+        const targetMember = await guild.members.fetch(userId).catch(() => null);
+        if (!targetMember) {
+            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+        }
+
+        const result = await kickMember({
+            guild,
+            targetMember,
+            reason,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req),
+            actorMember
+        });
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        logDashboardAudit(req, `Kick pre ${targetMember.displayName}.`, 'warn');
+        return res.json({ ok: true });
+    });
+
+    app.post('/api/moderation/ban', async (req, res) => {
+        const { guild, member: actorMember, sessionUser } = req.dashboardAuth;
+        const userId = String(req.body?.userId || '').trim();
+        const reason = String(req.body?.reason || '').trim() || undefined;
+        const deleteMessageSeconds = Number(req.body?.deleteMessageSeconds) || 0;
+
+        if (!/^\d{15,22}$/.test(userId)) {
+            return res.status(400).json({ error: 'Neplatné ID používateľa.' });
+        }
+
+        const targetMember = await guild.members.fetch(userId).catch(() => null);
+        const targetUser = targetMember?.user || await client.users.fetch(userId).catch(() => null);
+
+        const result = await banMember({
+            guild,
+            targetUser,
+            targetMember,
+            deleteMessageSeconds,
+            reason,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req),
+            actorMember
+        });
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        logDashboardAudit(req, `Ban pre ${result.targetTag}.`, 'warn');
+        return res.json({ ok: true });
+    });
+
+    app.get('/api/moderation/bans', async (req, res) => {
+        const { guild } = req.dashboardAuth;
+        const bansCol = await guild.bans.fetch().catch(() => null);
+        if (!bansCol) {
+            return res.status(400).json({ error: 'Bot nemá právo zobraziť zoznam banov (Ban Members).' });
+        }
+
+        const bans = [...bansCol.values()].map(b => ({
+            userId: b.user.id,
+            username: b.user.username,
+            tag: b.user.tag,
+            avatarUrl: b.user.displayAvatarURL({ size: 64 }),
+            reason: b.reason || null
+        }));
+
+        return res.json({ bans });
+    });
+
+    app.delete('/api/moderation/bans/:userId', async (req, res) => {
+        const { guild, sessionUser } = req.dashboardAuth;
+        const userId = String(req.params.userId || '').trim();
+        const reason = String(req.body?.reason || '').trim() || undefined;
+
+        const result = await unbanUser({
+            guild,
+            userId,
+            reason,
+            moderatorId: sessionUser.id,
+            moderatorTag: getActorName(req)
+        });
+        if (!result.ok) {
+            return res.status(400).json({ error: result.error });
+        }
+
+        logDashboardAudit(req, `Unban pre ${result.targetTag}.`);
         return res.json({ ok: true });
     });
 
@@ -1931,12 +2286,7 @@ function startWebServer(client) {
 
     app.delete('/api/logs', (req, res) => {
         clearActivityLogs();
-        addActivityLog({
-            level: 'info',
-            category: 'dashboard',
-            message: 'Activity Log bol vyčistený.',
-            actor: getActorName(req)
-        });
+        logDashboardAudit(req, 'Activity Log bol vyčistený.');
         return res.json({ ok: true, logs: getActivityLogs({ limit: 500 }) });
     });
 

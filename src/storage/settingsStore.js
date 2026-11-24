@@ -130,6 +130,25 @@ function getDefaultSettings() {
             panelButtonLabel: 'Otvoriť ticket',
             ticketCounter: 0,
             openTickets: {}
+        },
+        moderation: {
+            enabled: false,
+            adminRoleIds: [],
+            dmUser: true,
+            logToAdminLog: true,
+            commands: {
+                warn: true,
+                timeout: true,
+                kick: true,
+                ban: true,
+                clear: true,
+                lock: true,
+                slowmode: true
+            },
+            autoEscalation: {
+                enabled: false,
+                rules: []
+            }
         }
     };
 }
@@ -204,6 +223,9 @@ function normalizeSettings(raw) {
     const alEvents = al.events && typeof al.events === 'object' ? al.events : {};
     const wl = src.welcome && typeof src.welcome === 'object' ? src.welcome : {};
     const tk = src.tickets && typeof src.tickets === 'object' ? src.tickets : {};
+    const mod = src.moderation && typeof src.moderation === 'object' ? src.moderation : {};
+    const modCmds = mod.commands && typeof mod.commands === 'object' ? mod.commands : {};
+    const modAe = mod.autoEscalation && typeof mod.autoEscalation === 'object' ? mod.autoEscalation : {};
     const normalizeHex = (val, fallback) => (
         typeof val === 'string' && /^#[0-9a-fA-F]{6}$/.test(val.trim()) ? val.trim() : fallback
     );
@@ -364,7 +386,42 @@ function normalizeSettings(raw) {
             openTickets: tk.openTickets && typeof tk.openTickets === 'object' && !Array.isArray(tk.openTickets)
                 ? tk.openTickets
                 : {}
-        }
+        },
+        moderation: (() => {
+            const rawRules = Array.isArray(modAe.rules) ? modAe.rules : [];
+            const seenThresholds = new Set();
+            const rules = [];
+            for (const r of rawRules) {
+                if (!r || typeof r !== 'object') continue;
+                const threshold = Math.round(Number(r.threshold));
+                if (!Number.isFinite(threshold) || threshold < 1 || threshold > 50 || seenThresholds.has(threshold)) continue;
+                const action = r.action === 'kick' || r.action === 'ban' ? r.action : 'timeout';
+                const durationMinutes = Math.min(Math.max(Math.round(Number(r.durationMinutes) || 60), 1), 40320);
+                seenThresholds.add(threshold);
+                rules.push({ threshold, action, durationMinutes });
+            }
+            rules.sort((a, b) => a.threshold - b.threshold);
+
+            return {
+                enabled: Boolean(mod.enabled),
+                adminRoleIds: uniqueStringIds(mod.adminRoleIds),
+                dmUser: typeof mod.dmUser === 'boolean' ? mod.dmUser : true,
+                logToAdminLog: typeof mod.logToAdminLog === 'boolean' ? mod.logToAdminLog : true,
+                commands: {
+                    warn: typeof modCmds.warn === 'boolean' ? modCmds.warn : true,
+                    timeout: typeof modCmds.timeout === 'boolean' ? modCmds.timeout : true,
+                    kick: typeof modCmds.kick === 'boolean' ? modCmds.kick : true,
+                    ban: typeof modCmds.ban === 'boolean' ? modCmds.ban : true,
+                    clear: typeof modCmds.clear === 'boolean' ? modCmds.clear : true,
+                    lock: typeof modCmds.lock === 'boolean' ? modCmds.lock : true,
+                    slowmode: typeof modCmds.slowmode === 'boolean' ? modCmds.slowmode : true
+                },
+                autoEscalation: {
+                    enabled: Boolean(modAe.enabled),
+                    rules
+                }
+            };
+        })()
     };
 }
 
@@ -723,6 +780,16 @@ function getAllOpenTickets() {
     return loadSettings().tickets.openTickets || {};
 }
 
+function getModerationSettings() {
+    return loadSettings().moderation;
+}
+
+function updateModerationSettings(patch) {
+    return updateSettings(s => {
+        s.moderation = { ...s.moderation, ...patch };
+    }).moderation;
+}
+
 module.exports = {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -768,5 +835,7 @@ module.exports = {
     getOpenTicket,
     setOpenTicket,
     deleteOpenTicket,
-    getAllOpenTickets
+    getAllOpenTickets,
+    getModerationSettings,
+    updateModerationSettings
 };

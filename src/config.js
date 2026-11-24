@@ -18,6 +18,7 @@ const ALL_RANK_ROLE_IDS = [...RANK_ROLES.map(r => r.roleId), UNRANKED_ROLE_ID];
 const DB_FILE = path.join(__dirname, '..', 'users.json');
 const SETTINGS_FILE = path.join(__dirname, '..', 'settings.json');
 const ACTIVITY_LOG_FILE = path.join(__dirname, '..', 'activity.json');
+const WARNINGS_FILE = path.join(__dirname, '..', 'warnings.json');
 const TEMPVOICE_DB_FILE = path.join(__dirname, '..', 'tempvoice.json');
 const PATCHBOT_DB_FILE = path.join(__dirname, '..', 'patchbot.json');
 const JOINROLES_DB_FILE = path.join(__dirname, '..', 'joinroles.json');
@@ -61,6 +62,7 @@ module.exports = {
     DB_FILE,
     SETTINGS_FILE,
     ACTIVITY_LOG_FILE,
+    WARNINGS_FILE,
     TEMPVOICE_DB_FILE,
     PATCHBOT_DB_FILE,
     JOINROLES_DB_FILE,

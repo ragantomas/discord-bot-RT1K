@@ -3,6 +3,7 @@ env.txt
 users.json
 settings.json
 activity.json
+warnings.json
 .DS_Store
 __MACOSX/
 .vscode/

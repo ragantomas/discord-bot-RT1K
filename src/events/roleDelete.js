@@ -9,6 +9,7 @@ module.exports = {
         const current = loadSettings();
         const hasDashboardRole = (current.dashboardRoleIds || []).includes(role.id);
         const hasAllowedChannelBypassRole = (current.allowedChannelBypassRoleIds || []).includes(role.id);
+        const hasModAdminRole = (current.moderation?.adminRoleIds || []).includes(role.id);
         const hasMemberRole = (current.joinRoles?.memberRoleIds || []).includes(role.id);
         const hasBotRole = (current.joinRoles?.botRoleIds || []).includes(role.id);
         const hasTempVoiceLockRole = (current.tempVoice?.setups || []).some(
@@ -20,6 +21,7 @@ module.exports = {
         const needsUpdate =
             hasDashboardRole ||
             hasAllowedChannelBypassRole ||
+            hasModAdminRole ||
             current.patchBot?.roleId === role.id ||
             hasMemberRole ||
             hasBotRole ||
@@ -36,6 +38,10 @@ module.exports = {
             if (hasAllowedChannelBypassRole) {
                 settings.allowedChannelBypassRoleIds = (settings.allowedChannelBypassRoleIds || []).filter(id => id !== role.id);
                 console.warn(`Rola s výnimkou pre kanál príkazov (${role.id}) bola zmazaná.`);
+            }
+            if (hasModAdminRole && settings.moderation) {
+                settings.moderation.adminRoleIds = (settings.moderation.adminRoleIds || []).filter(id => id !== role.id);
+                console.warn(`Admin moderačná rola (${role.id}) bola zmazaná.`);
             }
             if (settings.patchBot.roleId === role.id) {
                 settings.patchBot.roleId = null;

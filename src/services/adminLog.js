@@ -1,5 +1,5 @@
 const { EmbedBuilder, PermissionFlagsBits, AuditLogEvent } = require('discord.js');
-const { getAdminLogSettings } = require('../storage/settingsStore');
+const { getAdminLogSettings, getModerationSettings } = require('../storage/settingsStore');
 const { addActivityLog } = require('./activityLog');
 
 async function getAdminLogChannel(guild) {
@@ -311,6 +311,51 @@ async function sendTestAdminLogMessage(guild) {
     return { ok: true };
 }
 
+async function logModerationAction(guild, {
+    title,
+    color = 0xF5A623,
+    targetUser = null,
+    targetId = null,
+    moderatorText = 'Neznámy',
+    reason = null,
+    extraFields = []
+} = {}) {
+    const mod = getModerationSettings();
+    if (!mod?.logToAdminLog || !guild) return false;
+
+    const ctx = await getAdminLogChannel(guild);
+    if (!ctx) return false;
+
+    const cleanTargetId = targetUser?.id || targetId;
+    const embed = new EmbedBuilder()
+        .setTitle(title || '🛡️ Moderácia')
+        .setColor(color)
+        .setTimestamp();
+
+    if (targetUser && typeof targetUser.displayAvatarURL === 'function') {
+        embed.setThumbnail(targetUser.displayAvatarURL({ size: 128 }));
+    }
+
+    if (cleanTargetId) {
+        const tag = targetUser?.tag ? ` (${targetUser.tag})` : '';
+        embed.addFields({ name: 'Používateľ', value: `<@${cleanTargetId}>${tag}`, inline: true });
+        embed.setFooter({ text: `ID: ${cleanTargetId}` });
+    }
+
+    embed.addFields({ name: 'Moderátor', value: String(moderatorText || 'Neznámy'), inline: true });
+
+    if (reason) {
+        embed.addFields({ name: 'Dôvod', value: String(reason).slice(0, 1024), inline: false });
+    }
+
+    if (Array.isArray(extraFields) && extraFields.length > 0) {
+        embed.addFields(...extraFields.slice(0, 10));
+    }
+
+    await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+    return true;
+}
+
 module.exports = {
     logMemberJoin,
     logMemberLeave,
@@ -318,5 +363,6 @@ module.exports = {
     logBanRemove,
     logMemberUpdate,
     logVoiceState,
-    sendTestAdminLogMessage
+    sendTestAdminLogMessage,
+    logModerationAction
 };

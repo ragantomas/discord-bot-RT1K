@@ -1,6 +1,7 @@
 const { Events } = require('discord.js');
 const { handleTempVoiceInteraction } = require('../services/tempVoicePanel');
 const { handleTicketInteraction } = require('../services/tickets');
+const { isModerationCommandEnabled, hasModerationAccess } = require('../services/moderation');
 const { loadSettings } = require('../storage/settingsStore');
 
 async function sendInteractionError(interaction, message) {
@@ -42,19 +43,34 @@ module.exports = {
         const command = interaction.client.commands.get(interaction.commandName);
         if (!command) return;
 
-        const { allowedChannelId, allowedChannelBypassRoleIds = [] } = loadSettings();
-        if (allowedChannelId && interaction.channelId !== allowedChannelId) {
-            const memberRoles = interaction.member?.roles;
-            const hasBypassRole = Array.isArray(allowedChannelBypassRoleIds) && allowedChannelBypassRoleIds.length > 0 && (
-                memberRoles?.cache
-                    ? allowedChannelBypassRoleIds.some(roleId => memberRoles.cache.has(roleId))
-                    : Array.isArray(memberRoles) && allowedChannelBypassRoleIds.some(roleId => memberRoles.includes(roleId))
-            );
-            if (!hasBypassRole) {
+        if (command.adminOnly) {
+            if (!isModerationCommandEnabled(command.modModuleKey)) {
                 return interaction.reply({
-                    content: `Príkazy bota je možné používať iba v kanáli <#${allowedChannelId}>.`,
+                    content: 'Tento príkaz je vypnutý.',
                     ephemeral: true
                 });
+            }
+            if (!hasModerationAccess(interaction.member)) {
+                return interaction.reply({
+                    content: 'Na tento príkaz nemáš oprávnenie.',
+                    ephemeral: true
+                });
+            }
+        } else {
+            const { allowedChannelId, allowedChannelBypassRoleIds = [] } = loadSettings();
+            if (allowedChannelId && interaction.channelId !== allowedChannelId) {
+                const memberRoles = interaction.member?.roles;
+                const hasBypassRole = Array.isArray(allowedChannelBypassRoleIds) && allowedChannelBypassRoleIds.length > 0 && (
+                    memberRoles?.cache
+                        ? allowedChannelBypassRoleIds.some(roleId => memberRoles.cache.has(roleId))
+                        : Array.isArray(memberRoles) && allowedChannelBypassRoleIds.some(roleId => memberRoles.includes(roleId))
+                );
+                if (!hasBypassRole) {
+                    return interaction.reply({
+                        content: `Príkazy bota je možné používať iba v kanáli <#${allowedChannelId}>.`,
+                        ephemeral: true
+                    });
+                }
             }
         }
 
