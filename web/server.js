@@ -822,6 +822,12 @@ function startWebServer(client) {
         }
     });
 
+    app.use('/api', (req, res, next) => {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        next();
+    });
+
     app.post('/api/logout', (req, res) => {
         const sessionUser = req.signedCookies?.[SESSION_COOKIE];
         if (sessionUser?.id) {

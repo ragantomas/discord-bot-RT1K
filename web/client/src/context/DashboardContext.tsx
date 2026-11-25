@@ -53,7 +53,6 @@ interface DashboardContextValue {
   bans: BanEntry[];
   logs: ActivityLogEntry[];
   announcementsHistory: AnnouncementHistoryEntry[];
-  liveUptimeMs: number;
   isDirty: boolean;
   registerDirty: (handlers: DirtyHandlers) => void;
   clearDirty: () => void;
@@ -94,11 +93,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [bans, setBans] = useState<BanEntry[]>([]);
   const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
   const [announcementsHistory, setAnnouncementsHistory] = useState<AnnouncementHistoryEntry[]>([]);
-  const [liveUptimeMs, setLiveUptimeMs] = useState(0);
 
   const [isDirty, setIsDirty] = useState(false);
   const dirtyHandlersRef = useRef<DirtyHandlers | null>(null);
   const pollingInFlightRef = useRef(false);
+  const pollSeqRef = useRef(0);
 
   const registerDirty = useCallback((handlers: DirtyHandlers) => {
     dirtyHandlersRef.current = handlers;
@@ -139,7 +138,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const refreshOverview = useCallback(async () => {
     const data = await overviewApi.getOverview();
     setOverview(data);
-    setLiveUptimeMs(data.bot.uptimeMs || 0);
   }, []);
 
   const refreshMeta = useCallback(async () => {
@@ -191,7 +189,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         announcementsApi.history(),
       ]);
       setOverview(ov);
-      setLiveUptimeMs(ov.bot.uptimeMs || 0);
       setMeta(gm);
       setSettings(st.settings);
       setSteamApiKeyConfigured(Boolean(st.steamApiKeyConfigured));
@@ -217,53 +214,82 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   }, [auth?.authorized, reloadAll]);
 
-  useEffect(() => {
-    if (!auth?.authorized) return;
+  const pollNow = useCallback(async (section: SectionId, opts?: { force?: boolean }) => {
+    const force = Boolean(opts?.force);
+    if (!force && (document.hidden || pollingInFlightRef.current)) return;
 
-    const pollTimer = window.setInterval(async () => {
-      if (document.hidden || pollingInFlightRef.current) return;
-      pollingInFlightRef.current = true;
-      try {
-        const data = await overviewApi.getLive(activeSection);
-        if (data.overview) {
-          setOverview(data.overview);
-          setLiveUptimeMs(data.overview.bot.uptimeMs || 0);
-        }
-        if (data.rankUpdaterStatus) {
-          setRankUpdaterStatus(data.rankUpdaterStatus);
-        }
-        if (Array.isArray(data.players)) {
-          setPlayers(data.players);
-        }
-        if (Array.isArray(data.rooms)) {
-          setTempRooms(data.rooms);
-        }
-        if (Array.isArray(data.logs)) {
-          setLogs(data.logs);
-        }
-        if (Array.isArray(data.openTickets)) {
-          setOpenTickets(data.openTickets);
-        }
-        if (Array.isArray(data.announcementsHistory)) {
-          setAnnouncementsHistory(data.announcementsHistory);
-        }
-      } catch {
-        // Ignore transient network hiccups during background polling
-      } finally {
+    const seq = ++pollSeqRef.current;
+    pollingInFlightRef.current = true;
+    try {
+      const data = await overviewApi.getLive(section);
+      if (seq !== pollSeqRef.current) return;
+
+      if (data.overview) {
+        setOverview(data.overview);
+      }
+      if (data.rankUpdaterStatus) {
+        setRankUpdaterStatus(data.rankUpdaterStatus);
+      }
+      if (Array.isArray(data.players)) {
+        setPlayers(data.players);
+      }
+      if (Array.isArray(data.rooms)) {
+        setTempRooms(data.rooms);
+      }
+      if (Array.isArray(data.logs)) {
+        setLogs(data.logs);
+      }
+      if (Array.isArray(data.openTickets)) {
+        setOpenTickets(data.openTickets);
+      }
+      if (Array.isArray(data.announcementsHistory)) {
+        setAnnouncementsHistory(data.announcementsHistory);
+      }
+    } catch {
+      // Ignore transient network hiccups during background polling
+    } finally {
+      if (seq === pollSeqRef.current) {
         pollingInFlightRef.current = false;
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!auth?.authorized || initialLoading) return;
+
+    void pollNow(activeSection, { force: true });
+    if (activeSection === 'moderation') {
+      void refreshBans().catch(() => null);
+    } else if (activeSection === 'announcements') {
+      void refreshAnnouncementsHistory().catch(() => null);
+    }
+
+    const pollTimer = window.setInterval(() => {
+      void pollNow(activeSection);
     }, POLLING.LIVE_INTERVAL_MS);
 
-    const uptimeTimer = window.setInterval(() => {
-      if (document.hidden) return;
-      setLiveUptimeMs((prev) => (prev > 0 ? prev + POLLING.UPTIME_TICK_MS : prev));
-    }, POLLING.UPTIME_TICK_MS);
+    const handleVisibilityOrFocus = () => {
+      if (!document.hidden) {
+        void pollNow(activeSection, { force: true });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
 
     return () => {
       window.clearInterval(pollTimer);
-      window.clearInterval(uptimeTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
     };
-  }, [auth?.authorized, activeSection]);
+  }, [
+    auth?.authorized,
+    initialLoading,
+    activeSection,
+    pollNow,
+    refreshBans,
+    refreshAnnouncementsHistory,
+  ]);
 
   const value = useMemo(
     () => ({
@@ -280,7 +306,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       bans,
       logs,
       announcementsHistory,
-      liveUptimeMs,
       isDirty,
       registerDirty,
       clearDirty,
@@ -315,7 +340,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       bans,
       logs,
       announcementsHistory,
-      liveUptimeMs,
       isDirty,
       registerDirty,
       clearDirty,

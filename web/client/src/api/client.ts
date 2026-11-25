@@ -40,6 +40,7 @@ export async function apiRequest<T>(url: string, options: ApiRequestOptions = {}
   try {
     response = await fetch(url, {
       credentials: 'same-origin',
+      cache: 'no-store',
       headers: finalHeaders,
       body: isJsonBody ? JSON.stringify(body) : (body as BodyInit | undefined),
       ...rest,

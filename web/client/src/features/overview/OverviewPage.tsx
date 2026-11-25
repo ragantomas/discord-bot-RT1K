@@ -21,11 +21,12 @@ import {
   Users,
   Volume2,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback';
+import { POLLING } from '@/config/constants';
 import { LOG_CATEGORY_LABEL_KEYS, LOG_LEVEL_STYLES } from '@/config/theme';
 import { useDashboard } from '@/context/DashboardContext';
 import { BackupModal } from '@/features/overview/BackupModal';
@@ -35,8 +36,23 @@ import { formatDateTime, formatDuration, formatNumber } from '@/utils/format';
 export function OverviewPage() {
   const { t } = useTranslation();
   const lang = getAppLanguage();
-  const { overview, liveUptimeMs, initialLoading } = useDashboard();
+  const { overview, initialLoading } = useDashboard();
   const [backupOpen, setBackupOpen] = useState(false);
+  const [liveUptimeMs, setLiveUptimeMs] = useState(0);
+
+  useEffect(() => {
+    setLiveUptimeMs(overview?.bot.uptimeMs || 0);
+  }, [overview?.bot.uptimeMs]);
+
+  useEffect(() => {
+    if (!overview?.bot.online) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) {
+        setLiveUptimeMs((prev) => (prev > 0 ? prev + POLLING.UPTIME_TICK_MS : prev));
+      }
+    }, POLLING.UPTIME_TICK_MS);
+    return () => window.clearInterval(timer);
+  }, [overview?.bot.online]);
 
   if (initialLoading || !overview) {
     return (
