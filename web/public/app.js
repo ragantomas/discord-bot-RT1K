@@ -731,7 +731,9 @@ function renderPlayersTableRows() {
                 : '';
 
         const warnBadge = p.warningsCount > 0
-            ? `<button type="button" data-player-mod="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 transition">${p.warningsCount}</button>`
+            ? (p.isOwner
+                ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/35">${p.warningsCount}</span>`
+                : `<button type="button" data-player-mod="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/35 transition">${p.warningsCount}</button>`)
             : `<span class="text-xs text-slate-500">0</span>`;
 
         const timeoutBadge = p.isTimedOut
@@ -763,10 +765,12 @@ function renderPlayersTableRows() {
                             <i data-lucide="user" class="w-3.5 h-3.5"></i>
                             <span>Detail</span>
                         </button>
-                        <button type="button" data-player-mod="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-amber-300 transition">
-                            <i data-lucide="gavel" class="w-3.5 h-3.5"></i>
-                            <span>Moderácia</span>
-                        </button>
+                        ${p.isOwner ? '' : `
+                            <button type="button" data-player-mod="${escapeHtml(p.userId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-amber-300 transition">
+                                <i data-lucide="gavel" class="w-3.5 h-3.5"></i>
+                                <span>Moderácia</span>
+                            </button>
+                        `}
                     </div>
                 </td>
             </tr>
