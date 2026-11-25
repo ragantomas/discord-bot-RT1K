@@ -923,6 +923,8 @@ function startWebServer(client) {
             payload.announcementsHistory = getAnnouncementsHistory();
         } else if (section === 'tickets') {
             payload.openTickets = buildOpenTicketsPayload(guild);
+        } else if (section === 'settings') {
+            payload.rankUpdaterStatus = getRankUpdaterStatus();
         }
 
         return res.json(payload);

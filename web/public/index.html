@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BOT Gaben — Web Dashboard</title>
+    <title>BOT Gaben — Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -38,6 +38,9 @@
     <div id="unsaved-banner" class="hidden fixed bottom-5 right-5 z-40 bg-bg-surface/95 backdrop-blur border border-amber-500/45 shadow-2xl rounded-2xl px-4 py-3 flex items-center gap-3">
         <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
         <span class="text-sm text-amber-100 font-medium">Neuložené zmeny</span>
+        <button id="unsaved-discard-btn" type="button" class="px-3 py-1.5 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-200 text-xs font-medium transition">
+            Zahodiť
+        </button>
         <button id="unsaved-save-btn" type="button" class="px-3.5 py-1.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-xs font-semibold transition">
             Uložiť
         </button>
@@ -83,25 +86,6 @@
                 </button>
             </div>
         </form>
-    </div>
-
-    <!-- Elo History Chart Modal -->
-    <div id="elo-history-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-        <div class="bg-bg-surface border border-slate-700/70 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3 min-w-0">
-                    <img id="elo-modal-avatar" src="" alt="" class="w-10 h-10 rounded-full object-cover bg-bg-elevated shrink-0" />
-                    <div class="min-w-0">
-                        <h3 id="elo-modal-name" class="text-lg font-semibold text-white truncate">História Elo</h3>
-                        <p id="elo-modal-sub" class="text-xs text-slate-400 truncate"></p>
-                    </div>
-                </div>
-                <button id="elo-modal-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
-                    <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
-            </div>
-            <div id="elo-modal-body" class="space-y-4"></div>
-        </div>
     </div>
 
     <!-- Backup Picker Modal -->
@@ -162,9 +146,15 @@
                         <p id="pmod-sub" class="text-xs text-slate-400 truncate"></p>
                     </div>
                 </div>
-                <button id="pmod-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
-                    <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="pmod-detail-btn" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-sky-300 transition">
+                        <i data-lucide="user" class="w-3.5 h-3.5"></i>
+                        <span>Detail</span>
+                    </button>
+                    <button id="pmod-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
             </div>
             <div id="pmod-body" class="space-y-4"></div>
         </div>
@@ -181,9 +171,15 @@
                         <p id="pdet-sub" class="text-xs text-slate-400 truncate"></p>
                     </div>
                 </div>
-                <button id="pdet-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
-                    <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button id="pdet-mod-btn" type="button" class="hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-amber-300 transition">
+                        <i data-lucide="gavel" class="w-3.5 h-3.5"></i>
+                        <span>Moderácia</span>
+                    </button>
+                    <button id="pdet-close" type="button" class="p-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 hover:text-white transition">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
             </div>
             <div id="pdet-tabs" class="flex flex-wrap gap-2 border-b border-slate-800 pb-3"></div>
             <div id="pdet-body" class="space-y-4"></div>
@@ -272,7 +268,7 @@
                     <span>Prehľad</span>
                 </button>
                 <button data-section="players" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
-                    <i data-lucide="trophy" class="w-4 h-4 shrink-0"></i>
+                    <i data-lucide="users" class="w-4 h-4 shrink-0"></i>
                     <span>Hráči</span>
                 </button>
                 <button data-section="announcements" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
@@ -281,7 +277,7 @@
                 </button>
                 <button data-section="logs" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
                     <i data-lucide="scroll-text" class="w-4 h-4 shrink-0"></i>
-                    <span>Activity Log</span>
+                    <span>Záznamy</span>
                 </button>
 
                 <div class="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Moduly</div>
@@ -295,7 +291,7 @@
                 </button>
                 <button data-section="joinroles" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
                     <i data-lucide="user-plus" class="w-4 h-4 shrink-0"></i>
-                    <span>Join Roles</span>
+                    <span>Úvodné roly</span>
                 </button>
                 <button data-section="csstatus" class="nav-item w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition">
                     <i data-lucide="activity" class="w-4 h-4 shrink-0"></i>
@@ -331,7 +327,7 @@
 
             <div class="p-4 border-t border-slate-800/90 text-xs text-slate-500 flex items-center justify-between">
                 <span>BOT Gaben</span>
-                <span class="px-2 py-0.5 rounded-md bg-bg-elevated text-slate-400">Web UI</span>
+                <span class="px-2 py-0.5 rounded-md bg-bg-elevated text-slate-400">Dashboard</span>
             </div>
         </aside>
 
