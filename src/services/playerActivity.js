@@ -3,7 +3,7 @@ const { PLAYER_ACTIVITY_FILE } = require('../config');
 
 const MAX_VOICE_HISTORY = 25;
 const MAX_DAILY_DAYS = 14;
-const SK_DAYS = ['Ne', 'Po', 'Ut', 'St', 'Št', 'Pi', 'So'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 let persistTimer = null;
 
 function loadActivityMap() {
@@ -147,7 +147,7 @@ function getDailyActivity(days = 7) {
         const entry = dailyMap[key] || {};
         out.push({
             date: key,
-            label: SK_DAYS[d.getDay()],
+            label: DAYS[d.getDay()],
             messages: Number(entry.messages) || 0,
             voiceJoins: Number(entry.voiceJoins) || 0,
             joins: Number(entry.joins) || 0,

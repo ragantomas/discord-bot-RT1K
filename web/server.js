@@ -95,7 +95,7 @@ async function runModerationCommandSyncJob({ client, guild, tokenEntry, actorNam
     try {
         const mod = getModerationSettings();
         const registered = await registerCommands(client).catch(err => {
-            console.error('[Moderation] Registrácia príkazov zlyhala:', err);
+            console.error('[Moderation] Command registration failed:', err);
             return null;
         });
 
@@ -103,7 +103,7 @@ async function runModerationCommandSyncJob({ client, guild, tokenEntry, actorNam
             addActivityLog({
                 level: 'warn',
                 category: 'moderation',
-                message: 'Nepodarilo sa zaregistrovať slash príkazy v Discorde.',
+                message: 'Failed to register Discord slash commands.',
                 actor: actorName
             });
             return;
@@ -113,7 +113,7 @@ async function runModerationCommandSyncJob({ client, guild, tokenEntry, actorNam
             addActivityLog({
                 level: 'info',
                 category: 'moderation',
-                message: 'Admin slash príkazy boli odstránené z Discordu.',
+                message: 'Admin slash commands removed from Discord.',
                 actor: actorName
             });
             return;
@@ -130,15 +130,15 @@ async function runModerationCommandSyncJob({ client, guild, tokenEntry, actorNam
             addActivityLog({
                 level: 'success',
                 category: 'moderation',
-                message: `Oprávnenia admin príkazov zosynchronizované (${syncRes.count}).`,
+                message: `Admin command permissions synced (${syncRes.count}).`,
                 actor: actorName
             });
         } else {
-            const codePart = syncRes.code ? `, kód ${syncRes.code}` : '';
+            const codePart = syncRes.code ? `, code ${syncRes.code}` : '';
             const detailPart = syncRes.detail ? `: ${syncRes.detail}` : '';
             const msg = syncRes.status === 403
-                ? 'Discord zamietol úpravu oprávnení (403) — účet potrebuje Manage Server a Manage Roles.'
-                : `Synchronizácia oprávnení zlyhala (HTTP ${syncRes.status}${codePart}${detailPart}).`;
+                ? 'Discord rejected permission update (403) — account requires Manage Server and Manage Roles.'
+                : `Permission sync failed (HTTP ${syncRes.status}${codePart}${detailPart}).`;
             console.error('[Moderation]', msg);
             addActivityLog({
                 level: 'warn',
@@ -148,7 +148,7 @@ async function runModerationCommandSyncJob({ client, guild, tokenEntry, actorNam
             });
         }
     } catch (err) {
-        console.error('[Moderation] Neočakávaná chyba pri synchronizácii:', err);
+        console.error('[Moderation] Unexpected error during sync:', err);
     }
 }
 
@@ -324,7 +324,7 @@ function buildOverviewPayload(client, guild) {
             const rankObj = getRankForElo(u.elo);
             rankedList.push({
                 userId,
-                displayName: member?.displayName || `Používateľ ${userId}`,
+                displayName: member?.displayName || `User ${userId}`,
                 avatarUrl: member?.displayAvatarURL({ size: 64 }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
                 elo: u.elo,
                 rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080',
@@ -334,7 +334,7 @@ function buildOverviewPayload(client, guild) {
         if (stats.weeklyDelta > 0 && (!topClimber || stats.weeklyDelta > topClimber.delta)) {
             topClimber = {
                 userId,
-                displayName: member?.displayName || `Používateľ ${userId}`,
+                displayName: member?.displayName || `User ${userId}`,
                 delta: stats.weeklyDelta,
                 elo: typeof u?.elo === 'number' ? u.elo : null
             };
@@ -455,7 +455,7 @@ function buildPlayersPayload(guild) {
             channelId,
             number: Number(t.number || 0),
             channelName: guild.channels.cache.get(channelId)?.name || channelId,
-            subject: t.subject || 'Bez predmetu',
+            subject: t.subject || 'No subject',
             claimedByName: claimer?.displayName || (t.claimedById ? `ID ${t.claimedById}` : null)
         });
         ticketsByUser.set(t.userId, list);
@@ -501,8 +501,8 @@ function buildPlayersPayload(guild) {
                 weeklyDelta,
                 lastDelta,
                 rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080',
-                displayName: member?.displayName || `Používateľ ${userId}`,
-                username: member?.user?.username || 'Neznámy na serveri',
+                displayName: member?.displayName || `User ${userId}`,
+                username: member?.user?.username || 'Unknown',
                 inGuild: Boolean(member),
                 avatarUrl: member?.displayAvatarURL({ size: 64 })
                     || 'https://cdn.discordapp.com/embed/avatars/0.png',
@@ -526,7 +526,7 @@ function buildPlayersPayload(guild) {
                 if (diff !== 0) return diff;
             }
             if (a.inGuild !== b.inGuild) return a.inGuild ? -1 : 1;
-            return a.displayName.localeCompare(b.displayName, 'sk');
+            return a.displayName.localeCompare(b.displayName, 'en');
         });
 }
 
@@ -549,7 +549,7 @@ function buildOpenTicketsPayload(guild) {
             userId: ticket.userId,
             userName: creator?.displayName || `ID ${ticket.userId}`,
             userAvatar: creator?.displayAvatarURL({ size: 64 }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
-            subject: ticket.subject || 'Bez predmetu',
+            subject: ticket.subject || 'No subject',
             claimedById: ticket.claimedById || null,
             claimedByName: claimer?.displayName || (ticket.claimedById ? `ID ${ticket.claimedById}` : null),
             createdAt: ticket.createdAt || Date.now()
@@ -624,14 +624,14 @@ function buildAnnouncementPayload(guild, body) {
     const colorNum = parseColorValue(body.color) ?? 0x5865F2;
 
     if (!title && !description && !content) {
-        return { error: 'Zadaj aspoň nadpis, popis embedu alebo text správy.' };
+        return { error: 'Enter a title, description, or message text.' };
     }
 
     if (thumbnailUrl && !isValidHttpUrl(thumbnailUrl)) {
-        return { error: 'Thumbnail URL musí začínať na http:// alebo https://.' };
+        return { error: 'Thumbnail URL must start with http:// or https://.' };
     }
     if (imageUrl && !isValidHttpUrl(imageUrl)) {
-        return { error: 'Obrázok URL musí začínať na http:// alebo https://.' };
+        return { error: 'Image URL must start with http:// or https://.' };
     }
 
     const hasEmbed = Boolean(title || description || footerText || thumbnailUrl || imageUrl);
@@ -712,7 +712,7 @@ function startWebServer(client) {
 
     const sessionSecret = process.env.SESSION_SECRET?.trim() || crypto.randomBytes(32).toString('hex');
     if (!process.env.SESSION_SECRET?.trim()) {
-        console.warn('[WARN] SESSION_SECRET nie je nastavený v .env — používam dočasný kľúč (po reštarte sa používatelia odhlásia).');
+        console.warn('[WARN] SESSION_SECRET is not set in .env — using a temporary key (users will be logged out on restart).');
     }
 
     app.use(express.json({ limit: '1mb' }));
@@ -883,15 +883,15 @@ function startWebServer(client) {
     async function requireAuth(req, res, next) {
         const sessionUser = req.signedCookies?.[SESSION_COOKIE];
         if (!sessionUser?.id) {
-            return res.status(401).json({ error: 'Nie si prihlásený.' });
+            return res.status(401).json({ error: 'Not logged in.' });
         }
 
         const access = await verifyDashboardAccess(client, sessionUser.id);
         if (!access.guild) {
-            return res.status(503).json({ error: 'Bot zatiaľ nie je pripojený na žiadny Discord server.' });
+            return res.status(503).json({ error: 'Bot is not connected to any Discord server yet.' });
         }
         if (!access.allowed) {
-            return res.status(403).json({ error: 'Nemáš rolu potrebnú pre prístup do dashboardu.' });
+            return res.status(403).json({ error: 'You do not have the required role to access the dashboard.' });
         }
 
         req.dashboardAuth = { sessionUser, ...access };
@@ -900,7 +900,7 @@ function startWebServer(client) {
 
     app.use('/api', requireAuth);
 
-    // --- Prehľad, Live polling & Metadata ---
+    // --- Overview, Live Polling & Metadata ---
     app.get('/api/overview', (req, res) => {
         const { guild } = req.dashboardAuth;
         return res.json(buildOverviewPayload(client, guild));
@@ -984,7 +984,7 @@ function startWebServer(client) {
 
         const members = [...membersCol.values()]
             .filter(m => m && !m.user?.bot)
-            .sort((a, b) => a.displayName.localeCompare(b.displayName, 'sk'))
+            .sort((a, b) => a.displayName.localeCompare(b.displayName, 'en'))
             .map(m => ({
                 id: m.id,
                 username: m.user.username,
@@ -1002,7 +1002,7 @@ function startWebServer(client) {
         });
     });
 
-    // --- Hráči (CS2 Premier) ---
+    // --- Players (CS2 Premier) ---
     app.get('/api/players', async (req, res) => {
         const { guild } = req.dashboardAuth;
         await guild.members.fetch().catch(() => guild.members.cache);
@@ -1015,18 +1015,18 @@ function startWebServer(client) {
         const profile = String(req.body?.profile || '').trim();
 
         if (!userId || !profile) {
-            return res.status(400).json({ error: 'Vyber hráča a zadaj Steam/Leetify profil.' });
+            return res.status(400).json({ error: 'Select a player and enter a Steam or Leetify profile.' });
         }
 
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) {
-            return res.status(404).json({ error: 'Vybraný hráč sa nenašiel na Discord serveri.' });
+            return res.status(404).json({ error: 'Selected player was not found on the Discord server.' });
         }
 
         const steamId = await resolveSteam64Id(profile);
         if (!steamId) {
             return res.status(400).json({
-                error: 'Nepodarilo sa nájsť Steam64 ID. Zadaj platné 17-miestne ID, Steam link alebo Leetify link.'
+                error: 'Could not resolve Steam64 ID. Enter a valid 17-digit ID, Steam link, or Leetify link.'
             });
         }
 
@@ -1049,7 +1049,7 @@ function startWebServer(client) {
         saveUsers(users);
         syncLinkedPlayer(userId, newEntry);
         updateBotStatus(client);
-        logDashboardAudit(req, `Prepojený hráč ${member.displayName} (${steamId}).`, 'success', userId);
+        logDashboardAudit(req, `Linked player ${member.displayName} (${steamId}).`, 'success', userId);
 
         return res.json({
             ok: true,
@@ -1065,7 +1065,7 @@ function startWebServer(client) {
         const users = loadUsers();
 
         if (!users[userId]) {
-            return res.status(404).json({ error: 'Hráč nie je v databáze.' });
+            return res.status(404).json({ error: 'Player is not in the database.' });
         }
 
         delete users[userId];
@@ -1078,7 +1078,7 @@ function startWebServer(client) {
             await removeRankRoles(member);
         }
 
-        logDashboardAudit(req, `Odpojený hráč ${member?.displayName || userId}.`, 'warn', userId);
+        logDashboardAudit(req, `Unlinked player ${member?.displayName || userId}.`, 'warn', userId);
         return res.json({ ok: true });
     });
 
@@ -1086,7 +1086,7 @@ function startWebServer(client) {
         const { guild } = req.dashboardAuth;
         const userId = String(req.params.userId || '').trim();
         if (!/^\d{15,22}$/.test(userId)) {
-            return res.status(400).json({ error: 'Neplatné ID používateľa.' });
+            return res.status(400).json({ error: 'Invalid user ID.' });
         }
 
         const member = await guild.members.fetch(userId).catch(() => null);
@@ -1095,7 +1095,7 @@ function startWebServer(client) {
         const data = users[userId] || null;
 
         if (!member && !user && !data) {
-            return res.status(404).json({ error: 'Hráč sa nenašiel.' });
+            return res.status(404).json({ error: 'Player not found.' });
         }
 
         const now = Date.now();
@@ -1121,14 +1121,14 @@ function startWebServer(client) {
                 channelId,
                 number: Number(t.number || 0),
                 channelName: ch.name,
-                subject: t.subject || 'Bez predmetu',
+                subject: t.subject || 'No subject',
                 claimedByName: claimer?.displayName || (t.claimedById ? `ID ${t.claimedById}` : null),
                 createdAt: t.createdAt || null
             });
         }
 
-        const displayName = member?.displayName || user?.globalName || user?.username || `Používateľ ${userId}`;
-        const username = user?.username || 'Neznámy';
+        const displayName = member?.displayName || user?.globalName || user?.username || `User ${userId}`;
+        const username = user?.username || 'Unknown';
         const matchTokens = [userId, username, user?.tag, displayName]
             .filter(Boolean)
             .map(s => String(s).toLowerCase());
@@ -1148,7 +1148,7 @@ function startWebServer(client) {
             }));
 
         const voiceItems = (act.voiceHistory || []).map(v => {
-            const prefix = v.type === 'join' ? 'Pripojenie do VC ' : (v.type === 'leave' ? 'Odpojenie z VC ' : 'Presun VC ');
+            const prefix = v.type === 'join' ? 'Joined VC ' : (v.type === 'leave' ? 'Left VC ' : 'Moved VC ');
             return {
                 timestamp: v.timestamp,
                 category: 'voice',
@@ -1209,7 +1209,7 @@ function startWebServer(client) {
 
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) {
-            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+            return res.status(404).json({ error: 'Member is not on the server.' });
         }
 
         const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
@@ -1218,8 +1218,8 @@ function startWebServer(client) {
             return res.status(400).json({ error: check.reason });
         }
 
-        await member.roles.add(role, `Pridané cez dashboard (${getActorName(req)})`);
-        logDashboardAudit(req, `Pridaná rola ${role.name} pre ${member.displayName}.`, 'info', userId);
+        await member.roles.add(role, `Added via dashboard (${getActorName(req)})`);
+        logDashboardAudit(req, `Added role ${role.name} to ${member.displayName}.`, 'info', userId);
         return res.json({ ok: true });
     });
 
@@ -1230,7 +1230,7 @@ function startWebServer(client) {
 
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) {
-            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+            return res.status(404).json({ error: 'Member is not on the server.' });
         }
 
         const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
@@ -1239,8 +1239,8 @@ function startWebServer(client) {
             return res.status(400).json({ error: check.reason });
         }
 
-        await member.roles.remove(role, `Odobraté cez dashboard (${getActorName(req)})`);
-        logDashboardAudit(req, `Odobratá rola ${role.name} pre ${member.displayName}.`, 'info', userId);
+        await member.roles.remove(role, `Removed via dashboard (${getActorName(req)})`);
+        logDashboardAudit(req, `Removed role ${role.name} from ${member.displayName}.`, 'info', userId);
         return res.json({ ok: true });
     });
 
@@ -1252,14 +1252,14 @@ function startWebServer(client) {
 
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) {
-            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+            return res.status(404).json({ error: 'Member is not on the server.' });
         }
         if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageNicknames) || !member.manageable) {
-            return res.status(400).json({ error: 'Bot nemá oprávnenie meniť prezývku tomuto hráčovi.' });
+            return res.status(400).json({ error: 'Bot lacks permission to change nickname for this member.' });
         }
 
-        await member.setNickname(nextNick, `Upravené cez dashboard (${getActorName(req)})`);
-        logDashboardAudit(req, nextNick ? `Zmenená prezývka ${member.user.username} na ${nextNick}.` : `Resetovaná prezývka pre ${member.user.username}.`, 'info', userId);
+        await member.setNickname(nextNick, `Edited via dashboard (${getActorName(req)})`);
+        logDashboardAudit(req, nextNick ? `Changed nickname for ${member.user.username} to ${nextNick}.` : `Reset nickname for ${member.user.username}.`, 'info', userId);
         return res.json({ ok: true, nickname: nextNick });
     });
 
@@ -1271,38 +1271,38 @@ function startWebServer(client) {
 
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) {
-            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+            return res.status(404).json({ error: 'Member is not on the server.' });
         }
         if (!member.voice?.channelId) {
-            return res.status(400).json({ error: 'Hráč nie je vo voice kanáli.' });
+            return res.status(400).json({ error: 'Member is not in a voice channel.' });
         }
         if (!guild.members.me?.permissions.has(PermissionFlagsBits.MoveMembers)) {
-            return res.status(400).json({ error: 'Bot nemá právo Move Members.' });
+            return res.status(400).json({ error: 'Bot lacks Move Members permission.' });
         }
 
         if (action === 'disconnect') {
-            await member.voice.disconnect(`Odpojený cez dashboard (${getActorName(req)})`);
-            logDashboardAudit(req, `Odpojený ${member.displayName} z voice.`, 'warn', userId);
+            await member.voice.disconnect(`Disconnected via dashboard (${getActorName(req)})`);
+            logDashboardAudit(req, `Disconnected ${member.displayName} from voice.`, 'warn', userId);
             return res.json({ ok: true });
         }
 
         if (action === 'move') {
             if (!channelId) {
-                return res.status(400).json({ error: 'Vyber cieľový voice kanál.' });
+                return res.status(400).json({ error: 'Select a target voice channel.' });
             }
             const targetChannel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
             if (!targetChannel || targetChannel.type !== ChannelType.GuildVoice) {
-                return res.status(400).json({ error: 'Vybraný voice kanál neexistuje.' });
+                return res.status(400).json({ error: 'Selected voice channel does not exist.' });
             }
-            await member.voice.setChannel(targetChannel, `Presunutý cez dashboard (${getActorName(req)})`);
-            logDashboardAudit(req, `Presunutý ${member.displayName} do ${targetChannel.name}.`, 'info', userId);
+            await member.voice.setChannel(targetChannel, `Moved via dashboard (${getActorName(req)})`);
+            logDashboardAudit(req, `Moved ${member.displayName} to ${targetChannel.name}.`, 'info', userId);
             return res.json({ ok: true });
         }
 
-        return res.status(400).json({ error: 'Neznáma voice akcia.' });
+        return res.status(400).json({ error: 'Unknown voice action.' });
     });
 
-    // --- Nastavenia (Všeobecné + CS2 Rank roly + Aktualizácia rankov) ---
+    // --- Settings (General + CS2 Rank Roles + Rank Updater) ---
     app.get('/api/settings', (req, res) => {
         return res.json({
             settings: loadSettings(),
@@ -1328,41 +1328,41 @@ function startWebServer(client) {
 
         for (const roleId of dashboardRoleIds) {
             if (roleId === guild.id) {
-                return res.status(400).json({ error: 'Ako prístupovú rolu do dashboardu nie je možné nastaviť `@everyone`.' });
+                return res.status(400).json({ error: 'Cannot set `@everyone` as the dashboard access role.' });
             }
             const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
-                return res.status(400).json({ error: 'Vybraná rola pre prístup do dashboardu neexistuje.' });
+                return res.status(400).json({ error: 'Selected dashboard access role does not exist.' });
             }
         }
 
         for (const roleId of allowedChannelBypassRoleIds) {
             if (roleId === guild.id) {
-                return res.status(400).json({ error: 'Ako výnimku pre kanál príkazov nie je možné nastaviť `@everyone`.' });
+                return res.status(400).json({ error: 'Cannot set `@everyone` as the command channel bypass role.' });
             }
             const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
-                return res.status(400).json({ error: 'Vybraná rola s výnimkou pre kanál príkazov neexistuje.' });
+                return res.status(400).json({ error: 'Selected command channel bypass role does not exist.' });
             }
         }
 
         if (allowedChannelId) {
             const channel = guild.channels.cache.get(allowedChannelId) || await guild.channels.fetch(allowedChannelId).catch(() => null);
             if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: 'Vybraný povolený kanál pre príkazy neexistuje alebo nie je textový.' });
+                return res.status(400).json({ error: 'Selected allowed command channel does not exist or is not a text channel.' });
             }
         }
 
         if (!unrankedRoleId) {
-            return res.status(400).json({ error: 'Musíš vybrať Discord rolu pre Unranked hráčov.' });
+            return res.status(400).json({ error: 'Select a Discord role for Unranked players.' });
         }
         const unrankedRole = guild.roles.cache.get(unrankedRoleId) || await guild.roles.fetch(unrankedRoleId).catch(() => null);
         if (!unrankedRole || unrankedRole.id === guild.id) {
-            return res.status(400).json({ error: 'Vybraná Unranked rola nie je platná.' });
+            return res.status(400).json({ error: 'Selected Unranked role is invalid.' });
         }
 
         if (!rankRolesInput || rankRolesInput.length === 0) {
-            return res.status(400).json({ error: 'Musí byť nastavené aspoň jedno CS2 Premier Elo pásmo.' });
+            return res.status(400).json({ error: 'At least one CS2 Premier Elo tier must be configured.' });
         }
 
         const validatedRanks = [];
@@ -1372,17 +1372,17 @@ function startWebServer(client) {
             const color = parseColorValue(item?.color);
 
             if (!Number.isFinite(min) || min < 0) {
-                return res.status(400).json({ error: 'Minimálne Elo musí byť nezáporné číslo.' });
+                return res.status(400).json({ error: 'Minimum Elo must be a non-negative number.' });
             }
             if (!roleId || roleId === guild.id) {
-                return res.status(400).json({ error: 'Každé Elo pásmo musí mať platnú Discord rolu.' });
+                return res.status(400).json({ error: 'Each Elo tier must have a valid Discord role.' });
             }
             const r = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!r) {
-                return res.status(400).json({ error: `Rola s ID ${roleId} sa na serveri nenašla.` });
+                return res.status(400).json({ error: `Role with ID ${roleId} was not found on the server.` });
             }
             if (color === null) {
-                return res.status(400).json({ error: 'Farba ranku musí byť platný hex kód (napr. #FFD700).' });
+                return res.status(400).json({ error: 'Rank color must be a valid hex code (e.g., #FFD700).' });
             }
 
             validatedRanks.push({ min: Math.round(min), roleId, color });
@@ -1396,16 +1396,16 @@ function startWebServer(client) {
             const inactiveIntervalHours = Number(rankUpdaterInput.inactiveIntervalHours);
 
             if (!Number.isFinite(activeIntervalMinutes) || activeIntervalMinutes < 3 || activeIntervalMinutes > 30) {
-                return res.status(400).json({ error: 'Interval počas hry musí byť medzi 3 a 30 minútami.' });
+                return res.status(400).json({ error: 'Active game interval must be between 3 and 30 minutes.' });
             }
             if (!Number.isFinite(postMatchDelayMinutes) || postMatchDelayMinutes < 2 || postMatchDelayMinutes > 15) {
-                return res.status(400).json({ error: 'Interval po zápase musí byť medzi 2 a 15 minútami.' });
+                return res.status(400).json({ error: 'Post-match interval must be between 2 and 15 minutes.' });
             }
             if (!Number.isFinite(backgroundIntervalMinutes) || backgroundIntervalMinutes < 15 || backgroundIntervalMinutes > 720) {
-                return res.status(400).json({ error: 'Interval na pozadí musí byť medzi 15 a 720 minútami.' });
+                return res.status(400).json({ error: 'Background interval must be between 15 and 720 minutes.' });
             }
             if (!Number.isFinite(inactiveIntervalHours) || inactiveIntervalHours < 6 || inactiveIntervalHours > 48) {
-                return res.status(400).json({ error: 'Interval pre neaktívnych musí byť medzi 6 a 48 hodinami.' });
+                return res.status(400).json({ error: 'Inactive interval must be between 6 and 48 hours.' });
             }
 
             nextRankUpdater = {
@@ -1441,7 +1441,7 @@ function startWebServer(client) {
             rescheduleRankUpdater();
         }
         updateBotStatus(client, { force: true });
-        logDashboardAudit(req, 'Aktualizované nastavenia.');
+        logDashboardAudit(req, 'Updated settings.');
 
         return res.json({
             ok: true,
@@ -1450,7 +1450,7 @@ function startWebServer(client) {
         });
     });
 
-    // --- TempVoice (viacero nezávislých konfigurácií, vypnutie nič nemaže) ---
+    // --- TempVoice (multiple independent setups; disabling deletes nothing) ---
     app.put('/api/settings/tempvoice', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -1480,22 +1480,22 @@ function startWebServer(client) {
                 : (raw.triggerChannelId ? String(raw.triggerChannelId).trim() : null);
 
             if (createTriggerChannel && (!triggerName || triggerName.length > 100)) {
-                return res.status(400).json({ error: `TempVoice #${i + 1}: Názov spúšťacieho kanála musí mať 1 až 100 znakov.` });
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Trigger channel name must be 1 to 100 characters.` });
             }
             if (!roomNameTemplate || roomNameTemplate.length > 100) {
-                return res.status(400).json({ error: `TempVoice #${i + 1}: Šablóna názvu miestnosti musí mať 1 až 100 znakov.` });
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Room name template must be 1 to 100 characters.` });
             }
             if (!Number.isFinite(bitrateKbps) || bitrateKbps < 8 || bitrateKbps > 384) {
-                return res.status(400).json({ error: `TempVoice #${i + 1}: Bitrate musí byť v rozsahu 8 až 384 kbps.` });
+                return res.status(400).json({ error: `TempVoice #${i + 1}: Bitrate must be between 8 and 384 kbps.` });
             }
             if (!Number.isFinite(userLimit) || userLimit < 0 || userLimit > 99) {
-                return res.status(400).json({ error: `TempVoice #${i + 1}: Limit hráčov musí byť v rozsahu 0 až 99.` });
+                return res.status(400).json({ error: `TempVoice #${i + 1}: User limit must be between 0 and 99.` });
             }
 
             if (categoryId) {
                 const cat = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
                 if (!cat || cat.type !== ChannelType.GuildCategory) {
-                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraná kategória sa na serveri nenašla.` });
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Selected category was not found on the server.` });
                 }
             }
 
@@ -1508,8 +1508,8 @@ function startWebServer(client) {
                     });
                     triggerChannelId = created.id;
                 } catch (err) {
-                    console.error('Chyba pri vytváraní TempVoice trigger kanála:', err);
-                    return res.status(400).json({ error: `TempVoice #${i + 1}: Nepodarilo sa vytvoriť spúšťací VC (skontroluj právo Manage Channels).` });
+                    console.error('Error creating TempVoice trigger channel:', err);
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Failed to create trigger VC (check Manage Channels permission).` });
                 }
             } else {
                 const triggerChannel = triggerChannelId
@@ -1518,10 +1518,10 @@ function startWebServer(client) {
 
                 if (moduleEnabled && setupEnabled) {
                     if (!triggerChannelId) {
-                        return res.status(400).json({ error: `TempVoice #${i + 1}: Vyber spúšťací kanál alebo prepni na vytvorenie nového.` });
+                        return res.status(400).json({ error: `TempVoice #${i + 1}: Select a trigger channel or switch to creating a new one.` });
                     }
                     if (!triggerChannel || triggerChannel.type !== ChannelType.GuildVoice) {
-                        return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraný spúšťací hlasový kanál neexistuje.` });
+                        return res.status(400).json({ error: `TempVoice #${i + 1}: Selected trigger voice channel does not exist.` });
                     }
                 }
 
@@ -1540,18 +1540,18 @@ function startWebServer(client) {
             for (const roleId of lockRoleIds) {
                 const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
                 if (!role) {
-                    return res.status(400).json({ error: `TempVoice #${i + 1}: Vybraná rola pre zamknutie kanála neexistuje.` });
+                    return res.status(400).json({ error: `TempVoice #${i + 1}: Selected lock role does not exist.` });
                 }
             }
             if (lockOnDisable && lockRoleIds.length === 0) {
                 return res.status(400).json({
-                    error: `TempVoice #${i + 1}: Pre automatické zamknutie pri vypnutí vyber aspoň jednu rolu (napr. @everyone).`
+                    error: `TempVoice #${i + 1}: Select at least one role (e.g., @everyone) for auto-lock on disable.`
                 });
             }
 
             if (triggerChannelId) {
                 if (usedTriggerIds.has(triggerChannelId)) {
-                    return res.status(400).json({ error: 'Dve TempVoice konfigurácie nemôžu používať rovnaký spúšťací hlasový kanál.' });
+                    return res.status(400).json({ error: 'Two TempVoice setups cannot use the same trigger voice channel.' });
                 }
                 usedTriggerIds.add(triggerChannelId);
             }
@@ -1593,7 +1593,7 @@ function startWebServer(client) {
             setups: normalizedSetups
         });
 
-        logDashboardAudit(req, `Upravené nastavenia TempVoice (${moduleEnabled ? 'zapnuté' : 'vypnuté'}).`);
+        logDashboardAudit(req, `Updated TempVoice settings (${moduleEnabled ? 'enabled' : 'disabled'}).`);
         return res.json({ ok: true, tempVoice: saved, warnings });
     });
 
@@ -1615,18 +1615,18 @@ function startWebServer(client) {
     app.post('/api/tempvoice/rooms/:channelId/toggle-lock', async (req, res) => {
         const result = await toggleTempRoomLock(client, req.params.channelId);
         if (!result.ok) {
-            return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
+            return res.status(404).json({ error: 'Temporary room no longer exists.' });
         }
-        logDashboardAudit(req, `${result.locked ? 'Zamknutá' : 'Odomknutá'} TempVoice miestnosť (${req.params.channelId}).`);
+        logDashboardAudit(req, `${result.locked ? 'Locked' : 'Unlocked'} TempVoice room (${req.params.channelId}).`);
         return res.json({ ok: true, locked: result.locked });
     });
 
     app.delete('/api/tempvoice/rooms/:channelId', async (req, res) => {
         const result = await closeTempRoom(client, req.params.channelId);
         if (!result.ok) {
-            return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
+            return res.status(404).json({ error: 'Temporary room no longer exists.' });
         }
-        logDashboardAudit(req, `Zatvorená dočasná miestnosť (${req.params.channelId}).`, 'warn');
+        logDashboardAudit(req, `Closed temporary room (${req.params.channelId}).`, 'warn');
         return res.json({ ok: true });
     });
 
@@ -1635,11 +1635,11 @@ function startWebServer(client) {
         const result = await renameTempRoom(client, req.params.channelId, newName);
         if (!result.ok) {
             if (result.reason === 'invalid_name') {
-                return res.status(400).json({ error: 'Názov miestnosti musí mať 1 až 100 znakov.' });
+                return res.status(400).json({ error: 'Room name must be 1 to 100 characters.' });
             }
-            return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
+            return res.status(404).json({ error: 'Temporary room no longer exists.' });
         }
-        logDashboardAudit(req, `Miestnosť premenovaná na „${result.name}“.`);
+        logDashboardAudit(req, `Renamed room to "${result.name}".`);
         return res.json({ ok: true, name: result.name });
     });
 
@@ -1647,15 +1647,15 @@ function startWebServer(client) {
         const result = await kickFromTempRoom(client, req.params.channelId, req.params.userId);
         if (!result.ok) {
             if (result.reason === 'member_not_in_room') {
-                return res.status(404).json({ error: 'Hráč sa už nenachádza v tejto miestnosti.' });
+                return res.status(404).json({ error: 'Member is no longer in this room.' });
             }
-            return res.status(404).json({ error: 'Dočasná miestnosť už neexistuje.' });
+            return res.status(404).json({ error: 'Temporary room no longer exists.' });
         }
-        logDashboardAudit(req, `Hráč ${result.displayName} bol odpojený z TempVoice miestnosti.`, 'warn');
+        logDashboardAudit(req, `Disconnected ${result.displayName} from TempVoice room.`, 'warn');
         return res.json({ ok: true, displayName: result.displayName });
     });
 
-    // --- CS2 PatchBot (viacero kanálov, vypnutie nič nemaže) ---
+    // --- CS2 PatchBot (multiple channels; disabling deletes nothing) ---
     app.put('/api/settings/patchbot', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -1669,18 +1669,18 @@ function startWebServer(client) {
         if (roleId) {
             const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
-                return res.status(400).json({ error: 'Vybraná ping rola pre PatchBot neexistuje.' });
+                return res.status(400).json({ error: 'Selected PatchBot ping role does not exist.' });
             }
         }
 
         if (enabled && channelIds.length === 0) {
-            return res.status(400).json({ error: 'Pre zapnutie CS2 PatchBota vyber aspoň jeden cieľový kanál.' });
+            return res.status(400).json({ error: 'Select at least one target channel to enable CS2 PatchBot.' });
         }
 
         for (const channelId of channelIds) {
             const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
             if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: `Kanál s ID ${channelId} neexistuje alebo nie je textový.` });
+                return res.status(400).json({ error: `Channel with ID ${channelId} does not exist or is not a text channel.` });
             }
             if (enabled && !hasChannelPermissions(guild, channel, [
                 PermissionFlagsBits.ViewChannel,
@@ -1688,7 +1688,7 @@ function startWebServer(client) {
                 PermissionFlagsBits.EmbedLinks
             ])) {
                 return res.status(400).json({
-                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                    error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.`
                 });
             }
         }
@@ -1711,7 +1711,7 @@ function startWebServer(client) {
             postedGids
         });
 
-        logDashboardAudit(req, `PatchBot ${enabled ? 'zapnutý' : 'vypnutý'}.`);
+        logDashboardAudit(req, `PatchBot ${enabled ? 'enabled' : 'disabled'}.`);
         return res.json({ ok: true, patchBot: saved });
     });
 
@@ -1721,7 +1721,7 @@ function startWebServer(client) {
         const channelIds = Array.isArray(config.channelIds) ? config.channelIds : [];
 
         if (channelIds.length === 0) {
-            return res.status(400).json({ error: 'Najprv pridaj aspoň jeden kanál pre CS2 PatchBota.' });
+            return res.status(400).json({ error: 'Add at least one channel for CS2 PatchBot first.' });
         }
 
         const validChannels = [];
@@ -1736,22 +1736,22 @@ function startWebServer(client) {
                 PermissionFlagsBits.EmbedLinks
             ])) {
                 return res.status(400).json({
-                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                    error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.`
                 });
             }
             validChannels.push(channel);
         }
 
         if (validChannels.length === 0) {
-            return res.status(400).json({ error: 'Žiadny z nastavených kanálov sa nenašiel.' });
+            return res.status(400).json({ error: 'None of the configured channels were found.' });
         }
 
         const items = await fetchCs2News({ mode: config.mode || 'all', count: 1 });
         if (items === null) {
-            return res.status(502).json({ error: 'Nepodarilo sa spojiť so Steam News API. Skús znova o chvíľu.' });
+            return res.status(502).json({ error: 'Failed to connect to Steam News API. Try again shortly.' });
         }
         if (items.length === 0) {
-            return res.status(404).json({ error: 'Steam momentálne nevrátil žiadne novinky pre zvolený režim.' });
+            return res.status(404).json({ error: 'Steam returned no news for the selected mode.' });
         }
 
         const latestItem = items[0];
@@ -1768,7 +1768,7 @@ function startWebServer(client) {
             updatedPatchBot = markPatchGidsPosted([String(latestItem.gid)], latestItem);
         }
 
-        logDashboardAudit(req, `Odoslaný najnovší CS2 update (${latestItem.title}) do ${sentCount} kanálov.`);
+        logDashboardAudit(req, `Sent latest CS2 update (${latestItem.title}) to ${sentCount} channels.`);
         return res.json({
             ok: true,
             title: latestItem.title,
@@ -1777,7 +1777,7 @@ function startWebServer(client) {
         });
     });
 
-    // --- Join Roles (viacero rolí pre hráčov aj botov, vypnutie nič nemaže) ---
+    // --- Join Roles (multiple roles for members and bots; disabling deletes nothing) ---
     app.put('/api/settings/joinroles', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -1787,7 +1787,7 @@ function startWebServer(client) {
         const botRoleIds = uniqueStringIds(body.botRoleIds);
 
         if (enabled && memberRoleIds.length === 0 && botRoleIds.length === 0) {
-            return res.status(400).json({ error: 'Pre zapnutie Join Roles vyber aspoň jednu rolu (pre hráčov alebo pre botov).' });
+            return res.status(400).json({ error: 'Select at least one role (for members or bots) to enable Join Roles.' });
         }
 
         for (const roleId of memberRoleIds) {
@@ -1812,11 +1812,11 @@ function startWebServer(client) {
             botRoleIds
         });
 
-        logDashboardAudit(req, `Join Roles ${enabled ? 'zapnuté' : 'vypnuté'}.`);
+        logDashboardAudit(req, `Join Roles ${enabled ? 'enabled' : 'disabled'}.`);
         return res.json({ ok: true, joinRoles: saved });
     });
 
-    // --- CS2 / Steam Status (vypnutie nič nemaže) ---
+    // --- CS2 / Steam Status (disabling deletes nothing) ---
     app.put('/api/settings/csstatus', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -1837,7 +1837,7 @@ function startWebServer(client) {
         if (channelId) {
             const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
             if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: 'Vybraný kanál pre stav serverov neexistuje alebo nie je textový.' });
+                return res.status(400).json({ error: 'Selected server status channel does not exist or is not a text channel.' });
             }
             if (enabled && !hasChannelPermissions(guild, channel, [
                 PermissionFlagsBits.ViewChannel,
@@ -1846,11 +1846,11 @@ function startWebServer(client) {
                 PermissionFlagsBits.ReadMessageHistory
             ])) {
                 return res.status(400).json({
-                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy, Vkladať odkazy a Čítať históriu správ.`
+                    error: `Bot lacks View Channel, Send Messages, Embed Links, and Read Message History permissions in #${channel.name}.`
                 });
             }
         } else if (enabled) {
-            return res.status(400).json({ error: 'Pre zapnutie stavu serverov vyber cieľový kanál.' });
+            return res.status(400).json({ error: 'Select a target channel to enable server status.' });
         }
 
         const channelChanged = current.channelId !== channelId;
@@ -1861,12 +1861,12 @@ function startWebServer(client) {
             intervalSeconds
         });
 
-        logDashboardAudit(req, `CS2 Status ${enabled ? 'zapnutý' : 'vypnutý'}.`);
+        logDashboardAudit(req, `CS2 Status ${enabled ? 'enabled' : 'disabled'}.`);
 
         if (enabled && channelId) {
             const refreshResult = await updateGuildStatusMessage(client, { forceNewMessage: channelChanged });
             if (!refreshResult.ok) {
-                return res.status(500).json({ error: 'Nastavenia sa uložili, ale nepodarilo sa odoslať embed správu do kanála.' });
+                return res.status(500).json({ error: 'Settings saved, but failed to send embed message to channel.' });
             }
             return res.json({ ok: true, csStatus: getCsStatusSettings() });
         }
@@ -1877,27 +1877,27 @@ function startWebServer(client) {
     app.post('/api/csstatus/refresh', async (req, res) => {
         const config = getCsStatusSettings();
         if (!config.channelId) {
-            return res.status(400).json({ error: 'Najprv nastav kanál pre stav CS2 a Steam serverov.' });
+            return res.status(400).json({ error: 'Configure a channel for CS2 and Steam status first.' });
         }
 
         const result = await updateGuildStatusMessage(client);
         if (!result.ok) {
-            return res.status(400).json({ error: 'Nepodarilo sa obnoviť správu so stavom serverov (skontroluj kanál a oprávnenia).' });
+            return res.status(400).json({ error: 'Failed to refresh server status message (check channel and permissions).' });
         }
 
-        logDashboardAudit(req, 'Obnovený CS2 Status embed.');
+        logDashboardAudit(req, 'Refreshed CS2 Status embed.');
         return res.json({ ok: true, csStatus: getCsStatusSettings() });
     });
 
-    // --- Zálohy (iba stiahnutie do prehliadača) ---
+    // --- Backups ---
     app.get('/api/backup/download/:target', (req, res) => {
         const target = req.params.target;
 
         if (target === 'users') {
             if (!usersFileExists()) {
-                return res.status(404).json({ error: 'Súbor users.json zatiaľ neexistuje.' });
+                return res.status(404).json({ error: 'users.json does not exist yet.' });
             }
-            logDashboardAudit(req, 'Stiahnutá záloha hráčov.');
+            logDashboardAudit(req, 'Downloaded players backup.');
             return res.download(DB_FILE, 'users.json');
         }
 
@@ -1905,7 +1905,7 @@ function startWebServer(client) {
             if (!settingsFileExists()) {
                 loadSettings();
             }
-            logDashboardAudit(req, 'Stiahnutá záloha nastavení.');
+            logDashboardAudit(req, 'Downloaded settings backup.');
             return res.download(SETTINGS_FILE, 'settings.json');
         }
 
@@ -1917,19 +1917,19 @@ function startWebServer(client) {
                 warnings: loadWarnings()
             };
             const dateTag = new Date().toISOString().slice(0, 10);
-            logDashboardAudit(req, 'Stiahnutá kompletná záloha.');
+            logDashboardAudit(req, 'Downloaded full backup.');
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="backup-bot-${dateTag}.json"`);
             return res.send(JSON.stringify(payload, null, 2));
         }
 
-        return res.status(400).json({ error: 'Neznámy súbor na stiahnutie.' });
+        return res.status(400).json({ error: 'Unknown backup target.' });
     });
 
     app.post('/api/backup/restore', (req, res) => {
         const payload = req.body?.data;
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-            return res.status(400).json({ error: 'Nahratý súbor musí byť platný JSON objekt.' });
+            return res.status(400).json({ error: 'Uploaded file must be a valid JSON object.' });
         }
 
         const restored = [];
@@ -1946,7 +1946,7 @@ function startWebServer(client) {
             return clean;
         }
 
-        // 1. Kompletná záloha { users, settings, warnings? }
+        // 1. Full backup { users, settings, warnings? }
         if (payload.users && typeof payload.users === 'object' && payload.settings && typeof payload.settings === 'object') {
             saveUsers(normalizeUsersMap(payload.users));
             saveSettings(payload.settings);
@@ -1960,11 +1960,11 @@ function startWebServer(client) {
             payload.csStatus || payload.rankRoles || payload.rankUpdater || payload.adminLog ||
             payload.rankFeed || payload.welcome || payload.tickets || payload.moderation
         ) {
-            // 2. Samostatný settings.json
+            // 2. Standalone settings.json
             saveSettings(payload);
             restored.push('settings');
         } else {
-            // 3. Samostatný users.json
+            // 3. Standalone users.json
             const entries = Object.entries(payload);
             const looksLikeUsers = entries.length === 0 || entries.every(([k, v]) =>
                 /^\d{15,22}$/.test(k) && (
@@ -1973,7 +1973,7 @@ function startWebServer(client) {
                 )
             );
             if (!looksLikeUsers) {
-                return res.status(400).json({ error: 'Nerozpoznaný formát zálohy. Nahraj users.json, settings.json alebo kompletnú zálohu.' });
+                return res.status(400).json({ error: 'Unrecognized backup format. Upload users.json, settings.json, or a full backup.' });
             }
             saveUsers(normalizeUsersMap(payload));
             restored.push('users');
@@ -1981,7 +1981,7 @@ function startWebServer(client) {
 
         rescheduleRankUpdater();
         updateBotStatus(client, { force: true });
-        logDashboardAudit(req, `Obnovená záloha zo súboru (${restored.join(' + ')}).`, 'warn');
+        logDashboardAudit(req, `Restored backup from file (${restored.join(' + ')}).`, 'warn');
 
         return res.json({
             ok: true,
@@ -2003,7 +2003,7 @@ function startWebServer(client) {
         if (channelId) {
             const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
             if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: 'Vybraný kanál pre Rank-Up / Derank oznámenia neexistuje alebo nie je textový.' });
+                return res.status(400).json({ error: 'Selected Rank-Up / Derank channel does not exist or is not a text channel.' });
             }
             if (enabled && !hasChannelPermissions(guild, channel, [
                 PermissionFlagsBits.ViewChannel,
@@ -2011,11 +2011,11 @@ function startWebServer(client) {
                 PermissionFlagsBits.EmbedLinks
             ])) {
                 return res.status(400).json({
-                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                    error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.`
                 });
             }
         } else if (enabled) {
-            return res.status(400).json({ error: 'Pre zapnutie Rank-Up / Derank oznámení vyber cieľový kanál.' });
+            return res.status(400).json({ error: 'Select a target channel to enable Rank-Up / Derank announcements.' });
         }
 
         const saved = updateRankFeedSettings({
@@ -2025,7 +2025,7 @@ function startWebServer(client) {
             notifyDerank
         });
 
-        logDashboardAudit(req, `Rank-Up / Derank oznámenia ${enabled ? 'zapnuté' : 'vypnuté'}.`);
+        logDashboardAudit(req, `Rank-Up / Derank ${enabled ? 'enabled' : 'disabled'}.`);
 
         return res.json({ ok: true, rankFeed: saved });
     });
@@ -2051,7 +2051,7 @@ function startWebServer(client) {
         if (channelId) {
             const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
             if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: 'Vybraný kanál pre Admin Log neexistuje alebo nie je textový.' });
+                return res.status(400).json({ error: 'Selected Admin Log channel does not exist or is not a text channel.' });
             }
             if (enabled && !hasChannelPermissions(guild, channel, [
                 PermissionFlagsBits.ViewChannel,
@@ -2059,11 +2059,11 @@ function startWebServer(client) {
                 PermissionFlagsBits.EmbedLinks
             ])) {
                 return res.status(400).json({
-                    error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                    error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.`
                 });
             }
         } else if (enabled) {
-            return res.status(400).json({ error: 'Pre zapnutie Admin Logu vyber cieľový kanál.' });
+            return res.status(400).json({ error: 'Select a target channel to enable Admin Log.' });
         }
 
         const saved = updateAdminLogSettings({
@@ -2079,7 +2079,7 @@ function startWebServer(client) {
             }
         });
 
-        logDashboardAudit(req, `Admin Log ${enabled ? 'zapnutý' : 'vypnutý'}.`);
+        logDashboardAudit(req, `Admin Log ${enabled ? 'enabled' : 'disabled'}.`);
 
         return res.json({ ok: true, adminLog: saved });
     });
@@ -2093,7 +2093,7 @@ function startWebServer(client) {
         return res.json({ ok: true });
     });
 
-    // --- Oznámenia / Embed Builder ---
+    // --- Announcements / Embed Builder ---
     async function syncAnnouncementsHistoryWithDiscord(guild) {
         const history = getAnnouncementsHistory();
         if (!guild || history.length === 0) return history;
@@ -2144,13 +2144,13 @@ function startWebServer(client) {
         const channelId = String(body.channelId || '').trim();
 
         if (!channelId) {
-            return res.status(400).json({ error: 'Vyber cieľový kanál pre oznámenie.' });
+            return res.status(400).json({ error: 'Select a target channel for the announcement.' });
         }
 
         const channel = guild.channels.cache.get(channelId)
             || await guild.channels.fetch(channelId).catch(() => null);
         if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-            return res.status(400).json({ error: 'Vybraný kanál neexistuje alebo nie je textový.' });
+            return res.status(400).json({ error: 'Selected channel does not exist or is not a text channel.' });
         }
 
         if (!hasChannelPermissions(guild, channel, [
@@ -2159,7 +2159,7 @@ function startWebServer(client) {
             PermissionFlagsBits.EmbedLinks
         ])) {
             return res.status(400).json({
-                error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`
+                error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.`
             });
         }
 
@@ -2182,7 +2182,7 @@ function startWebServer(client) {
         };
         const history = addAnnouncementHistory(entry);
 
-        logDashboardAudit(req, `Odoslané oznámenie do #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`, 'success');
+        logDashboardAudit(req, `Sent announcement to #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`, 'success');
 
         return res.json({ ok: true, entry, history });
     });
@@ -2197,7 +2197,7 @@ function startWebServer(client) {
         if (!channel || !channel.isTextBased()) {
             const history = removeAnnouncementHistory(channelId, messageId);
             return res.status(404).json({
-                error: 'Pôvodná správa na Discorde už neexistuje a bola odstránená zo zoznamu.',
+                error: 'Original message on Discord no longer exists and was removed from the list.',
                 history
             });
         }
@@ -2206,7 +2206,7 @@ function startWebServer(client) {
         if (!existingMsg) {
             const history = removeAnnouncementHistory(channelId, messageId);
             return res.status(404).json({
-                error: 'Pôvodná správa na Discorde už neexistuje a bola odstránená zo zoznamu.',
+                error: 'Original message on Discord no longer exists and was removed from the list.',
                 history
             });
         }
@@ -2230,12 +2230,12 @@ function startWebServer(client) {
         };
         const history = addAnnouncementHistory(entry);
 
-        logDashboardAudit(req, `Upravené oznámenie v #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`);
+        logDashboardAudit(req, `Updated announcement in #${channel.name}${built.meta.title ? ` (${built.meta.title})` : ''}.`);
 
         return res.json({ ok: true, entry, history });
     });
 
-    // --- Uvítacie správy (Welcome / Goodbye) ---
+    // --- Welcome / Goodbye ---
     app.put('/api/settings/welcome', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -2251,26 +2251,26 @@ function startWebServer(client) {
         async function validateTextChan(cid, label) {
             const ch = guild.channels.cache.get(cid) || await guild.channels.fetch(cid).catch(() => null);
             if (!ch || (ch.type !== ChannelType.GuildText && ch.type !== ChannelType.GuildAnnouncement)) {
-                return `Vybraný kanál pre ${label} neexistuje alebo nie je textový.`;
+                return `Selected ${label} channel does not exist or is not a text channel.`;
             }
             if (!hasChannelPermissions(guild, ch, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
-                return `Bot nemá v kanáli #${ch.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.`;
+                return `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${ch.name}.`;
             }
             return null;
         }
 
         if (channelId) {
-            const errMsg = await validateTextChan(channelId, 'uvítanie do roomky');
+            const errMsg = await validateTextChan(channelId, 'channel welcome');
             if (errMsg) return res.status(400).json({ error: errMsg });
         } else if (enabled && channelEnabled) {
-            return res.status(400).json({ error: 'Pre zapnutie uvítania do roomky vyber cieľový kanál.' });
+            return res.status(400).json({ error: 'Select a target channel to enable channel welcome.' });
         }
 
         if (goodbyeChannelId) {
-            const errMsg = await validateTextChan(goodbyeChannelId, 'rozlúčkovú správu');
+            const errMsg = await validateTextChan(goodbyeChannelId, 'goodbye message');
             if (errMsg) return res.status(400).json({ error: errMsg });
         } else if (enabled && goodbyeEnabled) {
-            return res.status(400).json({ error: 'Pre zapnutie rozlúčkovej správy vyber cieľový kanál.' });
+            return res.status(400).json({ error: 'Select a target channel to enable goodbye message.' });
         }
 
         const current = getWelcomeSettings();
@@ -2298,7 +2298,7 @@ function startWebServer(client) {
             ignoreBots
         });
 
-        logDashboardAudit(req, `Uvítanie ${enabled ? 'zapnuté' : 'vypnuté'}.`);
+        logDashboardAudit(req, `Welcome ${enabled ? 'enabled' : 'disabled'}.`);
 
         return res.json({ ok: true, welcome: saved });
     });
@@ -2313,7 +2313,7 @@ function startWebServer(client) {
         return res.json({ ok: true });
     });
 
-    // --- Ticket systém ---
+    // --- Tickets ---
     app.put('/api/settings/tickets', async (req, res) => {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
@@ -2327,7 +2327,7 @@ function startWebServer(client) {
         if (categoryId) {
             const cat = guild.channels.cache.get(categoryId) || await guild.channels.fetch(categoryId).catch(() => null);
             if (!cat || cat.type !== ChannelType.GuildCategory) {
-                return res.status(400).json({ error: 'Vybraná kategória pre tickety neexistuje.' });
+                return res.status(400).json({ error: 'Selected ticket category does not exist.' });
             }
         }
 
@@ -2335,20 +2335,20 @@ function startWebServer(client) {
             if (!cid) continue;
             const ch = guild.channels.cache.get(cid) || await guild.channels.fetch(cid).catch(() => null);
             if (!ch || !ch.isTextBased()) {
-                return res.status(400).json({ error: `Vybraný kanál pre ${label} neexistuje alebo nie je textový.` });
+                return res.status(400).json({ error: `Selected ${label} channel does not exist or is not a text channel.` });
             }
             if (!hasChannelPermissions(guild, ch, [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
-                return res.status(400).json({ error: `Bot nemá v kanáli #${ch.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.` });
+                return res.status(400).json({ error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${ch.name}.` });
             }
         }
 
         for (const roleId of supportRoleIds) {
             if (roleId === guild.id) {
-                return res.status(400).json({ error: 'Ako Support rolu pre tickety nie je možné nastaviť `@everyone`.' });
+                return res.status(400).json({ error: 'Cannot set `@everyone` as a ticket Support role.' });
             }
             const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
-                return res.status(400).json({ error: 'Jedna z vybraných Support rolí neexistuje.' });
+                return res.status(400).json({ error: 'One of the selected Support roles does not exist.' });
             }
         }
 
@@ -2377,7 +2377,7 @@ function startWebServer(client) {
                 : current.panelButtonLabel
         });
 
-        logDashboardAudit(req, `Tickety ${enabled ? 'zapnuté' : 'vypnuté'}.`);
+        logDashboardAudit(req, `Tickets ${enabled ? 'enabled' : 'disabled'}.`);
 
         return res.json({ ok: true, tickets: saved });
     });
@@ -2388,7 +2388,7 @@ function startWebServer(client) {
         if (!result.ok) {
             return res.status(400).json({ error: result.error });
         }
-        logDashboardAudit(req, 'Odoslaný alebo aktualizovaný Ticket panel.');
+        logDashboardAudit(req, 'Sent or updated Ticket panel.');
         return res.json({ ok: true, messageId: result.messageId, tickets: getTicketsSettings() });
     });
 
@@ -2408,13 +2408,13 @@ function startWebServer(client) {
     app.delete('/api/tickets/:channelId', async (req, res) => {
         const result = await closeTicketChannel(client, req.params.channelId, getActorName(req));
         if (!result.ok) {
-            return res.status(404).json({ error: 'Tento ticket už neexistuje alebo bol zatvorený.' });
+            return res.status(404).json({ error: 'This ticket no longer exists or has been closed.' });
         }
-        logDashboardAudit(req, `Zatvorený ticket (${req.params.channelId}).`, 'warn');
+        logDashboardAudit(req, `Closed ticket (${req.params.channelId}).`, 'warn');
         return res.json({ ok: true });
     });
 
-    // --- Moderácia ---
+    // --- Moderation ---
     app.put('/api/settings/moderation', async (req, res) => {
         const { guild, sessionUser } = req.dashboardAuth;
         const body = req.body || {};
@@ -2426,11 +2426,11 @@ function startWebServer(client) {
 
         for (const roleId of adminRoleIds) {
             if (roleId === guild.id) {
-                return res.status(400).json({ error: 'Ako admin rolu nie je možné nastaviť `@everyone`.' });
+                return res.status(400).json({ error: 'Cannot set `@everyone` as an admin role.' });
             }
             const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
             if (!role) {
-                return res.status(400).json({ error: 'Vybraná rola pre admin príkazy neexistuje.' });
+                return res.status(400).json({ error: 'Selected admin command role does not exist.' });
             }
         }
 
@@ -2454,10 +2454,10 @@ function startWebServer(client) {
         for (const item of rawRules) {
             const threshold = Math.round(Number(item?.threshold));
             if (!Number.isFinite(threshold) || threshold < 1 || threshold > 50) {
-                return res.status(400).json({ error: 'Počet varovaní pre auto-eskaláciu musí byť 1 až 50.' });
+                return res.status(400).json({ error: 'Auto-escalation warning count must be between 1 and 50.' });
             }
             if (seenThresholds.has(threshold)) {
-                return res.status(400).json({ error: `Duplicitné pravidlo pre ${threshold} varovaní.` });
+                return res.status(400).json({ error: `Duplicate rule for ${threshold} warnings.` });
             }
             seenThresholds.add(threshold);
 
@@ -2485,11 +2485,11 @@ function startWebServer(client) {
 
         const warnings = [];
         if (enabled && (!hasToken || !hasScope)) {
-            warnings.push('Oprávnenia príkazov sa nezosynchronizovali — odhlás sa a znova prihlás cez Discord (potvrď nové oprávnenie).');
+            warnings.push('Command permissions failed to sync — log out and log back in via Discord (approve the new permission).');
         }
 
         scheduleModerationCommandSync(client, guild, tokenEntry, getActorName(req));
-        logDashboardAudit(req, `Moderácia ${enabled ? 'zapnutá' : 'vypnutá'}.`);
+        logDashboardAudit(req, `Moderation ${enabled ? 'enabled' : 'disabled'}.`);
         return res.json({ ok: true, moderation: saved, warnings });
     });
 
@@ -2504,13 +2504,13 @@ function startWebServer(client) {
         const reason = String(req.body?.reason || '').trim();
 
         if (!/^\d{15,22}$/.test(userId) || !reason) {
-            return res.status(400).json({ error: 'Vyber hráča a zadaj dôvod varovania.' });
+            return res.status(400).json({ error: 'Select a player and enter a warning reason.' });
         }
 
         const targetMember = await guild.members.fetch(userId).catch(() => null);
         const targetUser = targetMember?.user || await client.users.fetch(userId).catch(() => null);
         if (targetUser?.bot) {
-            return res.status(400).json({ error: 'Bota nie je možné varovať.' });
+            return res.status(400).json({ error: 'Cannot warn a bot.' });
         }
 
         const resWarn = await issueWarning({
@@ -2527,7 +2527,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: resWarn.error });
         }
 
-        logDashboardAudit(req, `Udelený warn #${resWarn.warning.id} pre ${targetUser?.tag || userId}.`, 'warn', userId);
+        logDashboardAudit(req, `Issued warning #${resWarn.warning.id} to ${targetUser?.tag || userId}.`, 'warn', userId);
         return res.json({
             ok: true,
             warning: resWarn.warning,
@@ -2556,7 +2556,7 @@ function startWebServer(client) {
             return res.status(404).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Zmazaný warn #${warningId} pre ${targetMember?.displayName || userId}.`, 'info', userId);
+        logDashboardAudit(req, `Removed warning #${warningId} for ${targetMember?.displayName || userId}.`, 'info', userId);
         return res.json({ ok: true, warnings: getUserWarnings(userId) });
     });
 
@@ -2577,7 +2577,7 @@ function startWebServer(client) {
             return res.status(404).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Vymazané všetky varovania (${result.removedCount}) pre ${targetMember?.displayName || userId}.`, 'info', userId);
+        logDashboardAudit(req, `Cleared all warnings (${result.removedCount}) for ${targetMember?.displayName || userId}.`, 'info', userId);
         return res.json({ ok: true, removedCount: result.removedCount, warnings: [] });
     });
 
@@ -2589,7 +2589,7 @@ function startWebServer(client) {
 
         const targetMember = await guild.members.fetch(userId).catch(() => null);
         if (!targetMember) {
-            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+            return res.status(404).json({ error: 'Member is not on the server.' });
         }
 
         if (durationMinutes === 0) {
@@ -2602,7 +2602,7 @@ function startWebServer(client) {
                 actorMember
             });
             if (!resRm.ok) return res.status(400).json({ error: resRm.error });
-            logDashboardAudit(req, `Zrušený timeout pre ${targetMember.displayName}.`, 'info', userId);
+            logDashboardAudit(req, `Removed timeout for ${targetMember.displayName}.`, 'info', userId);
             return res.json({ ok: true });
         }
 
@@ -2619,7 +2619,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Timeout (${result.durationLabel}) pre ${targetMember.displayName}.`, 'warn', userId);
+        logDashboardAudit(req, `Timed out ${targetMember.displayName} (${result.durationLabel}).`, 'warn', userId);
         return res.json({ ok: true, durationLabel: result.durationLabel });
     });
 
@@ -2630,7 +2630,7 @@ function startWebServer(client) {
 
         const targetMember = await guild.members.fetch(userId).catch(() => null);
         if (!targetMember) {
-            return res.status(404).json({ error: 'Hráč sa nenachádza na serveri.' });
+            return res.status(404).json({ error: 'Member is not on the server.' });
         }
 
         const result = await kickMember({
@@ -2645,7 +2645,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Kick pre ${targetMember.displayName}.`, 'warn', userId);
+        logDashboardAudit(req, `Kicked ${targetMember.displayName}.`, 'warn', userId);
         return res.json({ ok: true });
     });
 
@@ -2656,7 +2656,7 @@ function startWebServer(client) {
         const deleteMessageSeconds = Number(req.body?.deleteMessageSeconds) || 0;
 
         if (!/^\d{15,22}$/.test(userId)) {
-            return res.status(400).json({ error: 'Neplatné ID používateľa.' });
+            return res.status(400).json({ error: 'Invalid user ID.' });
         }
 
         const targetMember = await guild.members.fetch(userId).catch(() => null);
@@ -2676,7 +2676,7 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Ban pre ${result.targetTag}.`, 'warn', userId);
+        logDashboardAudit(req, `Banned ${result.targetTag}.`, 'warn', userId);
         return res.json({ ok: true });
     });
 
@@ -2684,7 +2684,7 @@ function startWebServer(client) {
         const { guild } = req.dashboardAuth;
         const bansCol = await guild.bans.fetch().catch(() => null);
         if (!bansCol) {
-            return res.status(400).json({ error: 'Bot nemá právo zobraziť zoznam banov (Ban Members).' });
+            return res.status(400).json({ error: 'Bot lacks Ban Members permission to view bans.' });
         }
 
         const bans = [...bansCol.values()].map(b => ({
@@ -2714,11 +2714,11 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Unban pre ${result.targetTag}.`);
+        logDashboardAudit(req, `Unbanned ${result.targetTag}.`);
         return res.json({ ok: true });
     });
 
-    // --- Activity Log v dashboarde ---
+    // --- Dashboard Activity Log ---
     app.get('/api/logs', (req, res) => {
         const category = String(req.query.category || 'all');
         const limit = Number(req.query.limit || 500);
@@ -2727,11 +2727,11 @@ function startWebServer(client) {
 
     app.delete('/api/logs', (req, res) => {
         clearActivityLogs();
-        logDashboardAudit(req, 'Activity Log bol vyčistený.');
+        logDashboardAudit(req, 'Cleared Activity Log.');
         return res.json({ ok: true, logs: getActivityLogs({ limit: 500 }) });
     });
 
-    // SPA fallback (mimo /api a /auth)
+    // SPA fallback (outside /api and /auth)
     app.use((req, res, next) => {
         if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
             return next();
@@ -2741,7 +2741,7 @@ function startWebServer(client) {
 
     const port = Number(process.env.PORT || process.env.SERVER_PORT || 15655);
     const server = app.listen(port, '0.0.0.0', () => {
-        console.log(`Webový dashboard beží na porte ${port}`);
+        console.log(`Web dashboard listening on port ${port}`);
     });
 
     return server;
