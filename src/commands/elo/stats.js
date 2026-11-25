@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { loadUsers, saveUsers, appendEloHistory } = require('../../storage/usersStore');
 const { fetchLeetifyProfile } = require('../../services/leetify');
-const { getRankForElo } = require('../../services/ranks');
+const { getRankForElo, updateMemberRank } = require('../../services/ranks');
+const { notifyRankChange } = require('../../services/rankFeed');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -36,10 +37,32 @@ module.exports = {
         const rankObj = getRankForElo(premierElo);
         const embedColor = rankObj ? rankObj.color : 0x808080;
 
-        // Aktualizuje cached Elo pre leaderboard a históriu
-        users[targetUser.id].elo = typeof premierElo === 'number' && premierElo >= 1000 ? premierElo : null;
-        appendEloHistory(users[targetUser.id], users[targetUser.id].elo);
-        saveUsers(users);
+        // Aktualizuje cached Elo, rolu a prípadne pošle Rank-Up / Derank oznámenie
+        const previousElo = typeof entry.elo === 'number' ? entry.elo : null;
+        const finalElo = typeof premierElo === 'number' && premierElo >= 1000 ? Math.round(premierElo) : null;
+        const targetMember = interaction.guild
+            ? (interaction.guild.members.cache.get(targetUser.id)
+                || await interaction.guild.members.fetch(targetUser.id).catch(() => null))
+            : null;
+
+        if (targetMember) {
+            const rankRes = await updateMemberRank(targetMember, entry.steamId, users, {
+                prefetchedProfile: data,
+                previousElo
+            });
+            if (rankRes.error) {
+                users[targetUser.id].elo = finalElo;
+                appendEloHistory(users[targetUser.id], finalElo);
+                saveUsers(users);
+                if (typeof previousElo === 'number' && typeof finalElo === 'number') {
+                    await notifyRankChange(targetMember, previousElo, finalElo).catch(console.error);
+                }
+            }
+        } else {
+            users[targetUser.id].elo = finalElo;
+            appendEloHistory(users[targetUser.id], finalElo);
+            saveUsers(users);
+        }
 
         const leetifyRating = typeof data?.ranks?.leetify === 'number'
             ? `${data.ranks.leetify >= 0 ? '+' : ''}${data.ranks.leetify.toFixed(2)}`

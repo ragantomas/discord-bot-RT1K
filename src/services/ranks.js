@@ -114,8 +114,12 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
             }
         }
 
+        let notified = false;
         if (options.notifyChange !== false && typeof previousElo === 'number' && typeof finalElo === 'number') {
-            await notifyRankChange(member, previousElo, finalElo).catch(console.error);
+            notified = await notifyRankChange(member, previousElo, finalElo).catch((err) => {
+                console.error(err);
+                return false;
+            });
         }
 
         return {
@@ -123,6 +127,7 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
             previousElo,
             eloChanged,
             dirty,
+            notified,
             data,
             rateLimited: false,
             retryAfterMs: 0,
@@ -162,6 +167,8 @@ async function updateAllMemberRanks(client) {
                 continue;
             }
 
+            const previousElo = typeof entry.elo === 'number' ? entry.elo : null;
+            let notified = false;
             let prefetchedProfile = null;
             let memberUpdated = false;
 
@@ -169,7 +176,9 @@ async function updateAllMemberRanks(client) {
                 const result = await updateMemberRank(member, entry.steamId, users, {
                     deferSave: true,
                     prefetchedProfile,
-                    markDirtyOnCheck: true
+                    markDirtyOnCheck: true,
+                    previousElo,
+                    notifyChange: !notified
                 });
 
                 if (result.rateLimited) {
@@ -179,6 +188,9 @@ async function updateAllMemberRanks(client) {
 
                 if (!result.error) {
                     memberUpdated = true;
+                    if (result.notified) {
+                        notified = true;
+                    }
                     if (!prefetchedProfile && result.data) {
                         prefetchedProfile = result.data;
                     }

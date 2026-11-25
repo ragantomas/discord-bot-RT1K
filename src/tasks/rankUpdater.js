@@ -369,6 +369,8 @@ async function processWorkerTick() {
             return;
         }
 
+        const previousElo = typeof entry.elo === 'number' ? entry.elo : null;
+        let notified = false;
         let prefetchedProfile = null;
         let anyEloChanged = false;
         let anyDirty = false;
@@ -378,7 +380,9 @@ async function processWorkerTick() {
         for (const member of members) {
             const result = await updateMemberRank(member, entry.steamId, users, {
                 deferSave: true,
-                prefetchedProfile
+                prefetchedProfile,
+                previousElo,
+                notifyChange: !notified
             });
 
             if (result.rateLimited) {
@@ -388,6 +392,9 @@ async function processWorkerTick() {
             }
 
             if (!result.error) {
+                if (result.notified) {
+                    notified = true;
+                }
                 if (!prefetchedProfile && result.data) {
                     prefetchedProfile = result.data;
                 }

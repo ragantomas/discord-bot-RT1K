@@ -54,7 +54,17 @@ async function notifyRankChange(member, previousElo, newElo) {
         )
         .setTimestamp();
 
-    await channel.send({ embeds: [embed] });
+    try {
+        await channel.send({ embeds: [embed] });
+    } catch (err) {
+        console.error('[RankFeed] Chyba pri odosielaní oznámenia:', err);
+        addActivityLog({
+            level: 'error',
+            category: 'elo',
+            message: `Failed to send Rank-Up / Derank announcement for ${member.displayName}: ${err?.message || err}`
+        });
+        return false;
+    }
 
     addActivityLog({
         level: isRankUp ? 'success' : 'warn',
@@ -96,7 +106,11 @@ async function sendTestRankFeedMessage(guild, member) {
 
     if (thumb) embed.setThumbnail(thumb);
 
-    await channel.send({ embeds: [embed] });
+    try {
+        await channel.send({ embeds: [embed] });
+    } catch (err) {
+        return { ok: false, error: err?.message || 'Failed to send test Rank-Up / Derank message.' };
+    }
     return { ok: true };
 }
 
