@@ -3,10 +3,13 @@ const { assignJoinRole } = require('../services/joinRoles');
 const { logMemberJoin } = require('../services/adminLog');
 const { handleMemberWelcome } = require('../services/welcome');
 const { updateBotStatus } = require('../services/botStatus');
+const { recordMemberJoin } = require('../services/playerActivity');
 
 module.exports = {
     name: Events.GuildMemberAdd,
     async execute(member) {
+        recordMemberJoin(member);
+
         try {
             await assignJoinRole(member);
         } catch (err) {

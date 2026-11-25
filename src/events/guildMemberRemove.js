@@ -3,10 +3,12 @@ const { loadUsers, saveUsers } = require('../storage/usersStore');
 const { updateBotStatus } = require('../services/botStatus');
 const { logMemberLeave } = require('../services/adminLog');
 const { handleMemberGoodbye } = require('../services/welcome');
+const { recordMemberLeave } = require('../services/playerActivity');
 
 module.exports = {
     name: Events.GuildMemberRemove,
     async execute(member) {
+        recordMemberLeave(member);
         const users = loadUsers();
         if (users[member.id]) {
             delete users[member.id];

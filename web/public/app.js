@@ -384,86 +384,304 @@ function renderAddButtonHtml(id, label) {
 
 // --- RENDERERS ---
 
+function buildOverviewActivityChartSvg(dailyActivity) {
+    const days = Array.isArray(dailyActivity) ? dailyActivity : [];
+    if (days.length === 0) {
+        return `<p class="text-xs text-slate-400 py-8 text-center">Zatiaľ bez dát.</p>`;
+    }
+
+    const W = 520;
+    const H = 165;
+    const padL = 30;
+    const padR = 10;
+    const padT = 12;
+    const padB = 26;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const maxVal = Math.max(4, ...days.flatMap(d => [d.messages || 0, d.voiceJoins || 0]));
+    const slotW = innerW / days.length;
+    const barW = Math.min(16, Math.max(8, Math.floor(slotW * 0.28)));
+    const gap = 4;
+
+    const gridLines = [0.25, 0.5, 0.75, 1].map(frac => {
+        const y = padT + (1 - frac) * innerH;
+        const val = Math.round(maxVal * frac);
+        return `
+            <line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="#1e293b" stroke-dasharray="3 3" />
+            <text x="${padL - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="#64748b" font-size="10">${val}</text>
+        `;
+    }).join('');
+
+    const bars = days.map((d, i) => {
+        const cx = padL + i * slotW + slotW / 2;
+        const msgH = ((d.messages || 0) / maxVal) * innerH;
+        const vcH = ((d.voiceJoins || 0) / maxVal) * innerH;
+        const base = padT + innerH;
+        const msgX = cx - barW - gap / 2;
+        const vcX = cx + gap / 2;
+        return `
+            <g>
+                <title>${escapeHtml(d.label)} (${escapeHtml(d.date)}): ${d.messages} správ, ${d.voiceJoins} voice</title>
+                <rect x="${msgX.toFixed(1)}" y="${(base - msgH).toFixed(1)}" width="${barW}" height="${Math.max(msgH, d.messages > 0 ? 3 : 0).toFixed(1)}" rx="4" fill="#5865F2" opacity="0.9" />
+                <rect x="${vcX.toFixed(1)}" y="${(base - vcH).toFixed(1)}" width="${barW}" height="${Math.max(vcH, d.voiceJoins > 0 ? 3 : 0).toFixed(1)}" rx="4" fill="#34D399" opacity="0.9" />
+                <text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" fill="#94a3b8" font-size="11">${escapeHtml(d.label)}</text>
+            </g>
+        `;
+    }).join('');
+
+    return `
+        <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto block select-none">
+            <line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="#334155" />
+            ${gridLines}
+            ${bars}
+        </svg>
+    `;
+}
+
+function buildOverviewTopPlayersHtml(topPlayers) {
+    if (!Array.isArray(topPlayers) || topPlayers.length === 0) {
+        return `<p class="text-xs text-slate-400 py-8 text-center">Zatiaľ žiadni hodnotení hráči.</p>`;
+    }
+
+    return topPlayers.map((p, idx) => {
+        const rankStyle = idx === 0
+            ? 'text-amber-300 bg-amber-500/15 border-amber-500/35'
+            : idx === 1
+                ? 'text-slate-200 bg-slate-500/15 border-slate-500/35'
+                : idx === 2
+                    ? 'text-orange-300 bg-orange-500/15 border-orange-500/35'
+                    : 'text-slate-400 bg-bg-elevated border-slate-800';
+        const deltaHtml = p.weeklyDelta > 0
+            ? `<span class="text-[11px] font-semibold text-emerald-400">+${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
+            : p.weeklyDelta < 0
+                ? `<span class="text-[11px] font-semibold text-red-400">${p.weeklyDelta.toLocaleString('sk-SK')}</span>`
+                : '';
+
+        return `
+            <button type="button" data-ov-player="${escapeHtml(p.userId)}" class="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-bg-elevated/60 hover:bg-bg-hover border border-slate-800/80 transition text-left">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="w-6 h-6 rounded-lg border text-[11px] font-bold flex items-center justify-center shrink-0 ${rankStyle}">#${idx + 1}</span>
+                    <img src="${escapeHtml(p.avatarUrl)}" alt="" class="w-7 h-7 rounded-full object-cover bg-bg-base shrink-0" />
+                    <span class="text-sm font-medium text-white truncate">${escapeHtml(p.displayName)}</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    ${deltaHtml}
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString('sk-SK')}</span>
+                </div>
+            </button>
+        `;
+    }).join('');
+}
+
+function buildOverviewRecentLogsHtml(recentLogs) {
+    if (!Array.isArray(recentLogs) || recentLogs.length === 0) {
+        return `<p class="text-xs text-slate-400 py-8 text-center">Žiadne záznamy.</p>`;
+    }
+
+    const catLabels = {
+        audit: 'Audit',
+        dashboard: 'Audit',
+        moderation: 'Moderácia',
+        elo: 'CS2 Elo',
+        tempvoice: 'TempVoice',
+        patchbot: 'PatchBot',
+        joinroles: 'Join Roles',
+        adminlog: 'Admin Log',
+        welcome: 'Uvítanie',
+        tickets: 'Tickety',
+        system: 'Systém'
+    };
+
+    return recentLogs.map(item => `
+        <div class="flex items-center justify-between gap-3 py-2.5 border-t border-slate-800/70 first:border-t-0 text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="px-2 py-0.5 rounded-md bg-bg-elevated border border-slate-700/80 text-[10px] font-semibold text-slate-300 shrink-0">
+                    ${escapeHtml(catLabels[item.category] || item.category)}
+                </span>
+                <span class="text-slate-200 truncate">${escapeHtml(item.message)}</span>
+            </div>
+            <span class="text-slate-500 shrink-0">${escapeHtml(new Date(item.timestamp).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit' }))}</span>
+        </div>
+    `).join('');
+}
+
 function renderOverview() {
     const container = document.getElementById('section-overview');
     const ov = state.overview;
     if (!ov) return;
 
-    const pingBadge = ov.bot.online ? `${ov.bot.ping} ms` : 'N/A';
+    const pingBadge = ov.bot.online ? `${ov.bot.ping} ms` : '—';
+    const daily = ov.stats.dailyActivity || [];
+    const weekMsgs = daily.reduce((s, d) => s + (d.messages || 0), 0);
+    const weekVoice = daily.reduce((s, d) => s + (d.voiceJoins || 0), 0);
+    const weekJoins = daily.reduce((s, d) => s + (d.joins || 0), 0);
+    const weekLeaves = daily.reduce((s, d) => s + (d.leaves || 0), 0);
+
     const moduleRows = [
-        { key: 'tempvoice', label: 'TempVoice', enabled: ov.modules.tempVoiceEnabled, icon: 'mic' },
-        { key: 'patchbot', label: 'PatchBot', enabled: ov.modules.patchBotEnabled, icon: 'newspaper' },
-        { key: 'joinroles', label: 'Join Roles', enabled: ov.modules.joinRolesEnabled, icon: 'user-plus' },
-        { key: 'csstatus', label: 'CS2 Status', enabled: ov.modules.csStatusEnabled, icon: 'activity' },
-        { key: 'rankfeed', label: 'Rank-Up / Derank', enabled: ov.modules.rankFeedEnabled, icon: 'trending-up' },
-        { key: 'adminlog', label: 'Admin Log', enabled: ov.modules.adminLogEnabled, icon: 'shield-check' },
-        { key: 'welcome', label: 'Uvítanie', enabled: ov.modules.welcomeEnabled, icon: 'hand' },
-        { key: 'tickets', label: 'Tickety', enabled: ov.modules.ticketsEnabled, icon: 'ticket' },
-        { key: 'moderation', label: 'Moderácia', enabled: ov.modules.moderationEnabled, icon: 'gavel' }
+        { key: 'tempvoice', label: 'TempVoice', enabled: ov.modules.tempVoiceEnabled, icon: 'mic', color: 'text-brand' },
+        { key: 'patchbot', label: 'PatchBot', enabled: ov.modules.patchBotEnabled, icon: 'newspaper', color: 'text-amber-400' },
+        { key: 'joinroles', label: 'Join Roles', enabled: ov.modules.joinRolesEnabled, icon: 'user-plus', color: 'text-emerald-400' },
+        { key: 'csstatus', label: 'CS2 Status', enabled: ov.modules.csStatusEnabled, icon: 'activity', color: 'text-sky-400' },
+        { key: 'rankfeed', label: 'Rank-Up / Derank', enabled: ov.modules.rankFeedEnabled, icon: 'trending-up', color: 'text-brand-gold' },
+        { key: 'adminlog', label: 'Admin Log', enabled: ov.modules.adminLogEnabled, icon: 'shield-check', color: 'text-sky-400' },
+        { key: 'welcome', label: 'Uvítanie', enabled: ov.modules.welcomeEnabled, icon: 'hand', color: 'text-emerald-400' },
+        { key: 'tickets', label: 'Tickety', enabled: ov.modules.ticketsEnabled, icon: 'ticket', color: 'text-brand' },
+        { key: 'moderation', label: 'Moderácia', enabled: ov.modules.moderationEnabled, icon: 'gavel', color: 'text-amber-400' }
     ];
 
     container.innerHTML = `
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <div class="card p-5">
-                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
-                    <span>Stav bota</span>
-                    <i data-lucide="radio" class="w-4 h-4 text-emerald-400"></i>
+        <div class="card p-5 bg-gradient-to-r from-brand/10 via-bg-surface to-bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="flex items-center gap-4 min-w-0">
+                <div class="w-14 h-14 rounded-2xl bg-bg-elevated border border-slate-700/80 overflow-hidden flex items-center justify-center shrink-0">
+                    ${ov.guild.iconUrl
+                        ? `<img src="${escapeHtml(ov.guild.iconUrl)}" alt="" class="w-full h-full object-cover" />`
+                        : `<i data-lucide="server" class="w-6 h-6 text-brand"></i>`}
                 </div>
-                <div class="mt-3 flex items-baseline gap-2.5">
-                    <span id="ov-bot-status" class="text-2xl font-bold ${ov.bot.online ? 'text-emerald-400' : 'text-red-400'}">${ov.bot.online ? 'Online' : 'Offline'}</span>
-                    <span id="ov-bot-ping" class="text-xs text-slate-400">Ping: ${escapeHtml(pingBadge)}</span>
+                <div class="min-w-0 space-y-1">
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <h3 class="text-lg font-bold text-white truncate">${escapeHtml(ov.guild.name)}</h3>
+                        <span id="ov-bot-status" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${ov.bot.online ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/15 text-red-300 border border-red-500/30'}">
+                            <span class="w-1.5 h-1.5 rounded-full ${ov.bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>
+                            <span>${ov.bot.online ? 'Online' : 'Offline'}</span>
+                        </span>
+                        ${ov.guild.boostCount > 0 ? `<span class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/30">Tier ${ov.guild.boostTier} · ${ov.guild.boostCount} Boost</span>` : ''}
+                    </div>
+                    <div class="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                        <span>Uptime: <strong id="ov-bot-uptime" class="text-slate-200">${escapeHtml(formatDuration(ov.bot.uptimeMs))}</strong></span>
+                        <span>Ping: <strong id="ov-bot-ping" class="text-slate-200">${escapeHtml(pingBadge)}</strong></span>
+                    </div>
                 </div>
             </div>
 
-            <div class="card p-5">
-                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
-                    <span>Uptime</span>
-                    <i data-lucide="clock" class="w-4 h-4 text-brand"></i>
+            <div class="flex items-center flex-wrap gap-2 text-xs shrink-0">
+                <div class="px-3 py-2 rounded-xl bg-bg-elevated/80 border border-slate-800 flex items-center gap-2">
+                    <i data-lucide="hash" class="w-3.5 h-3.5 text-slate-400"></i>
+                    <span class="text-slate-400">Kanály</span>
+                    <strong class="text-white">${ov.guild.textChannelsCount || 0}</strong>
                 </div>
-                <div id="ov-bot-uptime" class="mt-3 text-2xl font-bold text-white">${escapeHtml(formatDuration(ov.bot.uptimeMs))}</div>
-                <div id="ov-guild-members" class="text-xs text-slate-400 mt-1">${escapeHtml(ov.guild.name)} (${ov.guild.memberCount} členov)</div>
-            </div>
-
-            <div class="card p-5">
-                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
-                    <span>Prepojení hráči</span>
-                    <i data-lucide="users" class="w-4 h-4 text-brand-gold"></i>
+                <div class="px-3 py-2 rounded-xl bg-bg-elevated/80 border border-slate-800 flex items-center gap-2">
+                    <i data-lucide="volume-2" class="w-3.5 h-3.5 text-slate-400"></i>
+                    <span class="text-slate-400">Voice</span>
+                    <strong class="text-white">${ov.guild.voiceChannelsCount || 0}</strong>
                 </div>
-                <div id="ov-linked-count" class="mt-3 text-2xl font-bold text-white">${ov.stats.linkedPlayersCount}</div>
-            </div>
-
-            <div class="card p-5">
-                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
-                    <span>Aktívne TempVoice</span>
-                    <i data-lucide="headphones" class="w-4 h-4 text-sky-400"></i>
+                <div class="px-3 py-2 rounded-xl bg-bg-elevated/80 border border-slate-800 flex items-center gap-2">
+                    <i data-lucide="tags" class="w-3.5 h-3.5 text-slate-400"></i>
+                    <span class="text-slate-400">Roly</span>
+                    <strong class="text-white">${ov.guild.rolesCount || 0}</strong>
                 </div>
-                <div id="ov-tv-count" class="mt-3 text-2xl font-bold text-white">${ov.stats.activeTempRoomsCount}</div>
             </div>
         </div>
 
-        <div class="card p-6">
-            <h3 class="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                <i data-lucide="layers" class="w-4 h-4 text-brand"></i>
-                <span>Stav modulov</span>
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                ${moduleRows.map(m => `
-                    <button type="button" data-jump="${m.key}" class="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-800 transition text-left">
-                        <span class="flex items-center gap-2.5 text-sm font-medium text-slate-200">
-                            <i data-lucide="${m.icon}" class="w-4 h-4 text-slate-400"></i>
-                            ${escapeHtml(m.label)}
-                        </span>
-                        <span data-module-badge="${m.key}" class="text-xs font-semibold px-2.5 py-1 rounded-full ${m.enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}">
-                            ${m.enabled ? 'Aktívny' : 'Vypnutý'}
-                        </span>
-                    </button>
-                `).join('')}
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <button type="button" data-jump="players" class="card p-5 text-left hover:border-slate-600/80 transition">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
+                    <span>Členovia</span>
+                    <i data-lucide="users" class="w-4 h-4 text-brand"></i>
+                </div>
+                <div id="ov-members-count" class="mt-2.5 text-2xl font-bold text-white">${ov.guild.humanCount ?? ov.guild.memberCount}</div>
+                <div id="ov-members-sub" class="text-xs text-slate-400 mt-1">${ov.guild.botCount ? `${ov.guild.botCount} botov` : `Celkom ${ov.guild.memberCount}`}</div>
+            </button>
+
+            <button type="button" data-jump="tempvoice" class="card p-5 text-left hover:border-slate-600/80 transition">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
+                    <span>Vo voice</span>
+                    <i data-lucide="headphones" class="w-4 h-4 text-emerald-400"></i>
+                </div>
+                <div id="ov-voice-count" class="mt-2.5 text-2xl font-bold text-white">${ov.stats.inVoiceCount || 0}</div>
+                <div id="ov-tv-count" class="text-xs text-slate-400 mt-1">TempVoice: ${ov.stats.activeTempRoomsCount}</div>
+            </button>
+
+            <button type="button" data-jump="players" class="card p-5 text-left hover:border-slate-600/80 transition">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
+                    <span>Prepojení hráči</span>
+                    <i data-lucide="trophy" class="w-4 h-4 text-brand-gold"></i>
+                </div>
+                <div id="ov-linked-count" class="mt-2.5 text-2xl font-bold text-white">${ov.stats.linkedPlayersCount}</div>
+                <div id="ov-avg-elo" class="text-xs text-slate-400 mt-1">${typeof ov.stats.avgElo === 'number' ? `Ø ${ov.stats.avgElo.toLocaleString('sk-SK')} Elo` : 'Bez Elo'}</div>
+            </button>
+
+            <button type="button" data-jump="tickets" class="card p-5 text-left hover:border-slate-600/80 transition">
+                <div class="flex items-center justify-between text-slate-400 text-xs font-medium uppercase tracking-wider">
+                    <span>Otvorené tickety</span>
+                    <i data-lucide="ticket" class="w-4 h-4 text-sky-400"></i>
+                </div>
+                <div id="ov-tickets-count" class="mt-2.5 text-2xl font-bold text-white">${ov.stats.openTicketsCount || 0}</div>
+                <div id="ov-mod-sub" class="text-xs text-slate-400 mt-1">Varovania: ${ov.stats.totalWarningsCount || 0} · Timeout: ${ov.stats.timedOutCount || 0}</div>
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div class="card p-6 lg:col-span-7 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-brand"></i>
+                        <span>Aktivita za 7 dní</span>
+                    </h3>
+                    <div id="ov-activity-totals" class="flex items-center flex-wrap gap-3 text-xs text-slate-400">
+                        <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-brand"></span>Správy: <strong class="text-slate-200">${weekMsgs}</strong></span>
+                        <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Voice: <strong class="text-slate-200">${weekVoice}</strong></span>
+                        <span><strong class="text-emerald-400">+${weekJoins}</strong> / <strong class="text-red-400">-${weekLeaves}</strong></span>
+                    </div>
+                </div>
+                <div id="ov-activity-chart">
+                    ${buildOverviewActivityChartSvg(daily)}
+                </div>
+            </div>
+
+            <div class="card p-6 lg:col-span-5 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="trophy" class="w-4 h-4 text-brand-gold"></i>
+                        <span>Top CS2 hráči</span>
+                    </h3>
+                    <button type="button" data-jump="players" class="text-xs font-medium text-sky-400 hover:underline">Všetci</button>
+                </div>
+                <div id="ov-top-players" class="space-y-2">
+                    ${buildOverviewTopPlayersHtml(ov.stats.topPlayers)}
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            <div class="card p-6 lg:col-span-7 space-y-4">
+                <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                    <i data-lucide="layers" class="w-4 h-4 text-brand"></i>
+                    <span>Moduly</span>
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    ${moduleRows.map(m => `
+                        <button type="button" data-jump="${m.key}" class="flex items-center justify-between gap-2 px-3.5 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-800 transition text-left">
+                            <span class="flex items-center gap-2 min-w-0">
+                                <i data-lucide="${m.icon}" class="w-4 h-4 ${m.color} shrink-0"></i>
+                                <span class="text-xs font-medium text-slate-200 truncate">${escapeHtml(m.label)}</span>
+                            </span>
+                            <span data-module-badge="${m.key}" class="w-2 h-2 rounded-full shrink-0 ${m.enabled ? 'bg-emerald-400' : 'bg-slate-600'}" title="${m.enabled ? 'Aktívny' : 'Vypnutý'}"></span>
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="card p-6 lg:col-span-5 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="scroll-text" class="w-4 h-4 text-sky-400"></i>
+                        <span>Posledná aktivita</span>
+                    </h3>
+                    <button type="button" data-jump="logs" class="text-xs font-medium text-sky-400 hover:underline">Všetko</button>
+                </div>
+                <div id="ov-recent-logs">
+                    ${buildOverviewRecentLogsHtml(ov.stats.recentLogs)}
+                </div>
             </div>
         </div>
     `;
 
     container.querySelectorAll('[data-jump]').forEach(btn => {
         btn.addEventListener('click', () => switchSection(btn.dataset.jump));
+    });
+
+    container.querySelectorAll('[data-ov-player]').forEach(btn => {
+        btn.addEventListener('click', () => openPlayerDetailModal(btn.dataset.ovPlayer, 'cs2'));
     });
 
     refreshIcons();
@@ -4701,13 +4919,8 @@ function renderModeration() {
 
 // --- DATA REFRESH, LIVE POLLING & NAVIGATION ---
 
-function updateHeaderBotBadge(bot) {
-    const badge = document.getElementById('header-bot-badge');
-    if (!badge || !bot) return;
-    badge.className = bot.online
-        ? 'hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-        : 'hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30';
-    badge.innerHTML = `<span class="w-2 h-2 rounded-full ${bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>${bot.online ? `Online (${bot.ping} ms)` : 'Offline'}`;
+function updateHeaderBotBadge() {
+    // Stav bota je zobrazený priamo v Prehľade
 }
 
 function patchOverviewDom() {
@@ -4717,28 +4930,79 @@ function patchOverviewDom() {
     const statusEl = document.getElementById('ov-bot-status');
     const pingEl = document.getElementById('ov-bot-ping');
     const uptimeEl = document.getElementById('ov-bot-uptime');
-    const guildEl = document.getElementById('ov-guild-members');
-    const linkedEl = document.getElementById('ov-linked-count');
+    const membersEl = document.getElementById('ov-members-count');
+    const membersSubEl = document.getElementById('ov-members-sub');
+    const voiceEl = document.getElementById('ov-voice-count');
     const tvEl = document.getElementById('ov-tv-count');
+    const linkedEl = document.getElementById('ov-linked-count');
+    const avgEloEl = document.getElementById('ov-avg-elo');
+    const ticketsEl = document.getElementById('ov-tickets-count');
+    const modSubEl = document.getElementById('ov-mod-sub');
+    const totalsEl = document.getElementById('ov-activity-totals');
+    const chartEl = document.getElementById('ov-activity-chart');
+    const topEl = document.getElementById('ov-top-players');
+    const logsEl = document.getElementById('ov-recent-logs');
 
     if (statusEl) {
-        statusEl.textContent = ov.bot.online ? 'Online' : 'Offline';
-        statusEl.className = `text-2xl font-bold ${ov.bot.online ? 'text-emerald-400' : 'text-red-400'}`;
+        statusEl.className = `inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${ov.bot.online ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/15 text-red-300 border border-red-500/30'}`;
+        statusEl.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${ov.bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span><span>${ov.bot.online ? 'Online' : 'Offline'}</span>`;
     }
     if (pingEl) {
-        pingEl.textContent = `Ping: ${ov.bot.online ? `${ov.bot.ping} ms` : 'N/A'}`;
+        pingEl.textContent = ov.bot.online ? `${ov.bot.ping} ms` : '—';
     }
     if (uptimeEl) {
         uptimeEl.textContent = formatDuration(ov.bot.uptimeMs);
     }
-    if (guildEl) {
-        guildEl.textContent = `${ov.guild.name} (${ov.guild.memberCount} členov)`;
+    if (membersEl) {
+        membersEl.textContent = String(ov.guild.humanCount ?? ov.guild.memberCount);
+    }
+    if (membersSubEl) {
+        membersSubEl.textContent = ov.guild.botCount ? `${ov.guild.botCount} botov` : `Celkom ${ov.guild.memberCount}`;
+    }
+    if (voiceEl) {
+        voiceEl.textContent = String(ov.stats.inVoiceCount || 0);
+    }
+    if (tvEl) {
+        tvEl.textContent = `TempVoice: ${ov.stats.activeTempRoomsCount}`;
     }
     if (linkedEl) {
         linkedEl.textContent = String(ov.stats.linkedPlayersCount);
     }
-    if (tvEl) {
-        tvEl.textContent = String(ov.stats.activeTempRoomsCount);
+    if (avgEloEl) {
+        avgEloEl.textContent = typeof ov.stats.avgElo === 'number'
+            ? `Ø ${ov.stats.avgElo.toLocaleString('sk-SK')} Elo`
+            : 'Bez Elo';
+    }
+    if (ticketsEl) {
+        ticketsEl.textContent = String(ov.stats.openTicketsCount || 0);
+    }
+    if (modSubEl) {
+        modSubEl.textContent = `Varovania: ${ov.stats.totalWarningsCount || 0} · Timeout: ${ov.stats.timedOutCount || 0}`;
+    }
+
+    const daily = ov.stats.dailyActivity || [];
+    if (totalsEl) {
+        const weekMsgs = daily.reduce((s, d) => s + (d.messages || 0), 0);
+        const weekVoice = daily.reduce((s, d) => s + (d.voiceJoins || 0), 0);
+        const weekJoins = daily.reduce((s, d) => s + (d.joins || 0), 0);
+        const weekLeaves = daily.reduce((s, d) => s + (d.leaves || 0), 0);
+        totalsEl.innerHTML = `
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-brand"></span>Správy: <strong class="text-slate-200">${weekMsgs}</strong></span>
+            <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span>Voice: <strong class="text-slate-200">${weekVoice}</strong></span>
+            <span><strong class="text-emerald-400">+${weekJoins}</strong> / <strong class="text-red-400">-${weekLeaves}</strong></span>
+        `;
+    }
+    if (chartEl) {
+        chartEl.innerHTML = buildOverviewActivityChartSvg(daily);
+    }
+    if (topEl) {
+        topEl.innerHTML = buildOverviewTopPlayersHtml(ov.stats.topPlayers);
+        topEl.querySelectorAll('[data-ov-player]').forEach(btn => {
+            btn.addEventListener('click', () => openPlayerDetailModal(btn.dataset.ovPlayer, 'cs2'));
+        });
+    }
+    if (logsEl) {
+        logsEl.innerHTML = buildOverviewRecentLogsHtml(ov.stats.recentLogs);
     }
 
     const moduleMap = {
@@ -4754,10 +5018,10 @@ function patchOverviewDom() {
     };
 
     Object.entries(moduleMap).forEach(([key, enabled]) => {
-        const pill = document.querySelector(`[data-module-badge="${key}"]`);
-        if (!pill) return;
-        pill.textContent = enabled ? 'Aktívny' : 'Vypnutý';
-        pill.className = `text-xs font-semibold px-2.5 py-1 rounded-full ${enabled ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700/40 text-slate-400 border border-slate-700'}`;
+        const dot = document.querySelector(`[data-module-badge="${key}"]`);
+        if (!dot) return;
+        dot.className = `w-2 h-2 rounded-full shrink-0 ${enabled ? 'bg-emerald-400' : 'bg-slate-600'}`;
+        dot.title = enabled ? 'Aktívny' : 'Vypnutý';
     });
 }
 

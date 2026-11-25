@@ -51,7 +51,7 @@ const {
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank } = require('../src/services/ranks');
-const { getPlayerActivity, getAllPlayerActivity } = require('../src/services/playerActivity');
+const { getPlayerActivity, getAllPlayerActivity, getDailyActivity } = require('../src/services/playerActivity');
 const { updateBotStatus } = require('../src/services/botStatus');
 const {
     toggleTempRoomLock,
@@ -276,15 +276,61 @@ function buildOverviewPayload(client, guild) {
         .filter(t => t && t.guildId === guild.id && guild.channels.cache.has(t.channelId))
         .length;
 
+    let humanCount = 0;
+    let botCount = 0;
+    let inVoiceCount = 0;
+    let timedOutCount = 0;
+    const now = Date.now();
+
+    for (const m of guild.members.cache.values()) {
+        if (!m) continue;
+        if (m.user?.bot) {
+            botCount++;
+        } else {
+            humanCount++;
+            if (m.voice?.channelId) inVoiceCount++;
+            if (m.communicationDisabledUntilTimestamp && m.communicationDisabledUntilTimestamp > now) timedOutCount++;
+        }
+    }
+
+    let textChannelsCount = 0;
+    let voiceChannelsCount = 0;
+    for (const ch of guild.channels.cache.values()) {
+        if (!ch) continue;
+        if (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement) {
+            textChannelsCount++;
+        } else if (ch.type === ChannelType.GuildVoice) {
+            voiceChannelsCount++;
+        }
+    }
+
+    const rolesCount = Math.max(0, guild.roles.cache.filter(r => r.id !== guild.id).size);
+
+    const warningsByUser = getAllWarningsByUser();
+    let totalWarningsCount = 0;
+    for (const list of Object.values(warningsByUser)) {
+        if (Array.isArray(list)) totalWarningsCount += list.length;
+    }
+
     let topElo = 0;
     let topClimber = null;
+    const rankedList = [];
     for (const [userId, u] of Object.entries(users)) {
-        if (typeof u?.elo === 'number' && u.elo > topElo) {
-            topElo = u.elo;
-        }
+        const member = guild.members.cache.get(userId);
         const stats = computeWeeklyEloStats(u);
+        if (typeof u?.elo === 'number') {
+            if (u.elo > topElo) topElo = u.elo;
+            const rankObj = getRankForElo(u.elo);
+            rankedList.push({
+                userId,
+                displayName: member?.displayName || `Používateľ ${userId}`,
+                avatarUrl: member?.displayAvatarURL({ size: 64 }) || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                elo: u.elo,
+                rankColor: rankObj ? formatHexColor(rankObj.color) : '#808080',
+                weeklyDelta: stats.weeklyDelta
+            });
+        }
         if (stats.weeklyDelta > 0 && (!topClimber || stats.weeklyDelta > topClimber.delta)) {
-            const member = guild.members.cache.get(userId);
             topClimber = {
                 userId,
                 displayName: member?.displayName || `Používateľ ${userId}`,
@@ -293,6 +339,11 @@ function buildOverviewPayload(client, guild) {
             };
         }
     }
+
+    rankedList.sort((a, b) => b.elo - a.elo);
+    const avgElo = rankedList.length > 0
+        ? Math.round(rankedList.reduce((sum, p) => sum + p.elo, 0) / rankedList.length)
+        : null;
 
     return {
         bot: {
@@ -306,14 +357,28 @@ function buildOverviewPayload(client, guild) {
             id: guild.id,
             name: guild.name,
             memberCount: guild.memberCount,
+            humanCount,
+            botCount,
+            boostCount: guild.premiumSubscriptionCount || 0,
+            boostTier: guild.premiumTier || 0,
+            textChannelsCount,
+            voiceChannelsCount,
+            rolesCount,
             iconUrl: guild.iconURL({ size: 128 }) || null
         },
         stats: {
             linkedPlayersCount: Object.keys(users).length,
             activeTempRoomsCount,
             openTicketsCount,
+            inVoiceCount,
+            totalWarningsCount,
+            timedOutCount,
             topElo,
-            topClimber
+            avgElo,
+            topClimber,
+            topPlayers: rankedList.slice(0, 5),
+            dailyActivity: getDailyActivity(7),
+            recentLogs: getActivityLogs({ limit: 6 })
         },
         modules: {
             tempVoiceEnabled: tvActive,
