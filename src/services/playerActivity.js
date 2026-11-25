@@ -4,6 +4,7 @@ const { PLAYER_ACTIVITY_FILE } = require('../config');
 const MAX_VOICE_HISTORY = 25;
 const MAX_DAILY_DAYS = 14;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const activeVoiceSessions = new Map();
 let persistTimer = null;
 
 function loadActivityMap() {
@@ -71,13 +72,42 @@ function ensureUserRecord(userId) {
             messagesTotal: 0,
             lastVoiceAt: null,
             lastVoiceChannelName: null,
+            voiceSecondsTotal: 0,
             voiceHistory: []
         };
+    }
+    if (!Number.isFinite(Number(activityMap[userId].voiceSecondsTotal))) {
+        activityMap[userId].voiceSecondsTotal = 0;
     }
     if (!Array.isArray(activityMap[userId].voiceHistory)) {
         activityMap[userId].voiceHistory = [];
     }
     return activityMap[userId];
+}
+
+function flushUserVoiceSession(userId, now = Date.now()) {
+    const startedAt = activeVoiceSessions.get(userId);
+    if (!startedAt) return 0;
+    activeVoiceSessions.delete(userId);
+    const elapsedSec = Math.max(0, Math.floor((now - startedAt) / 1000));
+    if (elapsedSec > 0) {
+        const rec = ensureUserRecord(userId);
+        rec.voiceSecondsTotal = (Number(rec.voiceSecondsTotal) || 0) + elapsedSec;
+    }
+    return elapsedSec;
+}
+
+function seedActiveVoiceSessions(client) {
+    if (!client?.guilds?.cache) return;
+    const now = Date.now();
+    for (const guild of client.guilds.cache.values()) {
+        for (const vs of guild.voiceStates?.cache?.values() || []) {
+            if (!vs?.channelId || vs.member?.user?.bot) continue;
+            if (!activeVoiceSessions.has(vs.id)) {
+                activeVoiceSessions.set(vs.id, now);
+            }
+        }
+    }
 }
 
 function recordMessageActivity(message) {
@@ -103,10 +133,15 @@ function recordVoiceActivity(oldState, newState) {
     if (!oldState?.channelId && newState?.channelId) {
         type = 'join';
         channelName = newState.channel?.name || 'Voice';
+        activeVoiceSessions.set(member.id, now);
         bumpDailyCounter('voiceJoins');
     } else if (oldState?.channelId && newState?.channelId) {
         type = 'move';
         channelName = `${oldState.channel?.name || 'Voice'} → ${newState.channel?.name || 'Voice'}`;
+        flushUserVoiceSession(member.id, now);
+        activeVoiceSessions.set(member.id, now);
+    } else {
+        flushUserVoiceSession(member.id, now);
     }
 
     rec.lastVoiceAt = now;
@@ -160,6 +195,9 @@ function getDailyActivity(days = 7) {
 
 function getPlayerActivity(userId) {
     const rec = activityMap[userId];
+    const activeStart = activeVoiceSessions.get(userId);
+    const activeSec = activeStart ? Math.max(0, Math.floor((Date.now() - activeStart) / 1000)) : 0;
+
     if (!rec || userId === '_daily') {
         return {
             lastMessageAt: null,
@@ -167,11 +205,17 @@ function getPlayerActivity(userId) {
             messagesTotal: 0,
             lastVoiceAt: null,
             lastVoiceChannelName: null,
+            voiceSecondsTotal: activeSec,
+            voiceMinutesTotal: Math.floor(activeSec / 60),
             voiceHistory: []
         };
     }
+
+    const totalSec = (Number(rec.voiceSecondsTotal) || 0) + activeSec;
     return {
         ...rec,
+        voiceSecondsTotal: totalSec,
+        voiceMinutesTotal: Math.floor(totalSec / 60),
         voiceHistory: Array.isArray(rec.voiceHistory) ? [...rec.voiceHistory] : []
     };
 }
@@ -190,6 +234,7 @@ module.exports = {
     recordVoiceActivity,
     recordMemberJoin,
     recordMemberLeave,
+    seedActiveVoiceSessions,
     getDailyActivity,
     getPlayerActivity,
     getAllPlayerActivity

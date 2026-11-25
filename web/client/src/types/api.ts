@@ -246,6 +246,7 @@ export interface WarningItem {
 export interface PlayerActivityStats {
   messagesTotal: number;
   messages7d?: number;
+  voiceSecondsTotal?: number;
   voiceMinutesTotal: number;
   voiceJoinsTotal?: number;
   lastMessageAt: number | null;

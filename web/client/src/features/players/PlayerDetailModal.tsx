@@ -185,7 +185,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
       {loading || !detail ? (
         <SkeletonCard rows={4} />
       ) : (
-        <div className="space-y-4 min-h-[340px]">
+        <div className="space-y-4">
           <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
             {tabs.map((tab) => (
               <button

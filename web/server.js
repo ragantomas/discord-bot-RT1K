@@ -720,9 +720,10 @@ function startWebServer(client) {
     app.use(cookieParser(sessionSecret));
 
     const distDir = path.join(__dirname, 'dist');
-    const publicDir = path.join(__dirname, 'public');
-    const staticDir = fs.existsSync(path.join(distDir, 'index.html')) ? distDir : publicDir;
-    app.use(express.static(staticDir));
+    if (!fs.existsSync(path.join(distDir, 'index.html'))) {
+        console.warn('[WARN] web/dist/index.html not found — run "npm run web:build" first.');
+    }
+    app.use(express.static(distDir));
 
     // --- Discord OAuth2 ---
     app.get('/auth/discord', (req, res) => {
@@ -2753,7 +2754,7 @@ function startWebServer(client) {
         if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
             return next();
         }
-        return res.sendFile(path.join(staticDir, 'index.html'));
+        return res.sendFile(path.join(distDir, 'index.html'));
     });
 
     const port = Number(process.env.PORT || process.env.SERVER_PORT || 15655);
