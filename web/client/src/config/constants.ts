@@ -69,14 +69,6 @@ export const WELCOME_VARIABLES = [
   { token: '{members}', labelKey: 'welcome.vars.members' },
 ] as const;
 
-export const TIMEOUT_PRESETS = [
-  { minutes: 5, labelKey: 'moderation.presets.5m' },
-  { minutes: 10, labelKey: 'moderation.presets.10m' },
-  { minutes: 60, labelKey: 'moderation.presets.1h' },
-  { minutes: 1440, labelKey: 'moderation.presets.1d' },
-  { minutes: 10080, labelKey: 'moderation.presets.7d' },
-] as const;
-
 export const BAN_DELETE_PRESETS = [
   { seconds: 0, labelKey: 'moderation.banDelete.none' },
   { seconds: 3600, labelKey: 'moderation.banDelete.1h' },

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { moderationApi } from '@/api/moderation';
 import { Button } from '@/components/ui/Button';
+import { DurationUnitInput } from '@/components/ui/DurationUnitInput';
 import { SkeletonCard } from '@/components/ui/Feedback';
 import { Modal } from '@/components/ui/Modal';
 import { BAN_DELETE_PRESETS } from '@/config/constants';
@@ -19,20 +20,6 @@ interface PlayerModModalProps {
   onOpenDetail: (userId: string) => void;
 }
 
-type TimeoutUnit = 'm' | 'h' | 'd';
-
-const UNIT_MULTIPLIER: Record<TimeoutUnit, number> = {
-  m: 1,
-  h: 60,
-  d: 1440,
-};
-
-const UNIT_MAX: Record<TimeoutUnit, number> = {
-  m: 40320,
-  h: 672,
-  d: 28,
-};
-
 export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModalProps) {
   const { t } = useTranslation();
   const lang = getAppLanguage();
@@ -43,8 +30,7 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [warnReason, setWarnReason] = useState('');
-  const [timeoutAmount, setTimeoutAmount] = useState(10);
-  const [timeoutUnit, setTimeoutUnit] = useState<TimeoutUnit>('m');
+  const [timeoutMinutes, setTimeoutMinutes] = useState(10);
   const [timeoutReason, setTimeoutReason] = useState('');
   const [actionReason, setActionReason] = useState('');
   const [banDeleteSec, setBanDeleteSec] = useState(0);
@@ -69,8 +55,7 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
       setWarnReason('');
       setTimeoutReason('');
       setActionReason('');
-      setTimeoutAmount(10);
-      setTimeoutUnit('m');
+      setTimeoutMinutes(10);
       setBanDeleteSec(0);
       void loadWarnings(playerId);
     } else {
@@ -353,44 +338,11 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex items-center gap-2 shrink-0">
-                  <input
-                    type="number"
-                    min={1}
-                    max={UNIT_MAX[timeoutUnit]}
-                    value={timeoutAmount}
-                    onChange={(e) => setTimeoutAmount(Math.max(1, Number(e.target.value) || 1))}
-                    className="input-field w-24"
-                  />
-                  <div className="inline-flex items-center p-1 rounded-xl bg-bg-base border border-slate-700 h-[42px] shrink-0">
-                    {(
-                      [
-                        { id: 'm', label: t('moderation.units.minutes') },
-                        { id: 'h', label: t('moderation.units.hours') },
-                        { id: 'd', label: t('moderation.units.days') },
-                      ] as const
-                    ).map((u) => {
-                      const active = timeoutUnit === u.id;
-                      return (
-                        <button
-                          key={u.id}
-                          type="button"
-                          onClick={() => {
-                            setTimeoutUnit(u.id);
-                            setTimeoutAmount((prev) => Math.min(Math.max(1, prev), UNIT_MAX[u.id]));
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                            active
-                              ? 'bg-brand text-white shadow-sm'
-                              : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          {u.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <DurationUnitInput
+                  minutes={timeoutMinutes}
+                  onChangeMinutes={setTimeoutMinutes}
+                  disabled={busy}
+                />
 
                 <input
                   type="text"
@@ -404,11 +356,7 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
               <Button
                 variant="secondary"
                 loading={busy}
-                onClick={() =>
-                  void handleTimeout(
-                    Math.min(40320, Math.max(1, Math.round(timeoutAmount * UNIT_MULTIPLIER[timeoutUnit]))),
-                  )
-                }
+                onClick={() => void handleTimeout(timeoutMinutes)}
               >
                 {t('moderation.modal.timeoutApply')}
               </Button>

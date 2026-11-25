@@ -178,6 +178,11 @@ export function TempVoicePage() {
     <div className="space-y-6">
       {/* Config form */}
       <form onSubmit={onFormSubmit} className="card p-6 space-y-5">
+        <h3 className="text-base font-semibold text-white flex items-center gap-2">
+          <Volume2 className="w-4 h-4 text-sky-400" />
+          <span>{t('nav.tempvoice')}</span>
+        </h3>
+
         <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
           <span className="text-sm font-semibold text-white">{t('tempvoice.enableModule')}</span>
           <ToggleSwitch
@@ -312,7 +317,7 @@ export function TempVoicePage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-400">
-                        {t('tempvoice.bitrate')} (kbps)
+                        {t('tempvoice.bitrate')}
                       </label>
                       <input
                         type="number"

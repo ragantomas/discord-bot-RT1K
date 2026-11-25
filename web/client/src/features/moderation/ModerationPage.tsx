@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { moderationApi } from '@/api/moderation';
 import { Button } from '@/components/ui/Button';
 import { RoleListEditor } from '@/components/ui/DiscordSelects';
+import { DurationUnitInput } from '@/components/ui/DurationUnitInput';
 import { EmptyState, SkeletonCard } from '@/components/ui/Feedback';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { API_LIMITS, ESCALATION_ACTIONS } from '@/config/constants';
@@ -276,7 +277,7 @@ export function ModerationPage() {
                     key={idx}
                     className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end p-3 rounded-xl bg-bg-base/60 border border-slate-800"
                   >
-                    <div className="sm:col-span-3 space-y-1">
+                    <div className="sm:col-span-2 space-y-1">
                       <label className="text-[11px] text-slate-400">
                         {t('moderation.warningsCount')}
                       </label>
@@ -290,7 +291,7 @@ export function ModerationPage() {
                       />
                     </div>
 
-                    <div className="sm:col-span-4 space-y-1">
+                    <div className="sm:col-span-3 space-y-1">
                       <label className="text-[11px] text-slate-400">{t('moderation.action')}</label>
                       <select
                         value={rule.action}
@@ -307,21 +308,17 @@ export function ModerationPage() {
                       </select>
                     </div>
 
-                    <div className="sm:col-span-4 space-y-1">
+                    <div className="sm:col-span-6 space-y-1">
                       {rule.action === 'timeout' && (
                         <>
-                          <label className="text-[11px] text-slate-400">
-                            {t('moderation.duration')} ({t('moderation.minutesUnit')})
+                          <label className="text-[11px] text-slate-400 block">
+                            {t('moderation.duration')}
                           </label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={API_LIMITS.ESCALATION_MAX_DURATION_MIN}
-                            value={rule.durationMinutes}
-                            onChange={(e) =>
-                              updateRule(idx, { durationMinutes: Number(e.target.value) })
+                          <DurationUnitInput
+                            minutes={rule.durationMinutes}
+                            onChangeMinutes={(mins) =>
+                              updateRule(idx, { durationMinutes: mins })
                             }
-                            className="input-field"
                           />
                         </>
                       )}

@@ -533,18 +533,18 @@ export function SettingsPage() {
               </div>
             ))}
           </div>
+        </div>
 
-          <div className="flex justify-end pt-2">
-            <Button
-              type="submit"
-              variant="primary"
-              loading={saving}
-              loadingText={t('common.saving')}
-              icon={<Save className="w-4 h-4" />}
-            >
-              {t('common.save')}
-            </Button>
-          </div>
+        <div className="flex justify-end">
+          <Button
+            type="submit"
+            variant="primary"
+            loading={saving}
+            loadingText={t('common.saving')}
+            icon={<Save className="w-4 h-4" />}
+          >
+            {t('common.save')}
+          </Button>
         </div>
       </form>
 

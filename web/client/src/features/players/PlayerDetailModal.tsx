@@ -2,10 +2,12 @@ import {
   ExternalLink,
   Gavel,
   Headphones,
+  MessageSquare,
   Plus,
   Save,
   Ticket,
   Trash2,
+  Volume2,
   VolumeX,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -374,28 +376,111 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
           )}
 
           {activeTab === 'activity' && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                <div className="text-xs text-slate-400">{t('players.detail.messagesTotal')}</div>
-                <div className="text-2xl font-bold text-white mt-1">
-                  {formatNumber(detail.activity.messagesTotal || 0, lang)}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                  <div className="text-xs text-slate-400">{t('players.detail.messagesTotal')}</div>
+                  <div className="text-2xl font-bold text-white mt-1">
+                    {formatNumber(detail.activity.messagesTotal || 0, lang)}
+                  </div>
+                </div>
+                <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                  <div className="text-xs text-slate-400">{t('players.detail.voiceMinutes')}</div>
+                  <div className="text-2xl font-bold text-white mt-1">
+                    {formatNumber(detail.activity.voiceMinutesTotal || 0, lang)}
+                  </div>
+                </div>
+                <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                  <div className="text-xs text-slate-400">{t('players.detail.lastSeen')}</div>
+                  <div className="text-sm font-semibold text-white mt-2">
+                    {formatRelativeTime(
+                      Math.max(
+                        detail.activity.lastMessageAt || 0,
+                        detail.activity.lastVoiceAt || 0,
+                      ) || null,
+                      lang,
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                <div className="text-xs text-slate-400">{t('players.detail.voiceMinutes')}</div>
-                <div className="text-2xl font-bold text-white mt-1">
-                  {formatNumber(detail.activity.voiceMinutesTotal || 0, lang)}
-                </div>
-              </div>
-              <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                <div className="text-xs text-slate-400">{t('players.detail.lastSeen')}</div>
-                <div className="text-sm font-semibold text-white mt-2">
-                  {formatRelativeTime(
-                    Math.max(detail.activity.lastMessageAt || 0, detail.activity.lastVoiceAt || 0) ||
-                      null,
-                    lang,
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{t('players.detail.lastMessage')}</span>
+                  </div>
+                  <div className="text-sm font-semibold text-white mt-1.5">
+                    {formatRelativeTime(detail.activity.lastMessageAt, lang)}
+                  </div>
+                  {detail.activity.lastMessageChannelName && (
+                    <div className="text-xs text-slate-400 mt-1 truncate">
+                      #{detail.activity.lastMessageChannelName}
+                    </div>
                   )}
                 </div>
+
+                <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                  <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{t('players.detail.lastVoice')}</span>
+                  </div>
+                  <div className="text-sm font-semibold text-white mt-1.5">
+                    {formatRelativeTime(detail.activity.lastVoiceAt, lang)}
+                  </div>
+                  {detail.activity.lastVoiceChannelName && (
+                    <div className="text-xs text-slate-400 mt-1 truncate">
+                      {detail.activity.lastVoiceChannelName}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2.5">
+                <div className="text-xs font-medium text-slate-400">
+                  {t('players.detail.voiceHistory')}
+                </div>
+                {!(detail.activity.voiceHistory?.length) ? (
+                  <p className="text-xs text-slate-400">{t('players.detail.noVoiceHistory')}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {detail.activity.voiceHistory.slice(0, 15).map((item, idx) => {
+                      const badge =
+                        item.type === 'join'
+                          ? {
+                              label: t('players.detail.voiceJoin'),
+                              cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+                            }
+                          : item.type === 'move'
+                            ? {
+                                label: t('players.detail.voiceMove'),
+                                cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+                              }
+                            : {
+                                label: t('players.detail.voiceLeave'),
+                                cls: 'bg-slate-700/60 text-slate-300 border-slate-600/60',
+                              };
+                      return (
+                        <div
+                          key={`${item.timestamp}_${idx}`}
+                          className="p-2 rounded-lg bg-bg-base/60 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-medium border shrink-0 ${badge.cls}`}
+                            >
+                              {badge.label}
+                            </span>
+                            <span className="text-slate-200 truncate">{item.channelName}</span>
+                          </div>
+                          <span className="text-slate-500 whitespace-nowrap shrink-0">
+                            {formatDateTime(item.timestamp, lang)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}

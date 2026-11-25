@@ -3,9 +3,11 @@ import {
   Gavel,
   Headphones,
   Link2,
+  RefreshCw,
   Search,
   Unlink,
   User,
+  Users,
 } from 'lucide-react';
 import { useCallback, useMemo, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +39,7 @@ export function PlayersPage() {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<PlayerFilter>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const [modUserId, setModUserId] = useState<string | null>(null);
@@ -111,6 +114,18 @@ export function PlayersPage() {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshPlayers();
+      showToast(t('players.refreshedToast'));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (initialLoading) {
     return <SkeletonCard rows={6} />;
   }
@@ -164,7 +179,23 @@ export function PlayersPage() {
 
       {/* Players table */}
       <div className="card overflow-hidden">
-        <div className="p-5 border-b border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="p-5 border-b border-slate-800/90 flex items-center justify-between gap-3">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Users className="w-4 h-4 text-brand" />
+            <span>{t('players.tableTitle', { count: filteredPlayers.length })}</span>
+          </h3>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={refreshing}
+            onClick={() => void handleRefresh()}
+            icon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
+
+        <div className="px-5 py-3.5 border-b border-slate-800/90 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex flex-wrap gap-2">
             {filterButtons.map((btn) => (
               <button

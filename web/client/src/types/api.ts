@@ -250,7 +250,9 @@ export interface PlayerActivityStats {
   voiceMinutesTotal: number;
   voiceJoinsTotal?: number;
   lastMessageAt: number | null;
+  lastMessageChannelName?: string | null;
   lastVoiceAt: number | null;
+  lastVoiceChannelName?: string | null;
   voiceHistory?: Array<{
     type: 'join' | 'leave' | 'move';
     channelName: string;
