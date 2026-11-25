@@ -47,18 +47,20 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
     }
   }, [showToast]);
 
+  const playerId = player?.userId ?? null;
+
   useEffect(() => {
-    if (player) {
+    if (playerId) {
       setWarnReason('');
       setTimeoutReason('');
       setActionReason('');
       setTimeoutMinutes(60);
       setBanDeleteSec(0);
-      void loadWarnings(player.userId);
+      void loadWarnings(playerId);
     } else {
       setWarnings([]);
     }
-  }, [player, loadWarnings]);
+  }, [playerId, loadWarnings]);
 
   const syncAfterAction = async () => {
     await Promise.all([refreshPlayers(), refreshOverview()]);

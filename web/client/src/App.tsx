@@ -27,7 +27,8 @@ function DashboardRoutes() {
       <DashboardLayout>
         <Routes>
           <Route path="/" element={<OverviewPage />} />
-          <Route path="/players" element={<PlayersPage />} />
+          <Route path="/members" element={<PlayersPage />} />
+          <Route path="/players" element={<Navigate to="/members" replace />} />
           <Route path="/announcements" element={<AnnouncementsPage />} />
           <Route path="/logs" element={<ActivityLogPage />} />
           <Route path="/tempvoice" element={<TempVoicePage />} />

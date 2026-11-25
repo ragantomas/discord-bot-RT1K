@@ -1,4 +1,4 @@
-import { Edit3, Megaphone, RefreshCw, Send, X } from 'lucide-react';
+import { Bot, Edit3, Eraser, Eye, Megaphone, RefreshCw, Send, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { announcementsApi } from '@/api/announcements';
@@ -8,6 +8,7 @@ import { EmptyState, SkeletonCard } from '@/components/ui/Feedback';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { API_LIMITS } from '@/config/constants';
 import { DEFAULT_EMBED_COLOR } from '@/config/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useDashboard } from '@/context/DashboardContext';
 import { useToast } from '@/context/ToastContext';
 import { getAppLanguage } from '@/i18n';
@@ -42,11 +43,17 @@ const EMPTY_FORM: FormState = {
   crosspost: false,
 };
 
+function isValidHttpUrl(url: string): boolean {
+  return /^https?:\/\/.+/i.test(url.trim());
+}
+
 export function AnnouncementsPage() {
   const { t } = useTranslation();
   const lang = getAppLanguage();
   const { showToast } = useToast();
+  const { auth } = useAuth();
   const {
+    overview,
     meta,
     announcementsHistory,
     setAnnouncementsHistory,
@@ -58,6 +65,7 @@ export function AnnouncementsPage() {
   const [editing, setEditing] = useState<AnnouncementHistoryEntry | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!editing) return;
@@ -73,6 +81,17 @@ export function AnnouncementsPage() {
 
   const selectedChannel = (meta?.textChannels ?? []).find((c) => c.id === form.channelId);
   const selectedRole = (meta?.roles ?? []).find((r) => r.id === form.roleId);
+  const botName = overview?.bot.username || auth?.bot.username || 'BOT Gaben';
+  const botAvatar = overview?.bot.avatarUrl || auth?.bot.avatarUrl;
+
+  const trimmedThumb = form.thumbnailUrl.trim();
+  const trimmedImage = form.imageUrl.trim();
+  const showThumb = isValidHttpUrl(trimmedThumb) && !failedImageUrls[trimmedThumb];
+  const showImage = isValidHttpUrl(trimmedImage) && !failedImageUrls[trimmedImage];
+
+  const markImageFailed = (url: string) => {
+    setFailedImageUrls((prev) => (prev[url] ? prev : { ...prev, [url]: true }));
+  };
 
   const startEdit = (entry: AnnouncementHistoryEntry) => {
     setEditing(entry);
@@ -160,13 +179,13 @@ export function AnnouncementsPage() {
     form.title.trim() ||
       form.description.trim() ||
       form.footerText.trim() ||
-      form.thumbnailUrl.trim() ||
-      form.imageUrl.trim(),
+      showThumb ||
+      showImage,
   );
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         <form onSubmit={handleSubmit} className="card p-6 xl:col-span-7 space-y-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-base font-semibold text-white flex items-center gap-2">
@@ -329,7 +348,16 @@ export function AnnouncementsPage() {
             )}
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex items-center justify-end gap-3 pt-2">
+            {!editing && (
+              <Button
+                variant="secondary"
+                onClick={() => setForm((prev) => ({ ...EMPTY_FORM, channelId: prev.channelId }))}
+                icon={<Eraser className="w-4 h-4" />}
+              >
+                {t('common.clear')}
+              </Button>
+            )}
             <Button
               type="submit"
               variant="primary"
@@ -342,16 +370,38 @@ export function AnnouncementsPage() {
           </div>
         </form>
 
-        {/* Live Discord preview */}
-        <div className="card p-6 xl:col-span-5 space-y-4">
-          <h3 className="text-base font-semibold text-white">{t('announcements.preview')}</h3>
-          <div className="p-4 rounded-xl bg-[#313338] border border-slate-800 space-y-2.5 text-sm">
-            {!form.content.trim() && !selectedRole && !hasEmbedPreview ? (
-              <p className="text-xs text-slate-400">{t('announcements.emptyPreview')}</p>
-            ) : (
-              <>
+        {/* Authentic Discord preview */}
+        <div className="card p-6 xl:col-span-5 space-y-4 xl:sticky xl:top-20">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Eye className="w-4 h-4 text-sky-400" />
+            <span>{t('announcements.preview')}</span>
+          </h3>
+
+          <div className="rounded-2xl bg-[#313338] border border-slate-800 p-4">
+            <div className="flex items-start gap-3">
+              {botAvatar ? (
+                <img
+                  src={botAvatar}
+                  alt={botName}
+                  className="w-10 h-10 rounded-full object-cover bg-bg-base shrink-0"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-brand/20 text-brand flex items-center justify-center shrink-0">
+                  <Bot className="w-5 h-5" />
+                </div>
+              )}
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-white">{botName}</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-brand text-white">
+                    APP
+                  </span>
+                  <span className="text-xs text-slate-400">{t('announcements.today')}</span>
+                </div>
+
                 {(selectedRole || form.content.trim()) && (
-                  <div className="text-slate-100 whitespace-pre-wrap break-words">
+                  <div className="text-sm text-slate-200 mt-1 whitespace-pre-wrap break-words">
                     {selectedRole && (
                       <span className="px-1.5 py-0.5 rounded bg-brand/30 text-indigo-200 font-medium mr-1.5">
                         {selectedRole.isEveryone ? '@everyone' : `@${selectedRole.name}`}
@@ -361,48 +411,58 @@ export function AnnouncementsPage() {
                   </div>
                 )}
 
-                {hasEmbedPreview && (
+                {hasEmbedPreview ? (
                   <div
-                    className="rounded-lg bg-[#2b2d31] p-3.5 border-l-4 space-y-2"
+                    className="mt-2 rounded-lg bg-[#2b2d31] border-l-4 p-4 shadow space-y-2.5"
                     style={{ borderLeftColor: form.color }}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1.5 min-w-0 flex-1">
-                        {form.title && (
-                          <div className="font-semibold text-white break-words">{form.title}</div>
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        {form.title.trim() && (
+                          <div className="text-sm font-bold text-white break-words">
+                            {form.title}
+                          </div>
                         )}
-                        {form.description && (
-                          <div className="text-slate-300 text-xs whitespace-pre-wrap break-words">
+                        {form.description.trim() && (
+                          <div className="text-xs text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
                             {form.description}
                           </div>
                         )}
                       </div>
-                      {form.thumbnailUrl && (
+                      {showThumb && (
                         <img
-                          src={form.thumbnailUrl}
+                          src={trimmedThumb}
                           alt=""
-                          className="w-16 h-16 rounded-lg object-cover shrink-0 bg-bg-base"
+                          onError={() => markImageFailed(trimmedThumb)}
+                          className="w-14 h-14 rounded-lg object-cover shrink-0 bg-bg-base"
                         />
                       )}
                     </div>
-                    {form.imageUrl && (
+
+                    {showImage && (
                       <img
-                        src={form.imageUrl}
+                        src={trimmedImage}
                         alt=""
-                        className="w-full max-h-52 rounded-lg object-cover bg-bg-base"
+                        onError={() => markImageFailed(trimmedImage)}
+                        className="rounded-lg max-h-56 w-full object-cover bg-bg-base"
                       />
                     )}
-                    {(form.footerText || form.timestamp) && (
-                      <div className="text-[11px] text-slate-400 flex items-center gap-2 pt-1">
-                        {form.footerText && <span>{form.footerText}</span>}
-                        {form.footerText && form.timestamp && <span>•</span>}
+
+                    {(form.footerText.trim() || form.timestamp) && (
+                      <div className="text-[11px] text-slate-400 flex items-center gap-1.5 pt-0.5">
+                        {form.footerText.trim() && <span>{form.footerText}</span>}
+                        {form.footerText.trim() && form.timestamp && <span>·</span>}
                         {form.timestamp && <span>{formatDateTime(Date.now(), lang)}</span>}
                       </div>
                     )}
                   </div>
-                )}
-              </>
-            )}
+                ) : !selectedRole && !form.content.trim() ? (
+                  <p className="text-xs text-slate-400 mt-2 italic">
+                    {t('announcements.emptyPreview')}
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
       </div>

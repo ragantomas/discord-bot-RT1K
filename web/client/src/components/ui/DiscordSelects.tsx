@@ -32,8 +32,7 @@ export function TextChannelSelect({
       {allowNone && <option value="">{noneLabel ?? t('common.selectChannel')}</option>}
       {channels.map((ch) => (
         <option key={ch.id} value={ch.id}>
-          {ch.type === 'announcement' ? '📢 #' : '#'}
-          {ch.name}
+          #{ch.name}
         </option>
       ))}
     </select>
@@ -60,7 +59,7 @@ export function VoiceChannelSelect({
       {allowNone && <option value="">{noneLabel ?? t('common.selectChannel')}</option>}
       {channels.map((ch) => (
         <option key={ch.id} value={ch.id}>
-          🔊 {ch.name}
+          {ch.name}
         </option>
       ))}
     </select>
@@ -87,7 +86,7 @@ export function CategorySelect({
       {allowNone && <option value="">{noneLabel ?? t('common.none')}</option>}
       {categories.map((cat) => (
         <option key={cat.id} value={cat.id}>
-          📁 {cat.name}
+          {cat.name}
         </option>
       ))}
     </select>

@@ -32,7 +32,7 @@ export const NAV_GROUPS: Array<{ id: NavGroupId; labelKey: string }> = [
 
 export const NAV_ITEMS: NavItemConfig[] = [
   { id: 'overview', path: '/', group: 'general', labelKey: 'nav.overview', icon: 'layout-dashboard' },
-  { id: 'players', path: '/players', group: 'general', labelKey: 'nav.players', icon: 'users' },
+  { id: 'players', path: '/members', group: 'general', labelKey: 'nav.players', icon: 'users' },
   { id: 'announcements', path: '/announcements', group: 'general', labelKey: 'nav.announcements', icon: 'megaphone' },
   { id: 'logs', path: '/logs', group: 'general', labelKey: 'nav.logs', icon: 'scroll-text' },
 

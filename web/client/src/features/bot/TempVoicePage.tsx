@@ -1,4 +1,15 @@
-import { Edit3, Lock, Mic, Plus, RefreshCw, Save, Trash2, Unlock, UserX } from 'lucide-react';
+import {
+  Edit3,
+  Lock,
+  Mic,
+  Plus,
+  RefreshCw,
+  Save,
+  Trash2,
+  Unlock,
+  UserX,
+  Volume2,
+} from 'lucide-react';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tempVoiceApi } from '@/api/tempvoice';
@@ -155,132 +166,6 @@ export function TempVoicePage() {
 
   return (
     <div className="space-y-6">
-      {/* Active rooms */}
-      <div className="card p-6 space-y-4">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <Mic className="w-4 h-4 text-brand" />
-            <span>
-              {t('tempvoice.activeRooms')} ({tempRooms.length})
-            </span>
-          </h3>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={refreshingRooms}
-            onClick={async () => {
-              setRefreshingRooms(true);
-              try {
-                await refreshTempRooms();
-              } finally {
-                setRefreshingRooms(false);
-              }
-            }}
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            {t('common.refresh')}
-          </Button>
-        </div>
-
-        {tempRooms.length === 0 ? (
-          <EmptyState message={t('tempvoice.noRooms')} />
-        ) : (
-          <div className="space-y-3">
-            {tempRooms.map((room) => (
-              <div
-                key={room.channelId}
-                className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white truncate">
-                        🔊 {room.name}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium border ${
-                          room.locked
-                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                        }`}
-                      >
-                        {room.locked ? t('tempvoice.locked') : t('tempvoice.unlocked')}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      {t('common.owner')}: {room.ownerName} ·{' '}
-                      {t('tempvoice.membersCount', {
-                        count: room.memberCount,
-                        limit: room.userLimit > 0 ? room.userLimit : t('tempvoice.unlimited'),
-                      })}{' '}
-                      · {room.bitrateKbps} kbps
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => void handleToggleLock(room)}
-                      icon={
-                        room.locked ? (
-                          <Unlock className="w-3.5 h-3.5" />
-                        ) : (
-                          <Lock className="w-3.5 h-3.5" />
-                        )
-                      }
-                    >
-                      {room.locked ? t('tempvoice.unlock') : t('tempvoice.lock')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setRenamingRoom(room)}
-                      icon={<Edit3 className="w-3.5 h-3.5" />}
-                    >
-                      {t('common.rename')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => void handleCloseRoom(room)}
-                      icon={<Trash2 className="w-3.5 h-3.5" />}
-                    >
-                      {t('common.close')}
-                    </Button>
-                  </div>
-                </div>
-
-                {room.members.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
-                    {room.members.map((m) => (
-                      <div
-                        key={m.id}
-                        className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-bg-base/70 border border-slate-800 text-xs"
-                      >
-                        <img
-                          src={m.avatarUrl}
-                          alt={m.displayName}
-                          className="w-5 h-5 rounded-full object-cover"
-                        />
-                        <span className="text-slate-200">{m.displayName}</span>
-                        <button
-                          type="button"
-                          onClick={() => void handleKickMember(room, m.id, m.displayName)}
-                          className="text-slate-400 hover:text-red-400 transition"
-                          title={t('tempvoice.kickTitle')}
-                        >
-                          <UserX className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Config form */}
       <form onSubmit={onFormSubmit} className="card p-6 space-y-5">
         <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-bg-elevated border border-slate-800">
@@ -486,6 +371,131 @@ export function TempVoicePage() {
           </Button>
         </div>
       </form>
+
+      {/* Active rooms below form */}
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Mic className="w-4 h-4 text-brand" />
+            <span>
+              {t('tempvoice.activeRooms')} ({tempRooms.length})
+            </span>
+          </h3>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={refreshingRooms}
+            onClick={async () => {
+              setRefreshingRooms(true);
+              try {
+                await refreshTempRooms();
+              } finally {
+                setRefreshingRooms(false);
+              }
+            }}
+            icon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
+
+        {tempRooms.length === 0 ? (
+          <EmptyState message={t('tempvoice.noRooms')} />
+        ) : (
+          <div className="space-y-3">
+            {tempRooms.map((room) => (
+              <div
+                key={room.channelId}
+                className="p-4 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-brand shrink-0" />
+                      <span className="text-sm font-semibold text-white truncate">{room.name}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+                          room.locked
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        }`}
+                      >
+                        {room.locked ? t('tempvoice.locked') : t('tempvoice.unlocked')}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      {t('common.owner')}: {room.ownerName} ·{' '}
+                      {t('tempvoice.membersCount', {
+                        count: room.memberCount,
+                        limit: room.userLimit > 0 ? room.userLimit : t('tempvoice.unlimited'),
+                      })}{' '}
+                      · {room.bitrateKbps} kbps
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleToggleLock(room)}
+                      icon={
+                        room.locked ? (
+                          <Unlock className="w-3.5 h-3.5" />
+                        ) : (
+                          <Lock className="w-3.5 h-3.5" />
+                        )
+                      }
+                    >
+                      {room.locked ? t('tempvoice.unlock') : t('tempvoice.lock')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setRenamingRoom(room)}
+                      icon={<Edit3 className="w-3.5 h-3.5" />}
+                    >
+                      {t('common.rename')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => void handleCloseRoom(room)}
+                      icon={<Trash2 className="w-3.5 h-3.5" />}
+                    >
+                      {t('common.close')}
+                    </Button>
+                  </div>
+                </div>
+
+                {room.members.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
+                    {room.members.map((m) => (
+                      <div
+                        key={m.id}
+                        className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-bg-base/70 border border-slate-800 text-xs"
+                      >
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.displayName}
+                          className="w-5 h-5 rounded-full object-cover"
+                        />
+                        <span className="text-slate-200">{m.displayName}</span>
+                        <button
+                          type="button"
+                          onClick={() => void handleKickMember(room, m.id, m.displayName)}
+                          className="text-slate-400 hover:text-red-400 transition"
+                          title={t('tempvoice.kickTitle')}
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <RenameRoomModal
         open={Boolean(renamingRoom)}

@@ -5,18 +5,21 @@ import {
   Flame,
   Gavel,
   Hand,
+  Hash,
   Headphones,
   Mic,
   Newspaper,
-  Radio,
   ScrollText,
+  Server,
   ShieldCheck,
   Sparkles,
+  Tags,
   Ticket,
   TrendingUp,
   Trophy,
   UserPlus,
   Users,
+  Volume2,
 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -75,34 +78,71 @@ export function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      {/* Primary KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <div className="card p-5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {t('overview.botStatus')}
-            </span>
-            <Radio className={`w-4 h-4 ${bot.online ? 'text-emerald-400' : 'text-red-400'}`} />
+      {/* Server Header Banner */}
+      <div className="card p-5 bg-gradient-to-r from-brand/10 via-bg-surface to-bg-surface flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-14 h-14 rounded-2xl bg-bg-elevated border border-slate-700/80 overflow-hidden flex items-center justify-center shrink-0">
+            {guild.iconUrl ? (
+              <img src={guild.iconUrl} alt={guild.name} className="w-full h-full object-cover" />
+            ) : (
+              <Server className="w-6 h-6 text-brand" />
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                bot.online ? 'bg-emerald-400' : 'bg-red-400'
-              }`}
-            />
-            <span className="text-2xl font-bold text-white">
-              {bot.online ? t('common.online') : t('common.offline')}
-            </span>
-          </div>
-          <div className="text-xs text-slate-400 flex items-center justify-between gap-2">
-            <span>
-              {t('overview.ping')}: {bot.ping} ms
-            </span>
-            <span>{formatDuration(liveUptimeMs || bot.uptimeMs)}</span>
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h3 className="text-lg font-bold text-white truncate">{guild.name}</h3>
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                  bot.online
+                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                    : 'bg-red-500/15 text-red-300 border-red-500/30'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    bot.online ? 'bg-emerald-400' : 'bg-red-400'
+                  }`}
+                />
+                <span>{bot.online ? t('common.online') : t('common.offline')}</span>
+              </span>
+            </div>
+            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+              <span>
+                {t('overview.uptime')}:{' '}
+                <strong className="text-slate-200">
+                  {formatDuration(liveUptimeMs || bot.uptimeMs)}
+                </strong>
+              </span>
+              <span>
+                {t('overview.ping')}:{' '}
+                <strong className="text-slate-200">{bot.online ? `${bot.ping} ms` : '—'}</strong>
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="card p-5 space-y-2">
+        <div className="flex items-center flex-wrap gap-2 text-xs shrink-0">
+          <div className="px-3 py-2 rounded-xl bg-bg-elevated/80 border border-slate-800 flex items-center gap-2">
+            <Hash className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-400">{t('overview.channels')}</span>
+            <strong className="text-white">{guild.textChannelsCount}</strong>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-bg-elevated/80 border border-slate-800 flex items-center gap-2">
+            <Volume2 className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-400">{t('overview.voiceChannels')}</span>
+            <strong className="text-white">{guild.voiceChannelsCount}</strong>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-bg-elevated/80 border border-slate-800 flex items-center gap-2">
+            <Tags className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-400">{t('overview.roles')}</span>
+            <strong className="text-white">{guild.rolesCount}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Primary KPI row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Link to="/members" className="card p-5 space-y-2 hover:border-slate-600/80 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {t('overview.members')}
@@ -114,9 +154,22 @@ export function OverviewPage() {
             <span>{t('overview.botsCount', { count: guild.botCount })}</span>
             <span>{t('overview.totalCount', { count: guild.memberCount })}</span>
           </div>
-        </div>
+        </Link>
 
-        <div className="card p-5 space-y-2">
+        <Link to="/tempvoice" className="card p-5 space-y-2 hover:border-slate-600/80 transition">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              {t('overview.activeVoice')}
+            </span>
+            <Headphones className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-bold text-white">{formatNumber(stats.inVoiceCount, lang)}</div>
+          <div className="text-xs text-slate-400">
+            {t('overview.tempRooms')}: {stats.activeTempRoomsCount}
+          </div>
+        </Link>
+
+        <Link to="/members" className="card p-5 space-y-2 hover:border-slate-600/80 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {t('overview.linkedPlayers')}
@@ -131,25 +184,25 @@ export function OverviewPage() {
               ? t('overview.avgElo', { value: formatNumber(stats.avgElo, lang) })
               : t('overview.noElo')}
           </div>
-        </div>
+        </Link>
 
-        <div className="card p-5 space-y-2">
+        <Link to="/tickets" className="card p-5 space-y-2 hover:border-slate-600/80 transition">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {t('overview.activeVoice')}
+              {t('overview.openTickets')}
             </span>
-            <Headphones className="w-4 h-4 text-emerald-400" />
+            <Ticket className="w-4 h-4 text-violet-400" />
           </div>
-          <div className="text-2xl font-bold text-white">{formatNumber(stats.inVoiceCount, lang)}</div>
-          <div className="text-xs text-slate-400 flex items-center justify-between gap-2">
-            <span>
-              {t('overview.tempRooms')}: {stats.activeTempRoomsCount}
-            </span>
-            <span>
-              {t('overview.openTickets')}: {stats.openTicketsCount}
-            </span>
+          <div className="text-2xl font-bold text-white">
+            {formatNumber(stats.openTicketsCount, lang)}
           </div>
-        </div>
+          <div className="text-xs text-slate-400">
+            {t('overview.warningsAndTimeout', {
+              warnings: stats.totalWarningsCount,
+              timeouts: stats.timedOutCount,
+            })}
+          </div>
+        </Link>
       </div>
 
       {/* Secondary server & climber stats */}
@@ -159,11 +212,8 @@ export function OverviewPage() {
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {t('overview.serverBoost')}
             </div>
-            <div className="text-sm font-semibold text-white mt-1">
+            <div className="text-sm font-semibold text-white mt-1.5">
               {t('overview.boostTier', { tier: guild.boostTier, count: guild.boostCount })}
-            </div>
-            <div className="text-xs text-slate-400 mt-1">
-              #{guild.textChannelsCount} · 🔊 {guild.voiceChannelsCount} · @{guild.rolesCount}
             </div>
           </div>
           <Sparkles className="w-5 h-5 text-pink-400 shrink-0" />
@@ -193,14 +243,9 @@ export function OverviewPage() {
         <div className="card p-5 flex items-center justify-between gap-4">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              {t('nav.moderation')}
+              {t('overview.backup')}
             </div>
-            <div className="text-sm font-semibold text-white mt-1">
-              {t('overview.warningsAndTimeout', {
-                warnings: stats.totalWarningsCount,
-                timeouts: stats.timedOutCount,
-              })}
-            </div>
+            <div className="text-xs text-slate-400 mt-1.5">{t('backup.fullDesc')}</div>
           </div>
           <Button
             variant="secondary"
@@ -250,7 +295,7 @@ export function OverviewPage() {
               <span>{t('overview.topPlayers')}</span>
             </h3>
             <Link
-              to="/players"
+              to="/members"
               className="text-xs font-medium text-brand hover:text-indigo-300 inline-flex items-center gap-1"
             >
               <span>{t('common.viewAll')}</span>

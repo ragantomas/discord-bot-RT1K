@@ -7,7 +7,7 @@ import {
   Unlink,
   User,
 } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useMemo, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { playersApi } from '@/api/players';
 import { Button } from '@/components/ui/Button';
@@ -40,6 +40,17 @@ export function PlayersPage() {
 
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const [modUserId, setModUserId] = useState<string | null>(null);
+
+  const handleCloseDetail = useCallback(() => setDetailUserId(null), []);
+  const handleCloseMod = useCallback(() => setModUserId(null), []);
+  const handleOpenModFromDetail = useCallback((uid: string) => {
+    setDetailUserId(null);
+    setModUserId(uid);
+  }, []);
+  const handleOpenDetailFromMod = useCallback((uid: string) => {
+    setModUserId(null);
+    setDetailUserId(uid);
+  }, []);
 
   const modPlayer: PlayerSummary | null = useMemo(
     () => players.find((p) => p.userId === modUserId) ?? null,
@@ -340,20 +351,14 @@ export function PlayersPage() {
 
       <PlayerDetailModal
         userId={detailUserId}
-        onClose={() => setDetailUserId(null)}
-        onOpenModeration={(uid) => {
-          setDetailUserId(null);
-          setModUserId(uid);
-        }}
+        onClose={handleCloseDetail}
+        onOpenModeration={handleOpenModFromDetail}
       />
 
       <PlayerModModal
         player={modPlayer}
-        onClose={() => setModUserId(null)}
-        onOpenDetail={(uid) => {
-          setModUserId(null);
-          setDetailUserId(uid);
-        }}
+        onClose={handleCloseMod}
+        onOpenDetail={handleOpenDetailFromMod}
       />
     </div>
   );

@@ -8,7 +8,7 @@ import {
   Trash2,
   VolumeX,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { playersApi } from '@/api/players';
 import { Button } from '@/components/ui/Button';
@@ -48,6 +48,9 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
   const [targetVoiceId, setTargetVoiceId] = useState<string | null>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   const loadDetail = useCallback(async (uid: string) => {
     setLoading(true);
     try {
@@ -57,11 +60,11 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
       setTargetVoiceId(res.voice?.channelId ?? null);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 'error');
-      onClose();
+      onCloseRef.current();
     } finally {
       setLoading(false);
     }
-  }, [onClose, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
     if (userId) {
