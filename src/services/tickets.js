@@ -82,23 +82,23 @@ function buildTicketControlRow(claimedById = null) {
 
 async function sendOrUpdateTicketPanel(guild) {
     if (!guild) {
-        return { ok: false, error: 'Discord server sa nenašiel.' };
+        return { ok: false, error: 'Discord server not found.' };
     }
     const config = getTicketsSettings();
     if (!config.panelChannelId) {
-        return { ok: false, error: 'Najprv vyber kanál pre Ticket panel a ulož nastavenia.' };
+        return { ok: false, error: 'Select a Ticket panel channel and save settings first.' };
     }
 
     const channel = guild.channels.cache.get(config.panelChannelId)
         || await guild.channels.fetch(config.panelChannelId).catch(() => null);
     if (!channel || !channel.isTextBased()) {
-        return { ok: false, error: 'Vybraný kanál pre Ticket panel neexistuje alebo nie je textový.' };
+        return { ok: false, error: 'Selected Ticket panel channel does not exist or is not a text channel.' };
     }
 
     const me = guild.members.me;
     const perms = me ? channel.permissionsFor(me) : null;
     if (perms && (!perms.has(PermissionFlagsBits.ViewChannel) || !perms.has(PermissionFlagsBits.SendMessages) || !perms.has(PermissionFlagsBits.EmbedLinks))) {
-        return { ok: false, error: `Bot nemá v kanáli #${channel.name} práva Zobraziť kanál, Posielať správy a Vkladať odkazy.` };
+        return { ok: false, error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.` };
     }
 
     const payload = buildPanelPayload(config);
@@ -120,7 +120,7 @@ async function sendOrUpdateTicketPanel(guild) {
     addActivityLog({
         level: 'info',
         category: 'tickets',
-        message: `Ticket panel odoslaný/aktualizovaný v #${channel.name}.`
+        message: `Ticket panel sent/updated in #${channel.name}.`
     });
 
     return { ok: true, messageId: msg.id };
@@ -214,7 +214,7 @@ async function closeTicketChannel(client, channelId, closedByLabel, interaction 
     addActivityLog({
         level: 'warn',
         category: 'tickets',
-        message: `Ticket #${numStr} (${ticket.subject || 'bez predmetu'}) bol zatvorený (${closedByLabel}).`
+        message: `Ticket #${numStr} (${ticket.subject || 'no subject'}) closed (${closedByLabel}).`
     });
 
     if (interaction) {
@@ -408,7 +408,7 @@ async function handleTicketInteraction(interaction) {
         addActivityLog({
             level: 'info',
             category: 'tickets',
-            message: `Vytvorený ticket #${numStr} (${subject}) používateľom ${interaction.user.tag}.`
+            message: `Created ticket #${numStr} (${subject}) by ${interaction.user.tag}.`
         });
 
         return interaction.editReply(`Tvoj ticket bol vytvorený: <#${createdChannel.id}>`);
@@ -438,7 +438,7 @@ async function handleTicketInteraction(interaction) {
         addActivityLog({
             level: 'info',
             category: 'tickets',
-            message: `Ticket #${String(ticket.number || 0).padStart(3, '0')} prevzal ${interaction.user.tag}.`
+            message: `Ticket #${String(ticket.number || 0).padStart(3, '0')} claimed by ${interaction.user.tag}.`
         });
         return;
     }

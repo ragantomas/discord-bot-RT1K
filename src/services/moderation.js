@@ -27,44 +27,47 @@ function hasModerationAccess(member) {
     return roleIds.some(roleId => member.roles?.cache?.has(roleId));
 }
 
-function canModerateTarget(guild, actorMember, targetMember) {
+const pickLang = (lang, en, sk) => (lang === 'en' ? en : sk);
+
+function canModerateTarget(guild, actorMember, targetMember, lang = 'sk') {
     if (!targetMember) return { ok: true };
 
     if (actorMember && actorMember.id === targetMember.id) {
-        return { ok: false, error: 'Nemôžeš vykonať túto akciu sám na sebe.' };
+        return { ok: false, error: pickLang(lang, 'You cannot perform this action on yourself.', 'Nemôžeš vykonať túto akciu sám na sebe.') };
     }
     if (targetMember.id === OWNER_ID || targetMember.id === guild.ownerId) {
-        return { ok: false, error: 'Nie je možné moderovať majiteľa servera.' };
+        return { ok: false, error: pickLang(lang, 'Cannot moderate the server owner.', 'Nie je možné moderovať majiteľa servera.') };
     }
 
     const me = guild.members.me;
     if (me && me.roles.highest.position <= targetMember.roles.highest.position) {
-        return { ok: false, error: 'Rola bota je príliš nízko na moderovanie tohto používateľa.' };
+        return { ok: false, error: pickLang(lang, 'Bot role is too low to moderate this user.', 'Rola bota je príliš nízko na moderovanie tohto používateľa.') };
     }
 
     if (actorMember && actorMember.id !== OWNER_ID && actorMember.id !== guild.ownerId) {
         if (actorMember.roles.highest.position <= targetMember.roles.highest.position) {
-            return { ok: false, error: 'Nemôžeš moderovať používateľa s rovnakou alebo vyššou rolou.' };
+            return { ok: false, error: pickLang(lang, 'Cannot moderate a user with an equal or higher role.', 'Nemôžeš moderovať používateľa s rovnakou alebo vyššou rolou.') };
         }
     }
 
     return { ok: true };
 }
 
-function formatDurationMinutes(minutes) {
+function formatDurationMinutes(minutes, lang = 'sk') {
     const m = Math.round(Number(minutes) || 0);
     if (m < 60) return `${m} min`;
     if (m % (24 * 60) === 0) {
         const d = m / (24 * 60);
+        if (lang === 'en') return `${d} ${d === 1 ? 'day' : 'days'}`;
         return `${d} ${d === 1 ? 'deň' : (d < 5 ? 'dni' : 'dní')}`;
     }
     if (m % 60 === 0) {
         const h = m / 60;
-        return `${h} hod`;
+        return lang === 'en' ? `${h} hr` : `${h} hod`;
     }
     const h = Math.floor(m / 60);
     const rem = m % 60;
-    return `${h} hod ${rem} min`;
+    return lang === 'en' ? `${h}h ${rem}m` : `${h} hod ${rem} min`;
 }
 
 async function sendModDm(user, { guildName, title, color = 0xF5A623, reason = null, extra = null }) {
@@ -87,10 +90,10 @@ async function sendModDm(user, { guildName, title, color = 0xF5A623, reason = nu
     return user.send({ embeds: [embed] }).then(() => true).catch(() => false);
 }
 
-async function issueWarning({ guild, targetUser, targetMember = null, moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, reason }) {
+async function issueWarning({ guild, targetUser, targetMember = null, moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, reason, lang = 'sk' }) {
     const member = targetMember || (targetUser?.id ? guild.members.cache.get(targetUser.id) : null);
     if (member) {
-        const check = canModerateTarget(guild, actorMember, member);
+        const check = canModerateTarget(guild, actorMember, member, lang);
         if (!check.ok) return check;
     }
 
@@ -126,7 +129,7 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Warn #${warning.id} pre ${targetTag}: ${cleanReason}`,
+        message: `Warn #${warning.id} for ${targetTag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: userId
     });
@@ -136,7 +139,7 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
     if (mod?.autoEscalation?.enabled && member) {
         const rule = (mod.autoEscalation.rules || []).find(r => r.threshold === total);
         if (rule) {
-            const botCheck = canModerateTarget(guild, null, member);
+            const botCheck = canModerateTarget(guild, null, member, lang);
             if (botCheck.ok) {
                 const autoReason = `Auto-eskalácia po ${total} varovaniach`;
                 if (rule.action === 'timeout') {
@@ -162,8 +165,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         addActivityLog({
                             level: 'warn',
                             category: 'moderation',
-                            message: `Auto-timeout (${formatDurationMinutes(mins)}) pre ${targetTag} po ${total} varovaniach.`,
-                            actor: 'Auto-eskalácia',
+                            message: `Auto-timeout (${formatDurationMinutes(mins, 'en')}) for ${targetTag} after ${total} warnings.`,
+                            actor: 'Auto-escalation',
                             targetUserId: member.id
                         });
                         escalation = { action: 'timeout', durationMinutes: mins };
@@ -188,8 +191,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         addActivityLog({
                             level: 'warn',
                             category: 'moderation',
-                            message: `Auto-kick pre ${targetTag} po ${total} varovaniach.`,
-                            actor: 'Auto-eskalácia',
+                            message: `Auto-kick for ${targetTag} after ${total} warnings.`,
+                            actor: 'Auto-escalation',
                             targetUserId: member.id
                         });
                         escalation = { action: 'kick' };
@@ -214,8 +217,8 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         addActivityLog({
                             level: 'warn',
                             category: 'moderation',
-                            message: `Auto-ban pre ${targetTag} po ${total} varovaniach.`,
-                            actor: 'Auto-eskalácia',
+                            message: `Auto-ban for ${targetTag} after ${total} warnings.`,
+                            actor: 'Auto-escalation',
                             targetUserId: member.id
                         });
                         escalation = { action: 'ban' };
@@ -228,10 +231,10 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
     return { ok: true, warning, total, escalation };
 }
 
-async function removeWarning({ guild, targetUserId, targetLabel = null, warningId, moderatorId = null, moderatorTag = 'Neznámy' }) {
+async function removeWarning({ guild, targetUserId, targetLabel = null, warningId, moderatorId = null, moderatorTag = 'Neznámy', lang = 'sk' }) {
     const res = deleteWarning(targetUserId, warningId);
     if (!res.removed) {
-        return { ok: false, error: `Varovanie #${warningId} sa nenašlo.` };
+        return { ok: false, error: pickLang(lang, `Warning #${warningId} not found.`, `Varovanie #${warningId} sa nenašlo.`) };
     }
 
     const label = targetLabel || `ID ${targetUserId}`;
@@ -247,7 +250,7 @@ async function removeWarning({ guild, targetUserId, targetLabel = null, warningI
     addActivityLog({
         level: 'info',
         category: 'moderation',
-        message: `Odstránený warn #${res.removed.id} pre ${label}.`,
+        message: `Removed warning #${res.removed.id} for ${label}.`,
         actor: moderatorTag,
         targetUserId
     });
@@ -255,10 +258,10 @@ async function removeWarning({ guild, targetUserId, targetLabel = null, warningI
     return { ok: true, removed: res.removed, remaining: res.remaining };
 }
 
-async function clearAllWarnings({ guild, targetUserId, targetLabel = null, moderatorId = null, moderatorTag = 'Neznámy' }) {
+async function clearAllWarnings({ guild, targetUserId, targetLabel = null, moderatorId = null, moderatorTag = 'Neznámy', lang = 'sk' }) {
     const removedCount = clearUserWarnings(targetUserId);
     if (removedCount === 0) {
-        return { ok: false, error: 'Používateľ nemá žiadne varovania.' };
+        return { ok: false, error: pickLang(lang, 'User has no warnings.', 'Používateľ nemá žiadne varovania.') };
     }
 
     const label = targetLabel || `ID ${targetUserId}`;
@@ -273,7 +276,7 @@ async function clearAllWarnings({ guild, targetUserId, targetLabel = null, moder
     addActivityLog({
         level: 'info',
         category: 'moderation',
-        message: `Vymazané všetky varovania (${removedCount}) pre ${label}.`,
+        message: `Cleared all warnings (${removedCount}) for ${label}.`,
         actor: moderatorTag,
         targetUserId
     });
@@ -281,19 +284,19 @@ async function clearAllWarnings({ guild, targetUserId, targetLabel = null, moder
     return { ok: true, removedCount };
 }
 
-async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null }) {
+async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
     if (!targetMember) {
-        return { ok: false, error: 'Používateľ sa nenašiel na serveri.' };
+        return { ok: false, error: pickLang(lang, 'User not found on the server.', 'Používateľ sa nenašiel na serveri.') };
     }
     const mins = Math.round(Number(durationMinutes));
     if (!Number.isFinite(mins) || mins < 1 || mins > MAX_TIMEOUT_MINUTES) {
-        return { ok: false, error: 'Trvanie timeoutu musí byť 1 až 40320 minút.' };
+        return { ok: false, error: pickLang(lang, 'Timeout duration must be between 1 and 40320 minutes.', 'Trvanie timeoutu musí byť 1 až 40320 minút.') };
     }
 
-    const check = canModerateTarget(guild, actorMember, targetMember);
+    const check = canModerateTarget(guild, actorMember, targetMember, lang);
     if (!check.ok) return check;
     if (!targetMember.moderatable) {
-        return { ok: false, error: 'Bot nemá oprávnenie udeliť timeout tomuto používateľovi.' };
+        return { ok: false, error: pickLang(lang, 'Bot lacks permission to time out this user.', 'Bot nemá oprávnenie udeliť timeout tomuto používateľovi.') };
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Bez dôvodu';
@@ -321,22 +324,22 @@ async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Be
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Timeout ${durLabel} pre ${targetMember.user.tag}: ${cleanReason}`,
+        message: `Timeout ${formatDurationMinutes(mins, 'en')} for ${targetMember.user.tag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: targetMember.id
     });
 
-    return { ok: true, durationLabel: durLabel };
+    return { ok: true, durationLabel: lang === 'en' ? formatDurationMinutes(mins, 'en') : durLabel };
 }
 
-async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null }) {
+async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
     if (!targetMember) {
-        return { ok: false, error: 'Používateľ sa nenašiel na serveri.' };
+        return { ok: false, error: pickLang(lang, 'User not found on the server.', 'Používateľ sa nenašiel na serveri.') };
     }
-    const check = canModerateTarget(guild, actorMember, targetMember);
+    const check = canModerateTarget(guild, actorMember, targetMember, lang);
     if (!check.ok) return check;
     if (!targetMember.moderatable) {
-        return { ok: false, error: 'Bot nemá oprávnenie upraviť timeout tohto používateľa.' };
+        return { ok: false, error: pickLang(lang, 'Bot lacks permission to modify timeout for this user.', 'Bot nemá oprávnenie upraviť timeout tohto používateľa.') };
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Zrušený timeout';
@@ -354,7 +357,7 @@ async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout'
     addActivityLog({
         level: 'info',
         category: 'moderation',
-        message: `Zrušený timeout pre ${targetMember.user.tag}.`,
+        message: `Removed timeout for ${targetMember.user.tag}.`,
         actor: moderatorTag,
         targetUserId: targetMember.id
     });
@@ -362,14 +365,14 @@ async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout'
     return { ok: true };
 }
 
-async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null }) {
+async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
     if (!targetMember) {
-        return { ok: false, error: 'Používateľ sa nenašiel na serveri.' };
+        return { ok: false, error: pickLang(lang, 'User not found on the server.', 'Používateľ sa nenašiel na serveri.') };
     }
-    const check = canModerateTarget(guild, actorMember, targetMember);
+    const check = canModerateTarget(guild, actorMember, targetMember, lang);
     if (!check.ok) return check;
     if (!targetMember.kickable) {
-        return { ok: false, error: 'Bot nemá oprávnenie vyhodiť tohto používateľa.' };
+        return { ok: false, error: pickLang(lang, 'Bot lacks permission to kick this user.', 'Bot nemá oprávnenie vyhodiť tohto používateľa.') };
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Bez dôvodu';
@@ -396,7 +399,7 @@ async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderat
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Kick pre ${targetUser.tag}: ${cleanReason}`,
+        message: `Kicked ${targetUser.tag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: targetUser.id
     });
@@ -404,25 +407,25 @@ async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderat
     return { ok: true, targetTag: targetUser.tag };
 }
 
-async function banMember({ guild, targetUser = null, targetMember = null, deleteMessageSeconds = 0, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null }) {
+async function banMember({ guild, targetUser = null, targetMember = null, deleteMessageSeconds = 0, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
     const member = targetMember || (targetUser?.id ? guild.members.cache.get(targetUser.id) : null);
     const userId = targetUser?.id || member?.id;
     if (!userId) {
-        return { ok: false, error: 'Používateľ nebol zadaný.' };
+        return { ok: false, error: pickLang(lang, 'User not specified.', 'Používateľ nebol zadaný.') };
     }
 
     if (userId === OWNER_ID || userId === guild.ownerId) {
-        return { ok: false, error: 'Nie je možné zabanovať majiteľa servera.' };
+        return { ok: false, error: pickLang(lang, 'Cannot ban the server owner.', 'Nie je možné zabanovať majiteľa servera.') };
     }
     if (actorMember && actorMember.id === userId) {
-        return { ok: false, error: 'Nemôžeš zabanovať sám seba.' };
+        return { ok: false, error: pickLang(lang, 'You cannot ban yourself.', 'Nemôžeš zabanovať sám seba.') };
     }
 
     if (member) {
-        const check = canModerateTarget(guild, actorMember, member);
+        const check = canModerateTarget(guild, actorMember, member, lang);
         if (!check.ok) return check;
         if (!member.bannable) {
-            return { ok: false, error: 'Bot nemá oprávnenie zabanovať tohto používateľa.' };
+            return { ok: false, error: pickLang(lang, 'Bot lacks permission to ban this user.', 'Bot nemá oprávnenie zabanovať tohto používateľa.') };
         }
     }
 
@@ -454,7 +457,7 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Ban pre ${targetTag}: ${cleanReason}`,
+        message: `Banned ${targetTag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: userId
     });
@@ -462,15 +465,15 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
     return { ok: true, targetTag };
 }
 
-async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy' }) {
+async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', lang = 'sk' }) {
     const cleanId = String(userId || '').trim();
     if (!/^\d{15,22}$/.test(cleanId)) {
-        return { ok: false, error: 'Zadaj platné Discord User ID.' };
+        return { ok: false, error: pickLang(lang, 'Enter a valid Discord User ID.', 'Zadaj platné Discord User ID.') };
     }
 
     const banInfo = await guild.bans.fetch(cleanId).catch(() => null);
     if (!banInfo) {
-        return { ok: false, error: 'Tento používateľ nie je zabanovaný.' };
+        return { ok: false, error: pickLang(lang, 'This user is not banned.', 'Tento používateľ nie je zabanovaný.') };
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Bez dôvodu';
@@ -488,7 +491,7 @@ async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = 
     addActivityLog({
         level: 'info',
         category: 'moderation',
-        message: `Unban pre ${banInfo.user?.tag || cleanId}: ${cleanReason}`,
+        message: `Unbanned ${banInfo.user?.tag || cleanId}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: cleanId
     });

@@ -124,7 +124,7 @@ async function createTempRoom(member, guildConfig) {
     addActivityLog({
         level: 'info',
         category: 'tempvoice',
-        message: `Vytvorená TempVoice miestnosť „${newChannel.name}“ pre ${member.displayName}.`
+        message: `Created TempVoice room "${newChannel.name}" for ${member.displayName}.`
     });
 
     const panelMessage = await newChannel.send(buildControlPanel(newChannel, room)).catch(err => {
@@ -410,14 +410,14 @@ async function syncTriggerChannelLock(guild, setup, prevSetup, shouldBeLocked) {
         addActivityLog({
             level: 'info',
             category: 'tempvoice',
-            message: `Automaticky zamknutý spúšťací kanál „${channel.name}“ pre ${lockedCount} ${lockedCount === 1 ? 'rolu' : 'rolí'}.`
+            message: `Auto-locked trigger channel "${channel.name}" for ${lockedCount} ${lockedCount === 1 ? 'role' : 'roles'}.`
         });
     }
     if (unlockedCount > 0) {
         addActivityLog({
             level: 'info',
             category: 'tempvoice',
-            message: `Automaticky odomknutý spúšťací kanál „${channel.name}“ (${unlockedCount} ${unlockedCount === 1 ? 'rola' : 'rolí'}).`
+            message: `Auto-unlocked trigger channel "${channel.name}" (${unlockedCount} ${unlockedCount === 1 ? 'role' : 'roles'}).`
         });
     }
 

@@ -324,7 +324,7 @@ function parseIntervalSeconds(input) {
     if (!match) {
         return {
             ok: false,
-            error: 'Zadaj interval s jednotkou `s` alebo `m`, napr. `30s`, `1m`, `5m`, `60m` (rozsah `30s` – `60m`).'
+            error: 'Enter an interval with `s` or `m`, e.g. `30s`, `1m`, `5m`, `60m` (range `30s` – `60m`).'
         };
     }
 
@@ -335,7 +335,7 @@ function parseIntervalSeconds(input) {
     if (seconds < CSSTATUS_DEFAULTS.minIntervalSeconds || seconds > CSSTATUS_DEFAULTS.maxIntervalSeconds) {
         return {
             ok: false,
-            error: 'Interval musí byť v rozsahu od `30s` do `60m`.'
+            error: 'Interval must be between `30s` and `60m`.'
         };
     }
 

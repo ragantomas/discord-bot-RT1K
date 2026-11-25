@@ -40,13 +40,16 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
             ? options.previousElo
             : (typeof users?.[member.id]?.elo === 'number' ? users[member.id].elo : null);
 
+        const isEn = options.lang === 'en';
         const leetifyRes = options.prefetchedProfile
             ? { ok: true, status: 200, notFound: false, rateLimited: false, retryAfterMs: 0, data: options.prefetchedProfile }
             : await fetchLeetifyProfileDetailed(steam64Id);
 
         if (leetifyRes.rateLimited) {
             return {
-                error: 'Leetify API je dočasne preťažené, skús to o chvíľu.',
+                error: isEn
+                    ? 'Leetify API is temporarily rate-limited, try again shortly.'
+                    : 'Leetify API je dočasne preťažené, skús to o chvíľu.',
                 rateLimited: true,
                 retryAfterMs: leetifyRes.retryAfterMs || 0,
                 notFound: false
@@ -56,8 +59,8 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
         if (leetifyRes.notFound || !leetifyRes.ok || !leetifyRes.data) {
             return {
                 error: leetifyRes.notFound
-                    ? 'Profil sa nenašiel na Leetify.'
-                    : 'Nepodarilo sa načítať profil z Leetify.',
+                    ? (isEn ? 'Profile not found on Leetify.' : 'Profil sa nenašiel na Leetify.')
+                    : (isEn ? 'Failed to load profile from Leetify.' : 'Nepodarilo sa načítať profil z Leetify.'),
                 rateLimited: false,
                 retryAfterMs: 0,
                 notFound: Boolean(leetifyRes.notFound)
@@ -128,7 +131,9 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
     } catch (err) {
         console.error(err);
         return {
-            error: 'Chyba pri komunikácii s Leetify alebo Discordom.',
+            error: options.lang === 'en'
+                ? 'Error communicating with Leetify or Discord.'
+                : 'Chyba pri komunikácii s Leetify alebo Discordom.',
             rateLimited: false,
             retryAfterMs: 0,
             notFound: false

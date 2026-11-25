@@ -126,7 +126,7 @@ async function checkAndPostUpdates(client) {
             addActivityLog({
                 level: 'success',
                 category: 'patchbot',
-                message: `PatchBot odoslal update: „${item.title}“.`
+                message: `PatchBot posted update: "${item.title}".`
             });
         }
     }

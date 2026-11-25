@@ -75,7 +75,7 @@ module.exports = {
         addActivityLog({
             level: 'info',
             category: 'moderation',
-            message: `Zmazaných ${deletedCount} správ v #${channel.name}.`,
+            message: `Deleted ${deletedCount} messages in #${channel.name}.`,
             actor: interaction.user.tag
         });
 

@@ -51,7 +51,7 @@ module.exports = {
         addActivityLog({
             level: 'warn',
             category: 'moderation',
-            message: `Zamknutý kanál #${channel.name}.`,
+            message: `Locked channel #${channel.name}.`,
             actor: interaction.user.tag
         });
 

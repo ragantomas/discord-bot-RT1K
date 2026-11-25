@@ -4,31 +4,31 @@ const { addActivityLog } = require('./activityLog');
 
 function validateAssignableRole(guild, role) {
     if (!role) {
-        return { ok: false, reason: 'Vybraná rola sa nenašla.' };
+        return { ok: false, reason: 'Selected role was not found.' };
     }
 
     if (role.id === guild.id) {
-        return { ok: false, reason: 'Rolu `@everyone` nie je možné použiť ako join rolu.' };
+        return { ok: false, reason: 'Cannot use `@everyone` as a join role.' };
     }
 
     if (role.managed) {
         return {
             ok: false,
-            reason: `Rolu <@&${role.id}> spravuje Discord alebo integrácia a bot ju nemôže prideľovať.`
+            reason: `Role <@&${role.id}> is managed by Discord or an integration and cannot be assigned by the bot.`
         };
     }
 
     if (!guild.members.me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
         return {
             ok: false,
-            reason: 'Bot nemá oprávnenie **Manage Roles** (*Spravovať role*) potrebné na prideľovanie rolí.'
+            reason: 'Bot lacks **Manage Roles** permission.'
         };
     }
 
     if (!role.editable) {
         return {
             ok: false,
-            reason: `Rola bota musí byť v nastaveniach rolí servera **vyššie** ako <@&${role.id}>, inak ju bot nemôže prideľovať.`
+            reason: `Bot role must be positioned **above** <@&${role.id}> in server role settings.`
         };
     }
 
@@ -77,7 +77,7 @@ async function assignJoinRole(member) {
     addActivityLog({
         level: 'info',
         category: 'joinroles',
-        message: `Pridelené join role (${rolesToAdd.map(r => r.name).join(', ')}) pre ${member.user.tag}.`
+        message: `Assigned join roles (${rolesToAdd.map(r => r.name).join(', ')}) to ${member.user.tag}.`
     });
     return true;
 }

@@ -142,8 +142,8 @@
                 <div class="flex items-center gap-3 min-w-0">
                     <img id="pmod-avatar" src="" alt="" class="w-10 h-10 rounded-full object-cover bg-bg-elevated shrink-0" />
                     <div class="min-w-0">
-                        <h3 id="pmod-name" class="text-lg font-semibold text-white truncate">Moderation</h3>
-                        <p id="pmod-sub" class="text-xs text-slate-400 truncate"></p>
+                        <h3 id="pmod-name" data-no-i18n class="text-lg font-semibold text-white truncate">Moderation</h3>
+                        <p id="pmod-sub" data-no-i18n class="text-xs text-slate-400 truncate"></p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
@@ -167,8 +167,8 @@
                 <div class="flex items-center gap-3 min-w-0">
                     <img id="pdet-avatar" src="" alt="" class="w-11 h-11 rounded-full object-cover bg-bg-elevated shrink-0" />
                     <div class="min-w-0">
-                        <h3 id="pdet-name" class="text-lg font-semibold text-white truncate">Player details</h3>
-                        <p id="pdet-sub" class="text-xs text-slate-400 truncate"></p>
+                        <h3 id="pdet-name" data-no-i18n class="text-lg font-semibold text-white truncate">Player details</h3>
+                        <p id="pdet-sub" data-no-i18n class="text-xs text-slate-400 truncate"></p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
@@ -198,11 +198,15 @@
     <div id="view-login" class="hidden min-h-screen flex items-center justify-center p-6 relative overflow-hidden">
         <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(88,101,242,0.16),_transparent_55%)] pointer-events-none"></div>
         <div class="relative w-full max-w-md bg-bg-surface/95 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center">
+            <div class="absolute top-4 right-4 inline-flex items-center p-0.5 rounded-xl bg-bg-elevated border border-slate-800 text-xs font-semibold" role="group" aria-label="Language">
+                <button type="button" data-lang-btn="en" class="px-2.5 py-1 rounded-lg transition">EN</button>
+                <button type="button" data-lang-btn="sk" class="px-2.5 py-1 rounded-lg transition">SK</button>
+            </div>
             <div class="mx-auto w-20 h-20 rounded-2xl bg-bg-elevated border border-slate-700/80 overflow-hidden flex items-center justify-center shadow-lg mb-5">
                 <img id="login-bot-avatar" src="" alt="Bot avatar" class="hidden w-full h-full object-cover" />
                 <i id="login-bot-fallback" data-lucide="bot" class="w-10 h-10 text-brand"></i>
             </div>
-            <h1 id="login-bot-name" class="text-2xl font-bold text-white tracking-tight">BOT Gaben</h1>
+            <h1 id="login-bot-name" data-no-i18n class="text-2xl font-bold text-white tracking-tight">BOT Gaben</h1>
             <p class="text-sm text-slate-400 mt-2">
                 BOT Gaben Dashboard
             </p>
@@ -214,7 +218,7 @@
                 <span>Sign in with Discord</span>
             </a>
 
-            <p id="login-oauth-warning" class="hidden mt-4 text-xs text-amber-300/90">
+            <p id="login-oauth-warning" data-i18n-html="oauth_warning" class="hidden mt-4 text-xs text-amber-300/90">
                 OAuth2 login is not configured in <code class="px-1 py-0.5 bg-bg-elevated rounded">.env</code> (<code class="px-1 py-0.5 bg-bg-elevated rounded">CLIENT_SECRET</code>, <code class="px-1 py-0.5 bg-bg-elevated rounded">REDIRECT_URI</code>).
             </p>
         </div>
@@ -222,7 +226,11 @@
 
     <!-- Access Denied View -->
     <div id="view-denied" class="hidden min-h-screen flex items-center justify-center p-6">
-        <div class="w-full max-w-md bg-bg-surface border border-red-500/30 rounded-3xl p-8 shadow-2xl text-center">
+        <div class="relative w-full max-w-md bg-bg-surface border border-red-500/30 rounded-3xl p-8 shadow-2xl text-center">
+            <div class="absolute top-4 right-4 inline-flex items-center p-0.5 rounded-xl bg-bg-elevated border border-slate-800 text-xs font-semibold" role="group" aria-label="Language">
+                <button type="button" data-lang-btn="en" class="px-2.5 py-1 rounded-lg transition">EN</button>
+                <button type="button" data-lang-btn="sk" class="px-2.5 py-1 rounded-lg transition">SK</button>
+            </div>
             <div class="mx-auto w-16 h-16 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center mb-5">
                 <i data-lucide="shield-alert" class="w-8 h-8"></i>
             </div>
@@ -232,7 +240,7 @@
             </p>
             <div class="mt-5 flex items-center justify-center gap-3 bg-bg-elevated border border-slate-800 rounded-xl px-4 py-3">
                 <img id="denied-user-avatar" src="" alt="" class="w-8 h-8 rounded-full object-cover" />
-                <span id="denied-user-name" class="text-sm font-medium text-slate-200"></span>
+                <span id="denied-user-name" data-no-i18n class="text-sm font-medium text-slate-200"></span>
             </div>
             <button id="denied-logout-btn" type="button" class="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-200 font-medium text-sm transition">
                 <i data-lucide="log-out" class="w-4 h-4"></i>
@@ -252,8 +260,8 @@
                 <div class="flex items-center gap-3 min-w-0">
                     <img id="nav-bot-avatar" src="" alt="" class="w-9 h-9 rounded-xl object-cover bg-bg-elevated border border-slate-700 shrink-0" />
                     <div class="min-w-0">
-                        <div id="nav-bot-name" class="text-sm font-bold text-white truncate">BOT Gaben</div>
-                        <div id="nav-guild-name" class="text-xs text-slate-400 truncate">Loading server...</div>
+                        <div id="nav-bot-name" data-no-i18n class="text-sm font-bold text-white truncate">BOT Gaben</div>
+                        <div id="nav-guild-name" data-no-i18n class="text-xs text-slate-400 truncate">Loading server...</div>
                     </div>
                 </div>
                 <button id="sidebar-close-btn" type="button" class="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-bg-elevated">
@@ -343,9 +351,13 @@
                 </div>
 
                 <div class="flex items-center gap-3">
+                    <div role="group" aria-label="Language" class="inline-flex items-center p-0.5 rounded-xl bg-bg-elevated border border-slate-800 text-xs font-semibold">
+                        <button type="button" data-lang-btn="en" class="px-2.5 py-1.5 rounded-lg transition">EN</button>
+                        <button type="button" data-lang-btn="sk" class="px-2.5 py-1.5 rounded-lg transition">SK</button>
+                    </div>
                     <div class="flex items-center gap-2.5 bg-bg-elevated border border-slate-800 rounded-xl px-3 py-1.5">
                         <img id="header-user-avatar" src="" alt="" class="w-6 h-6 rounded-full object-cover" />
-                        <span id="header-user-name" class="text-sm font-medium text-slate-200 hidden sm:inline max-w-[160px] truncate"></span>
+                        <span id="header-user-name" data-no-i18n class="text-sm font-medium text-slate-200 hidden sm:inline max-w-[160px] truncate"></span>
                     </div>
                     <button id="header-logout-btn" type="button" title="Log out" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-bg-elevated hover:bg-bg-hover border border-slate-700/80 text-slate-300 hover:text-white text-sm font-medium transition">
                         <i data-lucide="log-out" class="w-4 h-4"></i>
@@ -374,6 +386,7 @@
         </div>
     </div>
 
+    <script src="/i18n.js"></script>
     <script src="/app.js"></script>
 </body>
 </html>

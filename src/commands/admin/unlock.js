@@ -51,7 +51,7 @@ module.exports = {
         addActivityLog({
             level: 'info',
             category: 'moderation',
-            message: `Odomknutý kanál #${channel.name}.`,
+            message: `Unlocked channel #${channel.name}.`,
             actor: interaction.user.tag
         });
 

@@ -1030,7 +1030,7 @@ function startWebServer(client) {
             });
         }
 
-        const result = await updateMemberRank(member, steamId);
+        const result = await updateMemberRank(member, steamId, null, { lang: 'en' });
         if (result.error) {
             return res.status(400).json({ error: result.error });
         }
@@ -2520,7 +2520,8 @@ function startWebServer(client) {
             moderatorId: sessionUser.id,
             moderatorTag: getActorName(req),
             actorMember,
-            reason
+            reason,
+            lang: 'en'
         });
 
         if (!resWarn.ok) {
@@ -2549,7 +2550,8 @@ function startWebServer(client) {
             targetLabel: targetMember?.user?.tag || userId,
             warningId,
             moderatorId: sessionUser.id,
-            moderatorTag: getActorName(req)
+            moderatorTag: getActorName(req),
+            lang: 'en'
         });
 
         if (!result.ok) {
@@ -2570,7 +2572,8 @@ function startWebServer(client) {
             targetUserId: userId,
             targetLabel: targetMember?.user?.tag || userId,
             moderatorId: sessionUser.id,
-            moderatorTag: getActorName(req)
+            moderatorTag: getActorName(req),
+            lang: 'en'
         });
 
         if (!result.ok) {
@@ -2599,7 +2602,8 @@ function startWebServer(client) {
                 reason,
                 moderatorId: sessionUser.id,
                 moderatorTag: getActorName(req),
-                actorMember
+                actorMember,
+                lang: 'en'
             });
             if (!resRm.ok) return res.status(400).json({ error: resRm.error });
             logDashboardAudit(req, `Removed timeout for ${targetMember.displayName}.`, 'info', userId);
@@ -2613,7 +2617,8 @@ function startWebServer(client) {
             reason,
             moderatorId: sessionUser.id,
             moderatorTag: getActorName(req),
-            actorMember
+            actorMember,
+            lang: 'en'
         });
         if (!result.ok) {
             return res.status(400).json({ error: result.error });
@@ -2639,7 +2644,8 @@ function startWebServer(client) {
             reason,
             moderatorId: sessionUser.id,
             moderatorTag: getActorName(req),
-            actorMember
+            actorMember,
+            lang: 'en'
         });
         if (!result.ok) {
             return res.status(400).json({ error: result.error });
@@ -2670,7 +2676,8 @@ function startWebServer(client) {
             reason,
             moderatorId: sessionUser.id,
             moderatorTag: getActorName(req),
-            actorMember
+            actorMember,
+            lang: 'en'
         });
         if (!result.ok) {
             return res.status(400).json({ error: result.error });
@@ -2708,7 +2715,8 @@ function startWebServer(client) {
             userId,
             reason,
             moderatorId: sessionUser.id,
-            moderatorTag: getActorName(req)
+            moderatorTag: getActorName(req),
+            lang: 'en'
         });
         if (!result.ok) {
             return res.status(400).json({ error: result.error });

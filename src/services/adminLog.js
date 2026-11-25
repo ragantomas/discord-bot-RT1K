@@ -50,7 +50,7 @@ async function logMemberJoin(member) {
     addActivityLog({
         level: 'info',
         category: 'adminlog',
-        message: `Pripojil sa ${member.user.tag} (${member.user.bot ? 'bot' : 'používateľ'}).`
+        message: `Joined ${member.user.tag} (${member.user.bot ? 'bot' : 'user'}).`
     });
 }
 
@@ -91,7 +91,7 @@ async function logMemberLeave(member) {
     addActivityLog({
         level: isKick ? 'warn' : 'info',
         category: 'adminlog',
-        message: isKick ? `Kick: ${member.user.tag}` : `Odišiel ${member.user.tag}.`
+        message: isKick ? `Kicked: ${member.user.tag}` : `Left ${member.user.tag}.`
     });
 }
 
@@ -119,7 +119,7 @@ async function logBanAdd(ban) {
     addActivityLog({
         level: 'warn',
         category: 'adminlog',
-        message: `Ban udelený používateľovi ${ban.user.tag}.`
+        message: `Banned ${ban.user.tag}.`
     });
 }
 
@@ -145,7 +145,7 @@ async function logBanRemove(ban) {
     addActivityLog({
         level: 'info',
         category: 'adminlog',
-        message: `Unban pre ${ban.user.tag}.`
+        message: `Unbanned ${ban.user.tag}.`
     });
 }
 
@@ -187,7 +187,7 @@ async function logMemberUpdate(oldMember, newMember) {
         addActivityLog({
             level: isMuted ? 'warn' : 'info',
             category: 'adminlog',
-            message: isMuted ? `Timeout pre ${newMember.user.tag}.` : `Zrušený timeout pre ${newMember.user.tag}.`
+            message: isMuted ? `Timed out ${newMember.user.tag}.` : `Removed timeout for ${newMember.user.tag}.`
         });
     }
 
@@ -219,12 +219,12 @@ async function logMemberUpdate(oldMember, newMember) {
             await ctx.channel.send({ embeds: [embed] }).catch(() => null);
 
             const summaryParts = [];
-            if (added.size > 0) summaryParts.push(`pridané: ${added.map(r => `@${r.name}`).join(', ')}`);
-            if (removed.size > 0) summaryParts.push(`odobrané: ${removed.map(r => `@${r.name}`).join(', ')}`);
+            if (added.size > 0) summaryParts.push(`added: ${added.map(r => `@${r.name}`).join(', ')}`);
+            if (removed.size > 0) summaryParts.push(`removed: ${removed.map(r => `@${r.name}`).join(', ')}`);
             addActivityLog({
                 level: 'info',
                 category: 'adminlog',
-                message: `Zmena rolí pre ${newMember.user.tag} (${summaryParts.join('; ')}).`
+                message: `Role changes for ${newMember.user.tag} (${summaryParts.join('; ')}).`
             });
         }
     }
@@ -268,11 +268,11 @@ async function logVoiceState(oldState, newState) {
 
     let logMessage = '';
     if (!oldState.channelId && newState.channelId) {
-        logMessage = `${member.user.tag} sa pripojil do VC „${newState.channel?.name || newState.channelId}“.`;
+        logMessage = `${member.user.tag} joined VC "${newState.channel?.name || newState.channelId}".`;
     } else if (oldState.channelId && !newState.channelId) {
-        logMessage = `${member.user.tag} sa odpojil z VC „${oldState.channel?.name || oldState.channelId}“.`;
+        logMessage = `${member.user.tag} left VC "${oldState.channel?.name || oldState.channelId}".`;
     } else {
-        logMessage = `${member.user.tag} sa presunul z VC „${oldState.channel?.name || oldState.channelId}“ do „${newState.channel?.name || oldState.channelId}“.`;
+        logMessage = `${member.user.tag} moved from VC "${oldState.channel?.name || oldState.channelId}" to "${newState.channel?.name || newState.channelId}".`;
     }
     addActivityLog({
         level: 'info',
@@ -284,13 +284,13 @@ async function logVoiceState(oldState, newState) {
 async function sendTestAdminLogMessage(guild) {
     const config = getAdminLogSettings();
     if (!config?.channelId) {
-        return { ok: false, error: 'Najprv vyber cieľový kanál pre Admin Log.' };
+        return { ok: false, error: 'Select an Admin Log channel first.' };
     }
 
     const channel = guild.channels.cache.get(config.channelId)
         || await guild.channels.fetch(config.channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) {
-        return { ok: false, error: 'Nastavený kanál sa nenašiel alebo nie je textový.' };
+        return { ok: false, error: 'Configured channel was not found or is not a text channel.' };
     }
 
     const hasAuditPerm = Boolean(guild.members.me?.permissions.has(PermissionFlagsBits.ViewAuditLog));

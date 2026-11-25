@@ -59,7 +59,7 @@ async function notifyRankChange(member, previousElo, newElo) {
     addActivityLog({
         level: isRankUp ? 'success' : 'warn',
         category: 'elo',
-        message: `${isRankUp ? 'Rank-Up' : 'Derank'}: ${member.displayName} (${previousElo.toLocaleString('sk-SK')} → ${newElo.toLocaleString('sk-SK')}).`
+        message: `${isRankUp ? 'Rank-Up' : 'Derank'}: ${member.displayName} (${previousElo.toLocaleString('en-GB')} → ${newElo.toLocaleString('en-GB')}).`
     });
 
     return true;
@@ -68,13 +68,13 @@ async function notifyRankChange(member, previousElo, newElo) {
 async function sendTestRankFeedMessage(guild, member) {
     const config = getRankFeedSettings();
     if (!config?.channelId) {
-        return { ok: false, error: 'Najprv vyber cieľový kanál pre Rank-Up / Derank oznámenia.' };
+        return { ok: false, error: 'Select a Rank-Up / Derank channel first.' };
     }
 
     const channel = guild.channels.cache.get(config.channelId)
         || await guild.channels.fetch(config.channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) {
-        return { ok: false, error: 'Nastavený kanál sa nenašiel alebo nie je textový.' };
+        return { ok: false, error: 'Configured channel was not found or is not a text channel.' };
     }
 
     const { rankRoles } = getRankSettings();

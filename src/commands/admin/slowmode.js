@@ -50,8 +50,8 @@ module.exports = {
             level: 'info',
             category: 'moderation',
             message: seconds === 0
-                ? `Vypnutý slowmode v #${channel.name}.`
-                : `Slowmode v #${channel.name} nastavený na ${seconds} s.`,
+                ? `Disabled slowmode in #${channel.name}.`
+                : `Set slowmode in #${channel.name} to ${seconds}s.`,
             actor: interaction.user.tag
         });
 

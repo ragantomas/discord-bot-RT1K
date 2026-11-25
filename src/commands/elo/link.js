@@ -46,7 +46,7 @@ module.exports = {
         addActivityLog({
             level: 'success',
             category: 'elo',
-            message: `Hráč ${interaction.member.displayName} si prepojil Steam účet (${typeof result.elo === 'number' ? result.elo.toLocaleString('sk-SK') : 'Unranked'}).`
+            message: `Player ${interaction.member.displayName} linked Steam (${typeof result.elo === 'number' ? result.elo.toLocaleString('en-GB') : 'Unranked'}).`
         });
 
         if (result.elo === null) {

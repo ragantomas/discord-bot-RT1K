@@ -1,3 +1,7 @@
+const i18n = window.DashboardI18n;
+const t = (text, vars) => (i18n ? i18n.t(text, vars) : String(text ?? ''));
+const getLocale = () => (i18n ? i18n.getLocale() : 'en-GB');
+
 const state = {
     auth: null,
     activeSection: 'overview',
@@ -123,7 +127,7 @@ function splitIntervalParts(seconds) {
 
 function formatRelativeTimestamp(unixSeconds) {
     if (!unixSeconds) return 'Never';
-    return new Date(unixSeconds * 1000).toLocaleString('en-GB');
+    return new Date(unixSeconds * 1000).toLocaleString(getLocale());
 }
 
 function renderToggleSwitch(id, checked, extraClass = '', dataAttr = '') {
@@ -188,7 +192,7 @@ function showToast(message, type = 'success') {
     el.className = `toast-enter pointer-events-auto flex items-start gap-2.5 px-4 py-3 rounded-xl border shadow-xl text-sm backdrop-blur ${styles[type] || styles.info}`;
     el.innerHTML = `
         <i data-lucide="${icons[type] || 'info'}" class="w-4 h-4 mt-0.5 shrink-0"></i>
-        <span class="flex-1">${escapeHtml(message)}</span>
+        <span class="flex-1" data-no-i18n>${escapeHtml(t(message))}</span>
     `;
     container.appendChild(el);
     refreshIcons();
@@ -205,6 +209,9 @@ function refreshIcons() {
     if (window.lucide && typeof window.lucide.createIcons === 'function') {
         window.lucide.createIcons();
     }
+    if (i18n) {
+        i18n.translateTree(document.body);
+    }
 }
 
 async function setButtonLoading(button, isLoading, loadingText = 'Working...') {
@@ -213,7 +220,7 @@ async function setButtonLoading(button, isLoading, loadingText = 'Working...') {
         button.dataset.origHtml = button.innerHTML;
         button.disabled = true;
         button.classList.add('opacity-70', 'cursor-not-allowed');
-        button.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span>${escapeHtml(loadingText)}</span>`;
+        button.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span><span data-no-i18n>${escapeHtml(t(loadingText))}</span>`;
     } else {
         button.disabled = false;
         button.classList.remove('opacity-70', 'cursor-not-allowed');
@@ -233,9 +240,9 @@ function confirmAction({ title = 'Confirm action', message = '', confirmLabel = 
         const cancelBtn = document.getElementById('confirm-cancel');
         const iconWrap = document.getElementById('confirm-icon-wrap');
 
-        titleEl.textContent = title;
-        msgEl.textContent = message;
-        acceptBtn.textContent = confirmLabel;
+        titleEl.textContent = t(title);
+        msgEl.textContent = t(message);
+        acceptBtn.textContent = t(confirmLabel);
 
         acceptBtn.className = danger
             ? 'px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition'
@@ -309,7 +316,7 @@ async function apiFetch(url, options = {}) {
             stopLiveUpdates();
             await bootstrap();
         }
-        throw new Error(data.error || `Server error (${res.status})`);
+        throw new Error(data.error || t('Request failed ({status})', { status: res.status }));
     }
     return data;
 }
@@ -329,9 +336,9 @@ function buildRoleOptions(selectedId, { allowNone = true, noneLabel = '— None 
         if (onlyAssignable && !r.isEveryone && r.managed) continue;
         const selected = r.id === selectedId ? 'selected' : '';
         let suffix = '';
-        if (!r.isEveryone && r.managed) suffix = ' (managed)';
-        else if (!r.isEveryone && !r.editable && onlyAssignable) suffix = ' (above bot role)';
-        html += `<option value="${escapeHtml(r.id)}" ${selected}>${escapeHtml(r.name)}${suffix}</option>`;
+        if (!r.isEveryone && r.managed) suffix = t(' (managed)');
+        else if (!r.isEveryone && !r.editable && onlyAssignable) suffix = t(' (above bot role)');
+        html += `<option value="${escapeHtml(r.id)}" ${selected} data-no-i18n>${escapeHtml(r.name)}${suffix}</option>`;
     }
     return html;
 }
@@ -342,7 +349,7 @@ function buildTextChannelOptions(selectedId, { allowNone = true, noneLabel = '�
     for (const c of channels) {
         const selected = c.id === selectedId ? 'selected' : '';
         const prefix = c.type === 'announcement' ? '📢 #' : '#';
-        html += `<option value="${escapeHtml(c.id)}" ${selected}>${prefix}${escapeHtml(c.name)}</option>`;
+        html += `<option value="${escapeHtml(c.id)}" ${selected} data-no-i18n>${prefix}${escapeHtml(c.name)}</option>`;
     }
     return html;
 }
@@ -352,7 +359,7 @@ function buildVoiceChannelOptions(selectedId, { allowNone = true, noneLabel = '�
     let html = allowNone ? `<option value="">${escapeHtml(noneLabel)}</option>` : '';
     for (const c of channels) {
         const selected = c.id === selectedId ? 'selected' : '';
-        html += `<option value="${escapeHtml(c.id)}" ${selected}>🔊 ${escapeHtml(c.name)}</option>`;
+        html += `<option value="${escapeHtml(c.id)}" ${selected} data-no-i18n>🔊 ${escapeHtml(c.name)}</option>`;
     }
     return html;
 }
@@ -362,7 +369,7 @@ function buildCategoryOptions(selectedId) {
     let html = '<option value="">— Automatic —</option>';
     for (const c of cats) {
         const selected = c.id === selectedId ? 'selected' : '';
-        html += `<option value="${escapeHtml(c.id)}" ${selected}>📁 ${escapeHtml(c.name)}</option>`;
+        html += `<option value="${escapeHtml(c.id)}" ${selected} data-no-i18n>📁 ${escapeHtml(c.name)}</option>`;
     }
     return html;
 }
@@ -446,9 +453,9 @@ function buildOverviewTopPlayersHtml(topPlayers) {
                     ? 'text-orange-300 bg-orange-500/15 border-orange-500/35'
                     : 'text-slate-400 bg-bg-elevated border-slate-800';
         const deltaHtml = p.weeklyDelta > 0
-            ? `<span class="text-[11px] font-semibold text-emerald-400">+${p.weeklyDelta.toLocaleString('en-GB')}</span>`
+            ? `<span class="text-[11px] font-semibold text-emerald-400">+${p.weeklyDelta.toLocaleString(getLocale())}</span>`
             : p.weeklyDelta < 0
-                ? `<span class="text-[11px] font-semibold text-red-400">${p.weeklyDelta.toLocaleString('en-GB')}</span>`
+                ? `<span class="text-[11px] font-semibold text-red-400">${p.weeklyDelta.toLocaleString(getLocale())}</span>`
                 : '';
 
         return `
@@ -456,11 +463,11 @@ function buildOverviewTopPlayersHtml(topPlayers) {
                 <div class="flex items-center gap-2.5 min-w-0">
                     <span class="w-6 h-6 rounded-lg border text-[11px] font-bold flex items-center justify-center shrink-0 ${rankStyle}">#${idx + 1}</span>
                     <img src="${escapeHtml(p.avatarUrl)}" alt="" class="w-7 h-7 rounded-full object-cover bg-bg-base shrink-0" />
-                    <span class="text-sm font-medium text-white truncate">${escapeHtml(p.displayName)}</span>
+                    <span class="text-sm font-medium text-white truncate" data-no-i18n>${escapeHtml(p.displayName)}</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                     ${deltaHtml}
-                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString('en-GB')}</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString(getLocale())}</span>
                 </div>
             </button>
         `;
@@ -478,9 +485,9 @@ function buildOverviewRecentLogsHtml(recentLogs) {
                 <span class="px-2 py-0.5 rounded-md bg-bg-elevated border border-slate-700/80 text-[10px] font-semibold text-slate-300 shrink-0">
                     ${escapeHtml(LOG_CATEGORY_LABELS[item.category] || item.category)}
                 </span>
-                <span class="text-slate-200 truncate">${escapeHtml(item.message)}</span>
+                <span class="text-slate-200 truncate" data-no-i18n>${escapeHtml(item.message)}</span>
             </div>
-            <span class="text-slate-500 shrink-0">${escapeHtml(new Date(item.timestamp).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}</span>
+            <span class="text-slate-500 shrink-0">${escapeHtml(new Date(item.timestamp).toLocaleTimeString(getLocale(), { hour: '2-digit', minute: '2-digit' }))}</span>
         </div>
     `).join('');
 }
@@ -519,7 +526,7 @@ function renderOverview() {
                 </div>
                 <div class="min-w-0 space-y-1">
                     <div class="flex items-center gap-2.5 flex-wrap">
-                        <h3 class="text-lg font-bold text-white truncate">${escapeHtml(ov.guild.name)}</h3>
+                        <h3 class="text-lg font-bold text-white truncate" data-no-i18n>${escapeHtml(ov.guild.name)}</h3>
                         <span id="ov-bot-status" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full ${ov.bot.online ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/15 text-red-300 border border-red-500/30'}">
                             <span class="w-1.5 h-1.5 rounded-full ${ov.bot.online ? 'bg-emerald-400' : 'bg-red-400'}"></span>
                             <span>${ov.bot.online ? 'Online' : 'Offline'}</span>
@@ -577,7 +584,7 @@ function renderOverview() {
                     <i data-lucide="trophy" class="w-4 h-4 text-brand-gold"></i>
                 </div>
                 <div id="ov-linked-count" class="mt-2.5 text-2xl font-bold text-white">${ov.stats.linkedPlayersCount}</div>
-                <div id="ov-avg-elo" class="text-xs text-slate-400 mt-1">${typeof ov.stats.avgElo === 'number' ? `Avg ${ov.stats.avgElo.toLocaleString('en-GB')} Elo` : 'No Elo'}</div>
+                <div id="ov-avg-elo" class="text-xs text-slate-400 mt-1">${typeof ov.stats.avgElo === 'number' ? `Avg ${ov.stats.avgElo.toLocaleString(getLocale())} Elo` : 'No Elo'}</div>
             </button>
 
             <button type="button" data-jump="tickets" class="card p-5 text-left hover:border-slate-600/80 transition">
@@ -733,8 +740,8 @@ function buildEloChartSvg(history, accentColor = '#5865F2') {
         return { val, y };
     });
 
-    const firstDate = new Date(history[0].timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-    const lastDate = new Date(history[history.length - 1].timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+    const firstDate = new Date(history[0].timestamp).toLocaleDateString(getLocale(), { day: '2-digit', month: '2-digit' });
+    const lastDate = new Date(history[history.length - 1].timestamp).toLocaleDateString(getLocale(), { day: '2-digit', month: '2-digit' });
     const strokeColor = accentColor && accentColor !== '#808080' ? accentColor : '#5865F2';
 
     return `
@@ -747,13 +754,13 @@ function buildEloChartSvg(history, accentColor = '#5865F2') {
             </defs>
             ${yTicks.map(t => `
                 <line x1="${padL}" y1="${t.y.toFixed(1)}" x2="${W - padR}" y2="${t.y.toFixed(1)}" stroke="#334155" stroke-dasharray="3 3" stroke-width="1" />
-                <text x="${padL - 8}" y="${(t.y + 4).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="11">${t.val.toLocaleString('en-GB')}</text>
+                <text x="${padL - 8}" y="${(t.y + 4).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="11">${t.val.toLocaleString(getLocale())}</text>
             `).join('')}
             ${pts.length > 1 ? `<polygon points="${areaPoints}" fill="url(#eloAreaGrad)" />` : ''}
             ${pts.length > 1 ? `<polyline fill="none" stroke="${escapeHtml(strokeColor)}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${polyPoints}" />` : ''}
             ${pts.map(p => `
                 <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#0f172a" stroke="${escapeHtml(strokeColor)}" stroke-width="2.2">
-                    <title>${p.elo.toLocaleString('en-GB')} Elo (${new Date(p.timestamp).toLocaleString('en-GB')})</title>
+                    <title>${p.elo.toLocaleString(getLocale())} Elo (${new Date(p.timestamp).toLocaleString(getLocale())})</title>
                 </circle>
             `).join('')}
             <text x="${padL}" y="${H - 6}" text-anchor="start" fill="#64748b" font-size="11">${escapeHtml(firstDate)}</text>
@@ -793,7 +800,7 @@ function renderPlayersTableRows() {
             : `<div class="flex flex-wrap items-center gap-1">${visibleRoles.map(r => `
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border border-slate-700/80 bg-bg-elevated text-slate-200 max-w-[130px] truncate">
                     <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background-color: ${escapeHtml(r.colorHex)}"></span>
-                    <span class="truncate">${escapeHtml(r.name)}</span>
+                    <span class="truncate" data-no-i18n>${escapeHtml(r.name)}</span>
                 </span>`).join('')}${extraRoles > 0 ? `<span class="px-1.5 py-0.5 rounded-full text-[11px] text-slate-400 bg-bg-elevated border border-slate-800">+${extraRoles}</span>` : ''}</div>`;
 
         let activityHtml = `<span class="text-xs text-slate-500">—</span>`;
@@ -805,12 +812,12 @@ function renderPlayersTableRows() {
             activityHtml = `
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 max-w-[180px]">
                     <i data-lucide="volume-2" class="w-3.5 h-3.5 shrink-0"></i>
-                    <span class="truncate">${escapeHtml(p.voice.channelName)}</span>
+                    <span class="truncate" data-no-i18n>${escapeHtml(p.voice.channelName)}</span>
                     ${voiceFlags ? `<span class="inline-flex items-center gap-1">${voiceFlags}</span>` : ''}
                 </span>
             `;
         } else if (p.lastSeenAt) {
-            const seenStr = new Date(p.lastSeenAt).toLocaleString('en-GB', {
+            const seenStr = new Date(p.lastSeenAt).toLocaleString(getLocale(), {
                 day: '2-digit',
                 month: '2-digit',
                 hour: '2-digit',
@@ -822,13 +829,13 @@ function renderPlayersTableRows() {
         const eloBadge = !p.isLinked
             ? `<span class="text-xs text-slate-500">—</span>`
             : (typeof p.elo === 'number'
-                ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString('en-GB')}</span>`
+                ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border" style="background-color: ${escapeHtml(p.rankColor)}22; border-color: ${escapeHtml(p.rankColor)}66; color: ${escapeHtml(p.rankColor)};">${p.elo.toLocaleString(getLocale())}</span>`
                 : `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">Unranked</span>`);
 
         const deltaPill = p.isLinked && p.weeklyDelta > 0
-            ? `<span class="ml-1.5 text-[11px] font-semibold text-emerald-400">+${p.weeklyDelta.toLocaleString('en-GB')}</span>`
+            ? `<span class="ml-1.5 text-[11px] font-semibold text-emerald-400">+${p.weeklyDelta.toLocaleString(getLocale())}</span>`
             : p.isLinked && p.weeklyDelta < 0
-                ? `<span class="ml-1.5 text-[11px] font-semibold text-red-400">${p.weeklyDelta.toLocaleString('en-GB')}</span>`
+                ? `<span class="ml-1.5 text-[11px] font-semibold text-red-400">${p.weeklyDelta.toLocaleString(getLocale())}</span>`
                 : '';
 
         const warnBadge = p.warningsCount > 0
@@ -851,8 +858,8 @@ function renderPlayersTableRows() {
                     <div class="flex items-center gap-3">
                         <img src="${escapeHtml(p.avatarUrl)}" alt="" class="w-9 h-9 rounded-full object-cover bg-bg-elevated shrink-0" />
                         <div class="min-w-0">
-                            <div class="text-sm font-semibold text-white truncate flex items-center flex-wrap">${escapeHtml(p.displayName)}${timeoutBadge}${ticketBadge}</div>
-                            <div class="text-xs text-slate-400 truncate">@${escapeHtml(p.username)}${p.inGuild ? '' : ' · left server'}</div>
+                            <div class="text-sm font-semibold text-white truncate flex items-center flex-wrap"><span data-no-i18n>${escapeHtml(p.displayName)}</span>${timeoutBadge}${ticketBadge}</div>
+                            <div class="text-xs text-slate-400 truncate"><span data-no-i18n>@${escapeHtml(p.username)}</span>${p.inGuild ? '' : '<span> · left server</span>'}</div>
                         </div>
                     </div>
                 </td>
@@ -937,7 +944,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
 
     avatarEl.src = p.avatarUrl;
     nameEl.textContent = p.displayName;
-    subEl.textContent = `@${p.username} · ${p.userId}${p.inGuild ? '' : ' · left server'}`;
+    subEl.textContent = `@${p.username} · ${p.userId}${p.inGuild ? '' : t(' · left server')}`;
 
     if (modBtn) {
         if (p.isOwner) {
@@ -978,7 +985,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
     function renderTabBody() {
         if (activeTab === 'overview') {
             const voiceChannels = state.meta?.voiceChannels || [];
-            const fmtDate = ms => (ms ? new Date(ms).toLocaleString('en-GB') : '—');
+            const fmtDate = ms => (ms ? new Date(ms).toLocaleString(getLocale()) : '—');
             const voiceHistory = Array.isArray(act.voiceHistory) ? act.voiceHistory : [];
 
             bodyEl.innerHTML = `
@@ -993,7 +1000,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                     </div>
                     <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
                         <div class="text-[11px] uppercase tracking-wider text-slate-400">Messages</div>
-                        <div class="text-sm font-bold text-white mt-1">${Number(act.messagesTotal || 0).toLocaleString('en-GB')}</div>
+                        <div class="text-sm font-bold text-white mt-1">${Number(act.messagesTotal || 0).toLocaleString(getLocale())}</div>
                     </div>
                     <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
                         <div class="text-[11px] uppercase tracking-wider text-slate-400">Warnings</div>
@@ -1005,7 +1012,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                     <form id="pdet-nick-form" class="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 flex flex-col sm:flex-row sm:items-end gap-3">
                         <div class="flex-1 space-y-1.5">
                             <label class="text-xs font-medium text-slate-400">Nickname</label>
-                            <input id="pdet-nick-input" type="text" maxlength="32" placeholder="${escapeHtml(p.username)}" class="input-field" value="${escapeHtml(acc.nickname || '')}" />
+                            <input id="pdet-nick-input" type="text" maxlength="32" data-no-i18n placeholder="${escapeHtml(p.username)}" class="input-field" value="${escapeHtml(acc.nickname || '')}" />
                         </div>
                         <button type="submit" class="px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-xs font-semibold transition shrink-0">
                             Save
@@ -1019,7 +1026,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                         ${detail.voice ? `
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                                 <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
-                                <span>${escapeHtml(detail.voice.channelName)}</span>
+                                <span data-no-i18n>${escapeHtml(detail.voice.channelName)}</span>
                             </span>
                         ` : `<span class="text-xs text-slate-400">Not in voice</span>`}
                     </div>
@@ -1027,7 +1034,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                     ${detail.voice && acc.canMoveVoice ? `
                         <div class="flex flex-wrap items-center gap-2 pt-1">
                             <select id="pdet-move-vc" class="input-field flex-1 min-w-[180px] text-xs">
-                                ${voiceChannels.map(vc => `<option value="${escapeHtml(vc.id)}" ${vc.id === detail.voice.channelId ? 'selected' : ''}>🔊 ${escapeHtml(vc.name)}</option>`).join('')}
+                                ${voiceChannels.map(vc => `<option value="${escapeHtml(vc.id)}" ${vc.id === detail.voice.channelId ? 'selected' : ''} data-no-i18n>🔊 ${escapeHtml(vc.name)}</option>`).join('')}
                             </select>
                             <button id="pdet-move-btn" type="button" class="px-3.5 py-2 rounded-xl bg-bg-surface hover:bg-bg-hover border border-slate-700 text-xs font-medium text-slate-200 transition">
                                 Move
@@ -1041,11 +1048,11 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
                         <div class="p-3 rounded-xl bg-bg-base/50 border border-slate-800/80">
                             <div class="text-slate-400">Last message</div>
-                            <div class="text-slate-200 font-medium mt-0.5">${escapeHtml(fmtDate(act.lastMessageAt))}${act.lastMessageChannelName ? ` · #${escapeHtml(act.lastMessageChannelName)}` : ''}</div>
+                            <div class="text-slate-200 font-medium mt-0.5" data-no-i18n>${escapeHtml(fmtDate(act.lastMessageAt))}${act.lastMessageChannelName ? ` · #${escapeHtml(act.lastMessageChannelName)}` : ''}</div>
                         </div>
                         <div class="p-3 rounded-xl bg-bg-base/50 border border-slate-800/80">
                             <div class="text-slate-400">Last voice</div>
-                            <div class="text-slate-200 font-medium mt-0.5">${escapeHtml(fmtDate(act.lastVoiceAt))}${act.lastVoiceChannelName ? ` · ${escapeHtml(act.lastVoiceChannelName)}` : ''}</div>
+                            <div class="text-slate-200 font-medium mt-0.5" data-no-i18n>${escapeHtml(fmtDate(act.lastVoiceAt))}${act.lastVoiceChannelName ? ` · ${escapeHtml(act.lastVoiceChannelName)}` : ''}</div>
                         </div>
                     </div>
 
@@ -1061,8 +1068,8 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                                             : `<i data-lucide="arrow-right-left" class="w-3.5 h-3.5 text-sky-400 shrink-0"></i>`;
                                     return `
                                         <div class="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                                            <span class="text-slate-200 truncate inline-flex items-center gap-2 min-w-0">${iconHtml}<span class="truncate">${escapeHtml(v.channelName)}</span></span>
-                                            <span class="text-slate-400 shrink-0">${escapeHtml(new Date(v.timestamp).toLocaleString('en-GB'))}</span>
+                                            <span class="text-slate-200 truncate inline-flex items-center gap-2 min-w-0">${iconHtml}<span class="truncate" data-no-i18n>${escapeHtml(v.channelName)}</span></span>
+                                            <span class="text-slate-400 shrink-0">${escapeHtml(new Date(v.timestamp).toLocaleString(getLocale()))}</span>
                                         </div>
                                     `;
                                 }).join('')}
@@ -1078,8 +1085,8 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                             ${tickets.map(t => `
                                 <div class="flex items-center justify-between gap-3 p-3 rounded-xl bg-bg-base/50 border border-slate-800/80 text-xs">
                                     <div class="min-w-0">
-                                        <div class="font-semibold text-white truncate">#${String(t.number).padStart(3, '0')} · ${escapeHtml(t.subject)}</div>
-                                        <div class="text-slate-400 truncate">#${escapeHtml(t.channelName)}${t.claimedByName ? ` · Claimed by: ${escapeHtml(t.claimedByName)}` : ''}</div>
+                                        <div class="font-semibold text-white truncate" data-no-i18n>#${String(t.number).padStart(3, '0')} · ${escapeHtml(t.subject)}</div>
+                                        <div class="text-slate-400 truncate"><span data-no-i18n>#${escapeHtml(t.channelName)}</span>${t.claimedByName ? `<span> · Claimed by: <span data-no-i18n>${escapeHtml(t.claimedByName)}</span></span>` : ''}</div>
                                     </div>
                                     <button type="button" data-pdet-close-ticket="${escapeHtml(t.channelId)}" class="px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-xs font-medium text-red-300 transition shrink-0">
                                         Close
@@ -1181,7 +1188,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                                 ${roles.map(r => `
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-slate-700 bg-bg-base text-slate-200">
                                         <span class="w-2 h-2 rounded-full" style="background-color: ${escapeHtml(r.colorHex)}"></span>
-                                        <span>${escapeHtml(r.name)}</span>
+                                        <span data-no-i18n>${escapeHtml(r.name)}</span>
                                         ${r.editable ? `
                                             <button type="button" data-pdet-remove-role="${escapeHtml(r.id)}" title="Remove" class="text-slate-400 hover:text-red-400 transition ml-0.5">
                                                 <i data-lucide="x" class="w-3.5 h-3.5"></i>
@@ -1198,7 +1205,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                             <label class="text-xs font-medium text-slate-400">Add role</label>
                             <select id="pdet-role-select" class="input-field" ${assignableRoles.length === 0 ? 'disabled' : ''}>
                                 <option value="">— Select role —</option>
-                                ${assignableRoles.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}</option>`).join('')}
+                                ${assignableRoles.map(r => `<option value="${escapeHtml(r.id)}" data-no-i18n>${escapeHtml(r.name)}</option>`).join('')}
                             </select>
                         </div>
                         <button type="submit" ${assignableRoles.length === 0 ? 'disabled' : ''} class="px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-xs font-semibold transition shrink-0">
@@ -1265,7 +1272,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                             method: 'POST',
                             body: JSON.stringify({ userId, profile })
                         });
-                        const eloText = typeof res.elo === 'number' ? res.elo.toLocaleString('en-GB') : 'Unranked';
+                        const eloText = typeof res.elo === 'number' ? res.elo.toLocaleString(getLocale()) : 'Unranked';
                         showToast(`Account linked (${eloText}).`);
                         await refreshOverviewAndPlayers();
                         await openPlayerDetailModal(userId, 'cs2');
@@ -1277,9 +1284,9 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
             } else {
                 const history = Array.isArray(cs2.eloHistory) ? cs2.eloHistory : [];
                 const deltaText = cs2.weeklyDelta > 0
-                    ? `+${cs2.weeklyDelta.toLocaleString('en-GB')}`
+                    ? `+${cs2.weeklyDelta.toLocaleString(getLocale())}`
                     : cs2.weeklyDelta < 0
-                        ? cs2.weeklyDelta.toLocaleString('en-GB')
+                        ? cs2.weeklyDelta.toLocaleString(getLocale())
                         : '0';
                 const deltaColor = cs2.weeklyDelta > 0
                     ? 'text-emerald-400'
@@ -1305,7 +1312,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                     <div class="grid grid-cols-3 gap-3">
                         <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
                             <div class="text-[11px] uppercase tracking-wider text-slate-400">Current</div>
-                            <div class="text-lg font-bold text-white mt-0.5">${typeof cs2.elo === 'number' ? cs2.elo.toLocaleString('en-GB') : 'Unranked'}</div>
+                            <div class="text-lg font-bold text-white mt-0.5">${typeof cs2.elo === 'number' ? cs2.elo.toLocaleString(getLocale()) : 'Unranked'}</div>
                         </div>
                         <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
                             <div class="text-[11px] uppercase tracking-wider text-slate-400">7-day change</div>
@@ -1313,7 +1320,7 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                         </div>
                         <div class="p-3 rounded-xl bg-bg-elevated border border-slate-800">
                             <div class="text-[11px] uppercase tracking-wider text-slate-400">Min / Max</div>
-                            <div class="text-sm font-semibold text-slate-200 mt-1">${minVal !== null ? `${minVal.toLocaleString('en-GB')} / ${maxVal.toLocaleString('en-GB')}` : '—'}</div>
+                            <div class="text-sm font-semibold text-slate-200 mt-1">${minVal !== null ? `${minVal.toLocaleString(getLocale())} / ${maxVal.toLocaleString(getLocale())}` : '—'}</div>
                         </div>
                     </div>
 
@@ -1326,16 +1333,16 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                                 const prev = recentRows[idx + 1];
                                 const diff = prev ? pt.elo - prev.elo : 0;
                                 const diffBadge = diff > 0
-                                    ? `<span class="text-xs font-semibold text-emerald-400">+${diff.toLocaleString('en-GB')}</span>`
+                                    ? `<span class="text-xs font-semibold text-emerald-400">+${diff.toLocaleString(getLocale())}</span>`
                                     : diff < 0
-                                        ? `<span class="text-xs font-semibold text-red-400">${diff.toLocaleString('en-GB')}</span>`
+                                        ? `<span class="text-xs font-semibold text-red-400">${diff.toLocaleString(getLocale())}</span>`
                                         : `<span class="text-xs text-slate-500">—</span>`;
                                 return `
                                     <div class="flex items-center justify-between px-3.5 py-2 text-xs">
-                                        <span class="font-semibold text-white">${pt.elo.toLocaleString('en-GB')} Elo</span>
+                                        <span class="font-semibold text-white">${pt.elo.toLocaleString(getLocale())} Elo</span>
                                         <div class="flex items-center gap-3">
                                             ${diffBadge}
-                                            <span class="text-slate-400">${escapeHtml(new Date(pt.timestamp).toLocaleString('en-GB'))}</span>
+                                            <span class="text-slate-400">${escapeHtml(new Date(pt.timestamp).toLocaleString(getLocale()))}</span>
                                         </div>
                                     </div>
                                 `;
@@ -1373,11 +1380,11 @@ async function openPlayerDetailModal(userId, activeTab = 'overview') {
                                     <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-bg-elevated border border-slate-700 text-slate-300 shrink-0">
                                         ${escapeHtml(LOG_CATEGORY_LABELS[item.category] || item.category)}
                                     </span>
-                                    <span class="text-slate-200 break-words">${escapeHtml(item.message)}</span>
+                                    <span class="text-slate-200 break-words" data-no-i18n>${escapeHtml(item.message)}</span>
                                 </div>
                                 <div class="flex items-center gap-2 text-slate-400 shrink-0">
-                                    ${item.actor ? `<span class="px-1.5 py-0.5 rounded bg-bg-elevated border border-slate-800 text-slate-300">${escapeHtml(item.actor)}</span>` : ''}
-                                    <span>${escapeHtml(new Date(item.timestamp).toLocaleString('en-GB'))}</span>
+                                    ${item.actor ? `<span class="px-1.5 py-0.5 rounded bg-bg-elevated border border-slate-800 text-slate-300" data-no-i18n>${escapeHtml(item.actor)}</span>` : ''}
+                                    <span>${escapeHtml(new Date(item.timestamp).toLocaleString(getLocale()))}</span>
                                 </div>
                             </div>
                         `).join('')}
@@ -1450,7 +1457,7 @@ async function openPlayerModModal(userId) {
         ${currentPlayer.isTimedOut ? `
             <div class="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between gap-3">
                 <div class="text-xs text-red-200">
-                    <strong>Active timeout</strong> until ${escapeHtml(new Date(currentPlayer.timeoutUntil).toLocaleString('en-GB'))}
+                    <strong>Active timeout</strong> until ${escapeHtml(new Date(currentPlayer.timeoutUntil).toLocaleString(getLocale()))}
                 </div>
                 <button id="pmod-untimeout-btn" type="button" class="px-3 py-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-xs font-medium text-white transition">
                     Remove timeout
@@ -1474,12 +1481,12 @@ async function openPlayerModModal(userId) {
                 <div class="rounded-xl border border-slate-800 divide-y divide-slate-800/80 max-h-52 overflow-y-auto bg-bg-base/50">
                     ${[...warnings].reverse().map(w => `
                         <div class="flex items-start justify-between gap-3 px-3.5 py-2.5 text-xs">
-                            <div class="min-w-0 flex-1 space-y-0.5">
+                            <div class="min-w-0 flex-1 space-y-0.5" data-no-i18n>
                                 <div class="text-slate-200 font-medium break-words">
                                     <span class="text-amber-300 font-semibold">#${w.id}</span> ${escapeHtml(w.reason)}
                                 </div>
                                 <div class="text-slate-400">
-                                    ${escapeHtml(w.moderatorTag)} · ${escapeHtml(new Date(w.createdAt).toLocaleString('en-GB'))}
+                                    ${escapeHtml(w.moderatorTag)} · ${escapeHtml(new Date(w.createdAt).toLocaleString(getLocale()))}
                                 </div>
                             </div>
                             <button type="button" data-pmod-del-warn="${w.id}" title="Delete" class="p-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition shrink-0">
@@ -1724,10 +1731,10 @@ function renderPlayers() {
                     </div>
                     <div class="min-w-0">
                         <div class="text-xs uppercase tracking-wider font-semibold text-emerald-400">Weekly climber</div>
-                        <div class="text-sm font-bold text-white truncate">${escapeHtml(climber.displayName)} <span class="text-emerald-300 font-semibold">· +${climber.delta.toLocaleString('en-GB')} Elo in 7 days</span></div>
+                        <div class="text-sm font-bold text-white truncate"><span data-no-i18n>${escapeHtml(climber.displayName)}</span> <span class="text-emerald-300 font-semibold">· +${climber.delta.toLocaleString(getLocale())} Elo in 7 days</span></div>
                     </div>
                 </div>
-                ${typeof climber.elo === 'number' ? `<span class="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-200 shrink-0">${climber.elo.toLocaleString('en-GB')} Elo</span>` : ''}
+                ${typeof climber.elo === 'number' ? `<span class="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-bold text-emerald-200 shrink-0">${climber.elo.toLocaleString(getLocale())} Elo</span>` : ''}
             </button>
         ` : ''}
 
@@ -1837,13 +1844,13 @@ function updateAnnouncementPreview() {
     const botName = state.auth?.bot?.username || 'BOT Gaben';
 
     previewEl.innerHTML = `
-        <div class="flex items-start gap-3">
+        <div class="flex items-start gap-3" data-no-i18n>
             <img src="${escapeHtml(botAvatar)}" alt="" class="w-10 h-10 rounded-full object-cover bg-bg-base shrink-0" />
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                     <span class="text-sm font-semibold text-white">${escapeHtml(botName)}</span>
                     <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-brand text-white">APP</span>
-                    <span class="text-xs text-slate-500">Today</span>
+                    <span class="text-xs text-slate-500">${escapeHtml(t('Today'))}</span>
                 </div>
                 ${(pingHtml || content) ? `<div class="text-sm text-slate-200 mt-1 whitespace-pre-wrap break-words">${pingHtml}${escapeHtml(content)}</div>` : ''}
                 ${hasEmbed ? `
@@ -1858,11 +1865,11 @@ function updateAnnouncementPreview() {
                         ${image ? `<img src="${escapeHtml(image)}" alt="" class="mt-3 rounded-lg max-h-56 w-full object-cover bg-bg-base" onerror="this.style.display='none'" />` : ''}
                         ${(footer || timestamp) ? `
                             <div class="mt-3 text-[11px] text-slate-400">
-                                ${escapeHtml(footer)}${(footer && timestamp) ? ' · ' : ''}${timestamp ? 'Today' : ''}
+                                ${escapeHtml(footer)}${(footer && timestamp) ? ' · ' : ''}${timestamp ? escapeHtml(t('Today')) : ''}
                             </div>
                         ` : ''}
                     </div>
-                ` : '<p class="text-xs text-slate-500 mt-2 italic">Message preview...</p>'}
+                ` : `<p class="text-xs text-slate-500 mt-2 italic">${escapeHtml(t('Message preview...'))}</p>`}
             </div>
         </div>
     `;
@@ -1953,13 +1960,15 @@ function renderAnnouncementsHistoryBlock() {
             <select id="ann-history-select" class="input-field">
                 <option value="">— New announcement —</option>
                 ${history.map((h, i) => `
-                    <option value="${i}" ${editing && editing.messageId === h.messageId ? 'selected' : ''}>
-                        #${escapeHtml(h.channelName || h.channelId)} — ${escapeHtml(h.title || h.content || 'Untitled')}
+                    <option value="${i}" ${editing && editing.messageId === h.messageId ? 'selected' : ''} data-no-i18n>
+                        #${escapeHtml(h.channelName || h.channelId)} — ${escapeHtml(h.title || h.content || t('Untitled'))}
                     </option>
                 `).join('')}
             </select>
         </div>
     `;
+
+    if (i18n) i18n.translateTree(host);
 
     const histSelect = document.getElementById('ann-history-select');
     if (histSelect) {
@@ -2215,11 +2224,11 @@ function buildLogsListHtml() {
                 <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 ${levelStyles[item.level] || levelStyles.info}">
                     ${escapeHtml(LOG_CATEGORY_LABELS[item.category] || item.category)}
                 </span>
-                <span class="text-sm text-slate-200 break-words">${escapeHtml(item.message)}</span>
+                <span class="text-sm text-slate-200 break-words" data-no-i18n>${escapeHtml(item.message)}</span>
             </div>
             <div class="flex items-center gap-2 text-xs text-slate-400 shrink-0">
-                ${item.actor ? `<span class="px-2 py-0.5 rounded-md bg-bg-elevated border border-slate-800 text-slate-300">${escapeHtml(item.actor)}</span>` : ''}
-                <span>${escapeHtml(new Date(item.timestamp).toLocaleString('en-GB'))}</span>
+                ${item.actor ? `<span class="px-2 py-0.5 rounded-md bg-bg-elevated border border-slate-800 text-slate-300" data-no-i18n>${escapeHtml(item.actor)}</span>` : ''}
+                <span>${escapeHtml(new Date(item.timestamp).toLocaleString(getLocale()))}</span>
             </div>
         </div>
     `).join('');
@@ -2232,6 +2241,7 @@ function patchLogsDom() {
     if (nextHtml !== lastLogsHtml) {
         lastLogsHtml = nextHtml;
         listEl.innerHTML = nextHtml;
+        if (i18n) i18n.translateTree(listEl);
     }
 }
 
@@ -2353,15 +2363,15 @@ function renderTempVoiceRoomsList() {
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="font-semibold text-white text-sm truncate">${escapeHtml(r.name)}</span>
+                                <span class="font-semibold text-white text-sm truncate" data-no-i18n>${escapeHtml(r.name)}</span>
                                 <span class="text-xs inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${r.locked ? 'bg-red-500/15 text-red-300 border border-red-500/30' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'}">
                                     <i data-lucide="${r.locked ? 'lock' : 'unlock'}" class="w-3 h-3"></i>
                                     <span>${r.locked ? 'Locked' : 'Unlocked'}</span>
                                 </span>
                             </div>
                             <div class="text-xs text-slate-400 mt-1">
-                                Owner: <strong class="text-slate-200">${escapeHtml(r.ownerName)}</strong> ·
-                                Members: ${r.memberCount}/${r.userLimit === 0 ? '∞' : r.userLimit} ·
+                                Owner: <strong class="text-slate-200" data-no-i18n>${escapeHtml(r.ownerName)}</strong> ·
+                                <span>Members: ${r.memberCount}/${r.userLimit === 0 ? '∞' : r.userLimit}</span> ·
                                 ${r.bitrateKbps} kbps
                             </div>
                         </div>
@@ -2386,7 +2396,7 @@ function renderTempVoiceRoomsList() {
                             ${r.members.map(m => `
                                 <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-bg-surface border border-slate-700/70 text-xs">
                                     <img src="${escapeHtml(m.avatarUrl)}" alt="" class="w-4 h-4 rounded-full object-cover" />
-                                    <span class="text-slate-200 font-medium inline-flex items-center gap-1">${m.isOwner ? '<i data-lucide="crown" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>' : ''}<span>${escapeHtml(m.displayName)}</span></span>
+                                    <span class="text-slate-200 font-medium inline-flex items-center gap-1">${m.isOwner ? '<i data-lucide="crown" class="w-3.5 h-3.5 text-amber-400 shrink-0"></i>' : ''}<span data-no-i18n>${escapeHtml(m.displayName)}</span></span>
                                     <button type="button" data-tv-kick-room="${escapeHtml(r.channelId)}" data-tv-kick-user="${escapeHtml(m.id)}" data-tv-kick-name="${escapeHtml(m.displayName)}" title="Disconnect from room" class="text-slate-400 hover:text-red-400 transition ml-0.5">
                                         <i data-lucide="x" class="w-3.5 h-3.5"></i>
                                     </button>
@@ -2911,7 +2921,7 @@ function renderPatchBot() {
                 <div class="flex items-center justify-between flex-wrap gap-3 pt-2">
                     <div class="text-xs text-slate-400">
                         Last update:
-                        <strong class="text-slate-200">${escapeHtml(pb.lastPostedTitle || 'None')}</strong>
+                        <strong ${pb.lastPostedTitle ? 'data-no-i18n ' : ''}class="text-slate-200">${escapeHtml(pb.lastPostedTitle || 'None')}</strong>
                         ${pb.lastPostedAt ? `· ${escapeHtml(formatRelativeTimestamp(pb.lastPostedAt))}` : ''}
                     </div>
                     <button id="pb-save-btn" type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-hover text-white text-sm font-semibold transition">
@@ -3436,7 +3446,7 @@ function renderAdminLog() {
                 ${!hasAudit ? `
                     <div class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex items-center gap-2.5">
                         <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 text-amber-400"></i>
-                        <span>Missing <strong>View Audit Log</strong> permission — moderators won't be shown for bans, kicks, and timeouts.</span>
+                        <span data-i18n-html="audit_log_missing">Missing <strong>View Audit Log</strong> permission — moderators won't be shown for bans, kicks, and timeouts.</span>
                     </div>
                 ` : ''}
 
@@ -3568,7 +3578,7 @@ function renderWelcome() {
                             </button>
                         `).join('')}
                     </div>
-                    <p class="text-xs text-slate-400">Pluralization: <code class="text-sky-300">{members:one|few|many}</code></p>
+                    <p data-i18n-html="welcome_pluralization" class="text-xs text-slate-400">Pluralization: <code class="text-sky-300">{members:one|few|many}</code></p>
                 </div>
             </div>
 
@@ -3832,11 +3842,11 @@ function renderOpenTicketsList() {
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="px-2 py-0.5 rounded-md bg-brand/15 text-brand text-xs font-bold">#${String(t.number).padStart(3, '0')}</span>
-                        <span class="font-semibold text-white text-sm truncate">${escapeHtml(t.subject)}</span>
-                        ${t.claimedByName ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">${escapeHtml(t.claimedByName)}</span>` : `<span class="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-300">Unclaimed</span>`}
+                        <span class="font-semibold text-white text-sm truncate" data-no-i18n>${escapeHtml(t.subject)}</span>
+                        ${t.claimedByName ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-medium text-emerald-300" data-no-i18n>${escapeHtml(t.claimedByName)}</span>` : `<span class="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-medium text-amber-300">Unclaimed</span>`}
                     </div>
                     <div class="text-xs text-slate-400 mt-1">
-                        ${escapeHtml(t.userName)} · <span class="font-mono text-slate-300">#${escapeHtml(t.channelName)}</span> · ${escapeHtml(new Date(t.createdAt).toLocaleString('en-GB'))}
+                        <span data-no-i18n>${escapeHtml(t.userName)}</span> · <span class="font-mono text-slate-300" data-no-i18n>#${escapeHtml(t.channelName)}</span> · ${escapeHtml(new Date(t.createdAt).toLocaleString(getLocale()))}
                     </div>
                 </div>
             </div>
@@ -3879,6 +3889,7 @@ function patchOpenTicketsDom() {
     const heading = document.getElementById('tk-open-heading');
     if (heading) {
         heading.textContent = `Open tickets (${state.openTickets.length})`;
+        if (i18n) i18n.translateTree(heading);
     }
     const listEl = document.getElementById('tk-open-list');
     if (!listEl || listEl.querySelector('button:disabled')) return;
@@ -4233,14 +4244,14 @@ function renderSettings() {
                             </button>
                         `).join('')}
                     </div>
-                    <p class="text-xs text-slate-400">
+                    <p data-i18n-html="bot_status_plurals" class="text-xs text-slate-400">
                         Plurals: <code class="text-sky-300">{players:player|players}</code> or <code class="text-sky-300">{rooms:room|rooms}</code>
                     </p>
                 </div>
 
                 <div class="rounded-xl bg-bg-elevated/70 border border-slate-800 px-3.5 py-2.5 flex items-center justify-between gap-3">
                     <span class="text-xs font-medium text-slate-400">Preview:</span>
-                    <span id="set-status-preview" class="text-xs font-medium ${statusPreview ? 'text-slate-200' : 'text-slate-500 italic'} truncate">
+                    <span id="set-status-preview" ${statusPreview ? 'data-no-i18n ' : ''}class="text-xs font-medium ${statusPreview ? 'text-slate-200' : 'text-slate-500 italic'} truncate">
                         ${statusPreview ? escapeHtml(statusPreview) : 'No status'}
                     </span>
                 </div>
@@ -4380,10 +4391,12 @@ function renderSettings() {
         if (!statusPreviewEl || !textInput) return;
         const resolved = resolveBotStatusPreview(textInput.value);
         if (resolved) {
+            statusPreviewEl.setAttribute('data-no-i18n', '');
             statusPreviewEl.textContent = resolved;
             statusPreviewEl.className = 'text-xs font-medium text-slate-200 truncate';
         } else {
-            statusPreviewEl.textContent = 'No status';
+            statusPreviewEl.removeAttribute('data-no-i18n');
+            statusPreviewEl.textContent = t('No status');
             statusPreviewEl.className = 'text-xs font-medium text-slate-500 italic truncate';
         }
     }
@@ -4725,7 +4738,7 @@ function buildBansListHtml() {
                 <div class="flex items-center justify-between gap-3 px-4 py-3">
                     <div class="flex items-center gap-3 min-w-0">
                         <img src="${escapeHtml(b.avatarUrl)}" alt="" class="w-8 h-8 rounded-full object-cover bg-bg-elevated shrink-0" />
-                        <div class="min-w-0">
+                        <div class="min-w-0" data-no-i18n>
                             <div class="text-sm font-medium text-white truncate">${escapeHtml(b.tag || b.username)}</div>
                             <div class="text-xs text-slate-400 truncate">${escapeHtml(b.userId)}${b.reason ? ` · ${escapeHtml(b.reason)}` : ''}</div>
                         </div>
@@ -4774,6 +4787,7 @@ async function refreshBansList() {
         const heading = document.getElementById('mod-bans-heading');
         if (heading) {
             heading.textContent = `Banned users (${state.bans.length})`;
+            if (i18n) i18n.translateTree(heading);
         }
         if (document.getElementById('mod-bans-list')) {
             document.getElementById('mod-bans-list').innerHTML = buildBansListHtml();
@@ -5030,7 +5044,7 @@ function patchOverviewDom() {
     }
     if (avgEloEl) {
         avgEloEl.textContent = typeof ov.stats.avgElo === 'number'
-            ? `Avg ${ov.stats.avgElo.toLocaleString('en-GB')} Elo`
+            ? `Avg ${ov.stats.avgElo.toLocaleString(getLocale())} Elo`
             : 'No Elo';
     }
     if (ticketsEl) {
@@ -5083,12 +5097,17 @@ function patchOverviewDom() {
         dot.className = `w-2 h-2 rounded-full shrink-0 ${enabled ? 'bg-emerald-400' : 'bg-slate-600'}`;
         dot.title = enabled ? 'Active' : 'Disabled';
     });
+
+    if (i18n) {
+        i18n.translateTree(document.getElementById('section-overview'));
+    }
 }
 
 function patchPlayersTableDom() {
     const heading = document.getElementById('players-count-heading');
     if (heading) {
         heading.innerHTML = `<i data-lucide="users" class="w-4 h-4 text-brand"></i><span>Players (${state.players.length})</span>`;
+        if (i18n) i18n.translateTree(heading);
     }
 
     const tbody = document.getElementById('players-tbody');
@@ -5107,6 +5126,7 @@ function patchTempRoomsDom() {
     const heading = document.getElementById('tv-rooms-heading');
     if (heading) {
         heading.textContent = `Active rooms (${state.tempRooms.length})`;
+        if (i18n) i18n.translateTree(heading);
     }
 
     const listEl = document.getElementById('tv-rooms-list');
@@ -5138,6 +5158,7 @@ async function pollLiveUpdates() {
                 const playingBadge = document.getElementById('set-ru-playing-badge');
                 if (playingBadge) {
                     playingBadge.textContent = `In CS2: ${data.rankUpdaterStatus.playingCount}`;
+                    if (i18n) i18n.translateTree(playingBadge);
                 }
                 const rlBadge = document.getElementById('set-ru-rl-badge');
                 if (rlBadge) {
@@ -5298,7 +5319,7 @@ function renderActiveSection() {
 function switchSection(section) {
     setDirty(false);
     state.activeSection = section;
-    document.getElementById('page-title').textContent = SECTION_TITLES[section] || 'Overview';
+    document.getElementById('page-title').textContent = t(SECTION_TITLES[section] || 'Overview');
 
     document.querySelectorAll('.nav-item').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.section === section);
@@ -5361,7 +5382,7 @@ async function bootstrap() {
             const errCode = urlParams.get('error');
             const errBox = document.getElementById('login-error-box');
             if (errCode && OAUTH_ERRORS[errCode]) {
-                errBox.textContent = OAUTH_ERRORS[errCode];
+                errBox.textContent = t(OAUTH_ERRORS[errCode]);
                 errBox.classList.remove('hidden');
             } else {
                 errBox.classList.add('hidden');
@@ -5442,6 +5463,43 @@ document.getElementById('unsaved-save-btn').addEventListener('click', () => {
     }
 });
 
+async function handleLanguageSwitch(nextLang) {
+    if (!i18n || (nextLang !== 'en' && nextLang !== 'sk')) return;
+    if (nextLang === i18n.getLang()) return;
+
+    if (state.isDirty) {
+        const ok = await confirmAction({
+            title: 'Unsaved changes',
+            message: 'Switching language will discard unsaved changes on this page.',
+            confirmLabel: 'Switch language',
+            danger: false
+        });
+        if (!ok) return;
+        syncDraftsFromSettings();
+        setDirty(false);
+    }
+
+    i18n.setLang(nextLang);
+    lastPlayersHtml = '';
+    lastRoomsHtml = '';
+    lastLogsHtml = '';
+    lastTicketsHtml = '';
+
+    if (state.auth?.authorized) {
+        document.getElementById('page-title').textContent = t(SECTION_TITLES[state.activeSection] || 'Overview');
+        renderActiveSection();
+        i18n.translateTree(document.body);
+    } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        const errCode = urlParams.get('error');
+        const errBox = document.getElementById('login-error-box');
+        if (errBox && errCode && OAUTH_ERRORS[errCode]) {
+            errBox.textContent = t(OAUTH_ERRORS[errCode]);
+        }
+        i18n.translateTree(document.body);
+    }
+}
+
 document.getElementById('denied-logout-btn').addEventListener('click', handleLogout);
 document.getElementById('header-logout-btn').addEventListener('click', handleLogout);
 document.getElementById('sidebar-open-btn').addEventListener('click', openMobileSidebar);
@@ -5450,5 +5508,13 @@ document.getElementById('sidebar-backdrop').addEventListener('click', closeMobil
 document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => switchSection(btn.dataset.section));
 });
+document.querySelectorAll('[data-lang-btn]').forEach(btn => {
+    btn.addEventListener('click', () => handleLanguageSwitch(btn.dataset.langBtn));
+});
+
+if (i18n) {
+    i18n.syncLangSwitchers();
+    i18n.translateTree(document.body);
+}
 
 bootstrap();

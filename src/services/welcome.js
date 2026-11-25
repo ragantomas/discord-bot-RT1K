@@ -110,7 +110,7 @@ async function handleMemberWelcome(member) {
                 addActivityLog({
                     level: 'info',
                     category: 'welcome',
-                    message: `Odoslaná uvítacia správa do #${channel.name} pre ${member.user.tag}.`
+                    message: `Sent welcome message to #${channel.name} for ${member.user.tag}.`
                 });
             }
         }
@@ -124,7 +124,7 @@ async function handleMemberWelcome(member) {
                 addActivityLog({
                     level: 'info',
                     category: 'welcome',
-                    message: `Odoslaná uvítacia DM správa používateľovi ${member.user.tag}.`
+                    message: `Sent welcome DM to ${member.user.tag}.`
                 });
             }
         }
@@ -145,7 +145,7 @@ async function handleMemberGoodbye(member) {
             addActivityLog({
                 level: 'info',
                 category: 'welcome',
-                message: `Odoslaná rozlúčková správa do #${channel.name} (${member.user.tag}).`
+                message: `Sent goodbye message to #${channel.name} (${member.user.tag}).`
             });
         }
     }
@@ -154,48 +154,48 @@ async function handleMemberGoodbye(member) {
 async function sendTestWelcome(guild, member, target) {
     const config = getWelcomeSettings();
     if (!guild || !member) {
-        return { ok: false, error: 'Nepodarilo sa načítať server alebo tvoj Discord profil.' };
+        return { ok: false, error: 'Failed to load server or your Discord profile.' };
     }
 
     if (target === 'dm') {
         const embed = buildDmWelcomeEmbed(config, member);
         if (!embed) {
-            return { ok: false, error: 'Vyplň aspoň nadpis alebo text DM uvítacej správy.' };
+            return { ok: false, error: 'Enter at least a title or text for the welcome DM.' };
         }
         try {
             await member.send({ content: '🧪 **Test DM uvítacej správy:**', embeds: [embed] });
             return { ok: true };
         } catch {
-            return { ok: false, error: 'Nepodarilo sa poslať DM (máš pravdepodobne zablokované súkromné správy zo servera).' };
+            return { ok: false, error: 'Failed to send DM (direct messages from this server are likely disabled).' };
         }
     }
 
     if (target === 'goodbye') {
         if (!config.goodbyeChannelId) {
-            return { ok: false, error: 'Najprv vyber cieľový kanál pre rozlúčkovú správu a ulož nastavenia.' };
+            return { ok: false, error: 'Select a goodbye channel and save settings first.' };
         }
         const channel = await resolveTextChannelWithPerms(guild, config.goodbyeChannelId);
         if (!channel) {
-            return { ok: false, error: 'Kanál pre rozlúčkovú správu neexistuje alebo v ňom bot nemá právo písať.' };
+            return { ok: false, error: 'Goodbye channel does not exist or bot lacks permission to send messages.' };
         }
         const embed = buildGoodbyeEmbed(config, member);
         if (!embed) {
-            return { ok: false, error: 'Vyplň nadpis alebo text rozlúčkovej správy.' };
+            return { ok: false, error: 'Enter a title or text for the goodbye message.' };
         }
         await channel.send({ content: '🧪 **Test rozlúčkovej správy:**', embeds: [embed] });
         return { ok: true };
     }
 
     if (!config.channelId) {
-        return { ok: false, error: 'Najprv vyber kanál pre uvítaciu správu do roomky a ulož nastavenia.' };
+        return { ok: false, error: 'Select a welcome channel and save settings first.' };
     }
     const channel = await resolveTextChannelWithPerms(guild, config.channelId);
     if (!channel) {
-        return { ok: false, error: 'Kanál pre uvítaciu správu neexistuje alebo v ňom bot nemá právo písať.' };
+        return { ok: false, error: 'Welcome channel does not exist or bot lacks permission to send messages.' };
     }
     const embed = buildChannelWelcomeEmbed(config, member);
     if (!embed) {
-        return { ok: false, error: 'Vyplň nadpis alebo text uvítacej správy do roomky.' };
+        return { ok: false, error: 'Enter a title or text for the welcome message.' };
     }
     await channel.send({ content: '🧪 **Test uvítacej správy:**', embeds: [embed] });
     return { ok: true };
