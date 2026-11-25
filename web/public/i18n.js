@@ -124,7 +124,7 @@
         'Messages:': 'Správy:',
         'Voice:': 'Voice:',
         'Top CS2 players': 'Top CS2 hráči',
-        'View all': 'Všetci',
+        'View all': 'Zobraziť všetko',
         'No data yet.': 'Zatiaľ bez dát.',
         'No rated players yet.': 'Zatiaľ žiadni hodnotení hráči.',
         'Recent activity': 'Posledná aktivita',
