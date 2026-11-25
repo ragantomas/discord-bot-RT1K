@@ -2248,7 +2248,7 @@ function patchLogsDom() {
 function renderLogs() {
     const container = document.getElementById('section-logs');
     const categories = [
-        { id: 'all', label: 'All' },
+        { id: 'all', label: 'All', i18nKey: 'logs_all' },
         { id: 'audit', label: 'Audit' },
         { id: 'moderation', label: 'Moderation' },
         { id: 'elo', label: 'CS2 Elo' },
@@ -2284,7 +2284,7 @@ function renderLogs() {
 
                 <div class="flex flex-wrap gap-2">
                     ${categories.map(c => `
-                        <button type="button" data-log-cat="${c.id}" class="px-3 py-1.5 rounded-xl text-xs font-medium border transition ${state.logCategory === c.id ? 'bg-brand text-white border-brand' : 'bg-bg-elevated hover:bg-bg-hover text-slate-300 border-slate-700'}">
+                        <button type="button" data-log-cat="${c.id}"${c.i18nKey ? ` data-i18n-key="${c.i18nKey}"` : ''} class="px-3 py-1.5 rounded-xl text-xs font-medium border transition ${state.logCategory === c.id ? 'bg-brand text-white border-brand' : 'bg-bg-elevated hover:bg-bg-hover text-slate-300 border-slate-700'}">
                             ${escapeHtml(c.label)}
                         </button>
                     `).join('')}
@@ -3217,7 +3217,7 @@ function renderCsStatus() {
                     <div class="space-y-1.5">
                         <label class="text-xs font-medium text-slate-400">Channel</label>
                         <select id="cs-channel" class="input-field">
-                            ${buildTextChannelOptions(cs.channelId)}
+                            ${buildTextChannelOptions(cs.channelId, { allowNone: true, noneLabel: '— Select channel —' })}
                         </select>
                     </div>
 
@@ -3335,7 +3335,7 @@ function renderRankFeed() {
                 <div class="space-y-1.5">
                     <label class="text-xs font-medium text-slate-400">Channel</label>
                     <select id="rf-channel" class="input-field">
-                        ${buildTextChannelOptions(rf.channelId)}
+                        ${buildTextChannelOptions(rf.channelId, { allowNone: true, noneLabel: '— Select channel —' })}
                     </select>
                 </div>
 
@@ -3426,6 +3426,8 @@ function renderAdminLog() {
         { id: 'al-ev-leave', key: 'memberLeave', title: 'Leave & kick', icon: 'user-minus', color: 'text-amber-400' },
         { id: 'al-ev-bans', key: 'bans', title: 'Bans & unbans', icon: 'ban', color: 'text-red-400' },
         { id: 'al-ev-timeouts', key: 'timeouts', title: 'Timeouts', icon: 'volume-x', color: 'text-orange-400' },
+        { id: 'al-ev-warnings', key: 'warnings', title: 'Warnings', icon: 'alert-triangle', color: 'text-amber-300' },
+        { id: 'al-ev-channel', key: 'channelActions', title: 'Channel actions', icon: 'lock', color: 'text-indigo-400' },
         { id: 'al-ev-roles', key: 'roleChanges', title: 'Role changes', icon: 'tag', color: 'text-sky-400' },
         { id: 'al-ev-voice', key: 'voiceActivity', title: 'Voice activity', icon: 'mic', color: 'text-brand' }
     ];
@@ -3453,7 +3455,7 @@ function renderAdminLog() {
                 <div class="space-y-1.5">
                     <label class="text-xs font-medium text-slate-400">Channel</label>
                     <select id="al-channel" class="input-field">
-                        ${buildTextChannelOptions(al.channelId)}
+                        ${buildTextChannelOptions(al.channelId, { allowNone: true, noneLabel: '— Select channel —' })}
                     </select>
                 </div>
 
@@ -3501,6 +3503,8 @@ function renderAdminLog() {
                         memberLeave: document.getElementById('al-ev-leave').checked,
                         bans: document.getElementById('al-ev-bans').checked,
                         timeouts: document.getElementById('al-ev-timeouts').checked,
+                        warnings: document.getElementById('al-ev-warnings').checked,
+                        channelActions: document.getElementById('al-ev-channel').checked,
                         roleChanges: document.getElementById('al-ev-roles').checked,
                         voiceActivity: document.getElementById('al-ev-voice').checked
                     }
@@ -3936,7 +3940,7 @@ function renderTickets() {
                         </select>
                     </div>
                     <div class="space-y-1.5">
-                        <label class="text-xs font-medium text-slate-400">Log channel</label>
+                        <label class="text-xs font-medium text-slate-400">Transcript channel</label>
                         <select id="tk-log-channel" class="input-field">
                             ${buildTextChannelOptions(tk.logChannelId, { allowNone: true, noneLabel: '— None —' })}
                         </select>
@@ -4810,7 +4814,7 @@ function renderModeration() {
     const commandRows = [
         { id: 'mod-cmd-warn', key: 'warn', title: 'Warnings', icon: 'alert-triangle', color: 'text-amber-400' },
         { id: 'mod-cmd-timeout', key: 'timeout', title: 'Timeout', icon: 'volume-x', color: 'text-orange-400' },
-        { id: 'mod-cmd-kick', key: 'kick', title: 'Kick', icon: 'user-x', color: 'text-red-400' },
+        { id: 'mod-cmd-kick', key: 'kick', title: 'Kick', icon: 'user-x', color: 'text-red-400', noI18n: true },
         { id: 'mod-cmd-ban', key: 'ban', title: 'Ban & unban', icon: 'ban', color: 'text-red-400' },
         { id: 'mod-cmd-clear', key: 'clear', title: 'Clear messages', icon: 'eraser', color: 'text-sky-400' },
         { id: 'mod-cmd-lock', key: 'lock', title: 'Channel lock', icon: 'lock', color: 'text-amber-400' },
@@ -4846,7 +4850,7 @@ function renderModeration() {
                             <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
                                 <div class="text-sm font-medium text-white inline-flex items-center gap-2">
                                     <i data-lucide="${c.icon}" class="w-4 h-4 ${c.color} shrink-0"></i>
-                                    <span>${escapeHtml(c.title)}</span>
+                                    <span${c.noI18n ? ' data-no-i18n' : ''}>${escapeHtml(c.title)}</span>
                                 </div>
                                 ${renderToggleSwitch(c.id, cmds[c.key] !== false)}
                             </div>
@@ -4856,15 +4860,9 @@ function renderModeration() {
 
                 <div class="space-y-2.5">
                     <label class="text-xs font-medium text-slate-400 block">Behavior</label>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                            <div class="text-sm font-medium text-white">Send reason via DM</div>
-                            ${renderToggleSwitch('mod-dm-user', mod.dmUser !== false)}
-                        </div>
-                        <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
-                            <div class="text-sm font-medium text-white">Log to Admin Log</div>
-                            ${renderToggleSwitch('mod-log-adminlog', mod.logToAdminLog !== false)}
-                        </div>
+                    <div class="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                        <div class="text-sm font-medium text-white">Send reason via DM</div>
+                        ${renderToggleSwitch('mod-dm-user', mod.dmUser !== false)}
                     </div>
                 </div>
 
@@ -4945,7 +4943,6 @@ function renderModeration() {
                     enabled: document.getElementById('mod-enabled').checked,
                     adminRoleIds: state.modDraftAdminRoleIds.filter(Boolean),
                     dmUser: document.getElementById('mod-dm-user').checked,
-                    logToAdminLog: document.getElementById('mod-log-adminlog').checked,
                     commands: {
                         warn: document.getElementById('mod-cmd-warn').checked,
                         timeout: document.getElementById('mod-cmd-timeout').checked,

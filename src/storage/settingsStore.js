@@ -97,6 +97,8 @@ function getDefaultSettings() {
                 memberLeave: true,
                 bans: true,
                 timeouts: true,
+                warnings: true,
+                channelActions: true,
                 roleChanges: true,
                 voiceActivity: false
             }
@@ -139,7 +141,6 @@ function getDefaultSettings() {
             enabled: false,
             adminRoleIds: [],
             dmUser: true,
-            logToAdminLog: true,
             commands: {
                 warn: true,
                 timeout: true,
@@ -347,18 +348,25 @@ function normalizeSettings(raw) {
             useSteamApi: typeof ru.useSteamApi === 'boolean' ? ru.useSteamApi : RANK_UPDATER_DEFAULTS.useSteamApi,
             useDiscordPresence: typeof ru.useDiscordPresence === 'boolean' ? ru.useDiscordPresence : RANK_UPDATER_DEFAULTS.useDiscordPresence
         },
-        adminLog: {
-            enabled: typeof al.enabled === 'boolean' ? al.enabled : false,
-            channelId: al.channelId || null,
-            events: {
-                memberJoin: typeof alEvents.memberJoin === 'boolean' ? alEvents.memberJoin : true,
-                memberLeave: typeof alEvents.memberLeave === 'boolean' ? alEvents.memberLeave : true,
-                bans: typeof alEvents.bans === 'boolean' ? alEvents.bans : true,
-                timeouts: typeof alEvents.timeouts === 'boolean' ? alEvents.timeouts : true,
-                roleChanges: typeof alEvents.roleChanges === 'boolean' ? alEvents.roleChanges : true,
-                voiceActivity: typeof alEvents.voiceActivity === 'boolean' ? alEvents.voiceActivity : false
-            }
-        },
+        adminLog: (() => {
+            const legacyModLog = typeof raw?.moderation?.logToAdminLog === 'boolean'
+                ? raw.moderation.logToAdminLog
+                : true;
+            return {
+                enabled: typeof al.enabled === 'boolean' ? al.enabled : false,
+                channelId: al.channelId || null,
+                events: {
+                    memberJoin: typeof alEvents.memberJoin === 'boolean' ? alEvents.memberJoin : true,
+                    memberLeave: typeof alEvents.memberLeave === 'boolean' ? alEvents.memberLeave : true,
+                    bans: typeof alEvents.bans === 'boolean' ? alEvents.bans : true,
+                    timeouts: typeof alEvents.timeouts === 'boolean' ? alEvents.timeouts : true,
+                    warnings: typeof alEvents.warnings === 'boolean' ? alEvents.warnings : legacyModLog,
+                    channelActions: typeof alEvents.channelActions === 'boolean' ? alEvents.channelActions : legacyModLog,
+                    roleChanges: typeof alEvents.roleChanges === 'boolean' ? alEvents.roleChanges : true,
+                    voiceActivity: typeof alEvents.voiceActivity === 'boolean' ? alEvents.voiceActivity : false
+                }
+            };
+        })(),
         announcementsHistory: Array.isArray(src.announcementsHistory)
             ? src.announcementsHistory.filter(item => item && item.channelId && item.messageId).slice(0, 15)
             : [],
@@ -424,7 +432,6 @@ function normalizeSettings(raw) {
                 enabled: Boolean(mod.enabled),
                 adminRoleIds: uniqueStringIds(mod.adminRoleIds),
                 dmUser: typeof mod.dmUser === 'boolean' ? mod.dmUser : true,
-                logToAdminLog: typeof mod.logToAdminLog === 'boolean' ? mod.logToAdminLog : true,
                 commands: {
                     warn: typeof modCmds.warn === 'boolean' ? modCmds.warn : true,
                     timeout: typeof modCmds.timeout === 'boolean' ? modCmds.timeout : true,

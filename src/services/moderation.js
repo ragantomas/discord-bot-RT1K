@@ -7,7 +7,7 @@ const {
     clearUserWarnings
 } = require('../storage/warningsStore');
 const { addActivityLog } = require('./activityLog');
-const { logModerationAction } = require('./adminLog');
+const { logModerationAction, suppressNextAdminLogEvent } = require('./adminLog');
 
 const MAX_TIMEOUT_MINUTES = 28 * 24 * 60; // 40320 minút (28 dní - limit Discord API)
 
@@ -117,6 +117,7 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
 
     const modText = moderatorId ? `<@${moderatorId}>` : moderatorTag;
     await logModerationAction(guild, {
+        eventKey: 'warnings',
         title: `⚠️ Varovanie #${warning.id}`,
         color: 0xF5A623,
         targetUser: targetUser || member?.user,
@@ -144,6 +145,7 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                 const autoReason = `Auto-eskalácia po ${total} varovaniach`;
                 if (rule.action === 'timeout') {
                     const mins = Math.min(Math.max(Number(rule.durationMinutes) || 60, 1), MAX_TIMEOUT_MINUTES);
+                    suppressNextAdminLogEvent(guild.id, 'timeout', member.id);
                     const ok = await member.timeout(mins * 60 * 1000, autoReason).then(() => true).catch(() => false);
                     if (ok) {
                         await sendModDm(member.user, {
@@ -154,6 +156,7 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                             extra: `Trvanie: ${formatDurationMinutes(mins)}`
                         });
                         await logModerationAction(guild, {
+                            eventKey: 'timeouts',
                             title: '🔇 Auto-eskalácia — Timeout',
                             color: 0xF5A623,
                             targetUser: member.user,
@@ -178,9 +181,11 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         color: 0xED4245,
                         reason: autoReason
                     });
+                    suppressNextAdminLogEvent(guild.id, 'memberLeave', member.id);
                     const ok = await member.kick(autoReason).then(() => true).catch(() => false);
                     if (ok) {
                         await logModerationAction(guild, {
+                            eventKey: 'memberLeave',
                             title: '👢 Auto-eskalácia — Kick',
                             color: 0xED4245,
                             targetUser: member.user,
@@ -204,9 +209,11 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         color: 0xED4245,
                         reason: autoReason
                     });
+                    suppressNextAdminLogEvent(guild.id, 'banAdd', member.id);
                     const ok = await guild.members.ban(member.id, { reason: autoReason }).then(() => true).catch(() => false);
                     if (ok) {
                         await logModerationAction(guild, {
+                            eventKey: 'bans',
                             title: '🔨 Auto-eskalácia — Ban',
                             color: 0xED4245,
                             targetUser: member.user,
@@ -239,6 +246,7 @@ async function removeWarning({ guild, targetUserId, targetLabel = null, warningI
 
     const label = targetLabel || `ID ${targetUserId}`;
     await logModerationAction(guild, {
+        eventKey: 'warnings',
         title: `🗑️ Odstránené varovanie #${res.removed.id}`,
         color: 0x57F287,
         targetId: targetUserId,
@@ -266,6 +274,7 @@ async function clearAllWarnings({ guild, targetUserId, targetLabel = null, moder
 
     const label = targetLabel || `ID ${targetUserId}`;
     await logModerationAction(guild, {
+        eventKey: 'warnings',
         title: '🧹 Vymazané všetky varovania',
         color: 0x57F287,
         targetId: targetUserId,
@@ -300,6 +309,7 @@ async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Be
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Bez dôvodu';
+    suppressNextAdminLogEvent(guild.id, 'timeout', targetMember.id);
     await targetMember.timeout(mins * 60 * 1000, cleanReason);
 
     const durLabel = formatDurationMinutes(mins);
@@ -312,6 +322,7 @@ async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Be
     });
 
     await logModerationAction(guild, {
+        eventKey: 'timeouts',
         title: '🔇 Timeout',
         color: 0xF5A623,
         targetUser: targetMember.user,
@@ -343,9 +354,11 @@ async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout'
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Zrušený timeout';
+    suppressNextAdminLogEvent(guild.id, 'timeout', targetMember.id);
     await targetMember.timeout(null, cleanReason);
 
     await logModerationAction(guild, {
+        eventKey: 'timeouts',
         title: '🔊 Timeout zrušený',
         color: 0x57F287,
         targetUser: targetMember.user,
@@ -385,9 +398,11 @@ async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderat
         reason: cleanReason
     });
 
+    suppressNextAdminLogEvent(guild.id, 'memberLeave', targetUser.id);
     await targetMember.kick(cleanReason);
 
     await logModerationAction(guild, {
+        eventKey: 'memberLeave',
         title: '👢 Kick',
         color: 0xF5A623,
         targetUser,
@@ -443,9 +458,11 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
     }
 
     const delSec = Math.min(Math.max(Math.round(Number(deleteMessageSeconds) || 0), 0), 604800);
+    suppressNextAdminLogEvent(guild.id, 'banAdd', userId);
     await guild.members.ban(userId, { deleteMessageSeconds: delSec, reason: cleanReason });
 
     await logModerationAction(guild, {
+        eventKey: 'bans',
         title: '🔨 Ban',
         color: 0xED4245,
         targetUser: userObj,
@@ -477,9 +494,11 @@ async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = 
     }
 
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Bez dôvodu';
+    suppressNextAdminLogEvent(guild.id, 'banRemove', cleanId);
     await guild.members.unban(cleanId, cleanReason);
 
     await logModerationAction(guild, {
+        eventKey: 'bans',
         title: '🕊️ Unban',
         color: 0x57F287,
         targetUser: banInfo.user,

@@ -303,6 +303,7 @@
         'Leave & kick': 'Odchod a kick',
         'Bans & unbans': 'Bany a unbany',
         'Timeouts': 'Timeouty',
+        'Channel actions': 'Akcie kanálov',
         'Role changes': 'Zmeny rolí',
         'Voice activity': 'Voice aktivita',
         'Enable Admin Log': 'Zapnúť Admin Log',
@@ -331,7 +332,7 @@
         'A transcript will be saved to the log channel and the ticket channel will be deleted.': 'Uloží sa prepis do log kanála a kanál ticketu sa zmaže.',
         'Close ticket': 'Zavrieť ticket',
         'Enable Tickets': 'Zapnúť Tickety',
-        'Log channel': 'Log kanál',
+        'Transcript channel': 'Kanál prepisov',
         'Panel channel': 'Kanál panelu',
         'Support roles': 'Roly podpory',
         'Ticket panel': 'Ticket panel',
@@ -357,7 +358,6 @@
         'Commands': 'Príkazy',
         'Behavior': 'Správanie',
         'Send reason via DM': 'Poslať dôvod v správe',
-        'Log to Admin Log': 'Zapisovať do Admin Logu',
         'Auto-escalation': 'Auto-eskalácia',
         'Add rule': 'Pridať pravidlo',
         'Moderation settings saved.': 'Nastavenia Moderácie boli uložené.',
@@ -536,7 +536,7 @@
         [/^(\d+) bots$/, (_, n) => `${n} ${pickSkPlural(n, 'bot', 'boti', 'botov')}`],
         [/^Total (\d+)$/, (_, n) => `Celkom ${n}`],
         [/^Tier (\d+) · (\d+) Boosts?$/, (_, t, c) => `Úroveň ${t} · ${c} ${pickSkPlural(c, 'boost', 'boosty', 'boostov')}`],
-        [/^Avg ([\d\s,.]+) Elo$/, (_, val) => `Ø ${val} Elo`],
+        [/^Avg ([\d\s,.]+) Elo$/, (_, val) => `Priemer ${val} Elo`],
         [/^Warnings: (\d+) · Timeout: (\d+)$/, (_, w, to) => `Varovania: ${w} · Timeout: ${to}`],
         [/^In CS2: (\d+)$/, (_, n) => `V CS2: ${n}`],
         [/^Messages:$/, () => 'Správy:'],
@@ -619,6 +619,13 @@
         }
     };
 
+    const SK_KEYS = {
+        logs_all: {
+            en: 'All',
+            sk: 'Všetko'
+        }
+    };
+
     const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'CODE', 'PRE']);
     const origTextMap = new WeakMap();
     const lastAppliedMap = new WeakMap();
@@ -671,6 +678,7 @@
             if (SKIP_TAGS.has(el.tagName)) return true;
             if (el.hasAttribute('data-no-i18n')) return true;
             if (el.hasAttribute('data-i18n-html')) return true;
+            if (el.hasAttribute('data-i18n-key')) return true;
             el = el.parentElement;
         }
         return false;
@@ -745,11 +753,35 @@
         }
     }
 
+    function translateKeyedBlocks(root) {
+        if (!root || typeof root.querySelectorAll !== 'function') return;
+        const els = [];
+        if (root.nodeType === 1 && root.hasAttribute && root.hasAttribute('data-i18n-key')) {
+            els.push(root);
+        }
+        const inner = root.querySelectorAll('[data-i18n-key]');
+        for (let i = 0; i < inner.length; i++) {
+            els.push(inner[i]);
+        }
+
+        for (let i = 0; i < els.length; i++) {
+            const el = els[i];
+            const key = el.getAttribute('data-i18n-key');
+            const entry = key && SK_KEYS[key];
+            if (!entry) continue;
+            const targetText = entry[currentLang] || entry.en;
+            if (el.textContent !== targetText) {
+                el.textContent = targetText;
+            }
+        }
+    }
+
     function translateTree(root) {
         const target = root || (global.document && global.document.body);
         if (!target) return;
 
         translateHtmlBlocks(target);
+        translateKeyedBlocks(target);
 
         if (global.document && typeof global.document.createTreeWalker === 'function' && global.NodeFilter) {
             const walker = global.document.createTreeWalker(target, global.NodeFilter.SHOW_TEXT);

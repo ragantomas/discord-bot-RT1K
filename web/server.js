@@ -2074,6 +2074,8 @@ function startWebServer(client) {
                 memberLeave: Boolean(events.memberLeave),
                 bans: Boolean(events.bans),
                 timeouts: Boolean(events.timeouts),
+                warnings: Boolean(events.warnings),
+                channelActions: Boolean(events.channelActions),
                 roleChanges: Boolean(events.roleChanges),
                 voiceActivity: Boolean(events.voiceActivity)
             }
@@ -2422,7 +2424,6 @@ function startWebServer(client) {
         const enabled = Boolean(body.enabled);
         const adminRoleIds = uniqueStringIds(body.adminRoleIds);
         const dmUser = body.dmUser !== false;
-        const logToAdminLog = body.logToAdminLog !== false;
 
         for (const roleId of adminRoleIds) {
             if (roleId === guild.id) {
@@ -2471,7 +2472,6 @@ function startWebServer(client) {
             enabled,
             adminRoleIds,
             dmUser,
-            logToAdminLog,
             commands,
             autoEscalation: {
                 enabled: aeEnabled,

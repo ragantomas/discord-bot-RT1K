@@ -37,6 +37,7 @@ module.exports = {
         await channel.setRateLimitPerUser(seconds, `Nastavil ${interaction.user.tag}`);
 
         await logModerationAction(interaction.guild, {
+            eventKey: 'channelActions',
             title: '⏱️ Slowmode upravený',
             color: 0x5865F2,
             moderatorText: `<@${interaction.user.id}>`,

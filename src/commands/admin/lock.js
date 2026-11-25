@@ -41,6 +41,7 @@ module.exports = {
         );
 
         await logModerationAction(interaction.guild, {
+            eventKey: 'channelActions',
             title: '🔒 Kanál zamknutý',
             color: 0xED4245,
             moderatorText: `<@${interaction.user.id}>`,

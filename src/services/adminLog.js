@@ -1,6 +1,29 @@
 const { EmbedBuilder, PermissionFlagsBits, AuditLogEvent } = require('discord.js');
-const { getAdminLogSettings, getModerationSettings } = require('../storage/settingsStore');
+const { getAdminLogSettings } = require('../storage/settingsStore');
 const { addActivityLog } = require('./activityLog');
+
+const SUPPRESS_TTL_MS = 15000;
+const suppressedGatewayEvents = new Map();
+
+function suppressNextAdminLogEvent(guildId, eventType, userId) {
+    if (!guildId || !eventType || !userId) return;
+    suppressedGatewayEvents.set(`${guildId}:${eventType}:${userId}`, Date.now() + SUPPRESS_TTL_MS);
+    if (suppressedGatewayEvents.size > 200) {
+        const now = Date.now();
+        for (const [key, expiresAt] of suppressedGatewayEvents.entries()) {
+            if (expiresAt <= now) suppressedGatewayEvents.delete(key);
+        }
+    }
+}
+
+function consumeSuppressedAdminLogEvent(guildId, eventType, userId) {
+    if (!guildId || !eventType || !userId) return false;
+    const key = `${guildId}:${eventType}:${userId}`;
+    const expiresAt = suppressedGatewayEvents.get(key);
+    if (!expiresAt) return false;
+    suppressedGatewayEvents.delete(key);
+    return expiresAt > Date.now();
+}
 
 async function getAdminLogChannel(guild) {
     const config = getAdminLogSettings();
@@ -56,6 +79,7 @@ async function logMemberJoin(member) {
 
 async function logMemberLeave(member) {
     if (!member?.guild || !member.user) return;
+    if (consumeSuppressedAdminLogEvent(member.guild.id, 'memberLeave', member.id)) return;
     const ctx = await getAdminLogChannel(member.guild);
     if (!ctx || !ctx.config.events?.memberLeave) return;
 
@@ -97,6 +121,7 @@ async function logMemberLeave(member) {
 
 async function logBanAdd(ban) {
     if (!ban?.guild || !ban.user) return;
+    if (consumeSuppressedAdminLogEvent(ban.guild.id, 'banAdd', ban.user.id)) return;
     const ctx = await getAdminLogChannel(ban.guild);
     if (!ctx || !ctx.config.events?.bans) return;
 
@@ -125,6 +150,7 @@ async function logBanAdd(ban) {
 
 async function logBanRemove(ban) {
     if (!ban?.guild || !ban.user) return;
+    if (consumeSuppressedAdminLogEvent(ban.guild.id, 'banRemove', ban.user.id)) return;
     const ctx = await getAdminLogChannel(ban.guild);
     if (!ctx || !ctx.config.events?.bans) return;
 
@@ -160,35 +186,38 @@ async function logMemberUpdate(oldMember, newMember) {
     const oldTimeout = oldMember.communicationDisabledUntilTimestamp || 0;
     const newTimeout = newMember.communicationDisabledUntilTimestamp || 0;
 
-    if (events.timeouts && oldTimeout !== newTimeout) {
-        const audit = await fetchRecentAuditEntry(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
-        const now = Date.now();
-        const isMuted = newTimeout > now;
+    if (oldTimeout !== newTimeout) {
+        const suppressedTimeout = consumeSuppressedAdminLogEvent(newMember.guild.id, 'timeout', newMember.id);
+        if (!suppressedTimeout && events.timeouts) {
+            const audit = await fetchRecentAuditEntry(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
+            const now = Date.now();
+            const isMuted = newTimeout > now;
 
-        const embed = new EmbedBuilder()
-            .setTitle(isMuted ? '🔇 Používateľ dostal Timeout' : '🔊 Timeout bol zrušený')
-            .setColor(isMuted ? 0xF5A623 : 0x57F287)
-            .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
-            .addFields(
-                { name: 'Používateľ', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true },
-                { name: 'Moderátor', value: audit?.executor ? `<@${audit.executor.id}>` : '*Neznámy*', inline: true }
-            )
-            .setFooter({ text: `ID: ${newMember.id}` })
-            .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setTitle(isMuted ? '🔇 Používateľ dostal Timeout' : '🔊 Timeout bol zrušený')
+                .setColor(isMuted ? 0xF5A623 : 0x57F287)
+                .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
+                .addFields(
+                    { name: 'Používateľ', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true },
+                    { name: 'Moderátor', value: audit?.executor ? `<@${audit.executor.id}>` : '*Neznámy*', inline: true }
+                )
+                .setFooter({ text: `ID: ${newMember.id}` })
+                .setTimestamp();
 
-        if (isMuted) {
-            embed.addFields(
-                { name: 'Vyprší', value: `<t:${Math.floor(newTimeout / 1000)}:R>`, inline: true },
-                { name: 'Dôvod', value: audit?.reason || '*Neuvedený*', inline: false }
-            );
+            if (isMuted) {
+                embed.addFields(
+                    { name: 'Vyprší', value: `<t:${Math.floor(newTimeout / 1000)}:R>`, inline: true },
+                    { name: 'Dôvod', value: audit?.reason || '*Neuvedený*', inline: false }
+                );
+            }
+
+            await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+            addActivityLog({
+                level: isMuted ? 'warn' : 'info',
+                category: 'adminlog',
+                message: isMuted ? `Timed out ${newMember.user.tag}.` : `Removed timeout for ${newMember.user.tag}.`
+            });
         }
-
-        await ctx.channel.send({ embeds: [embed] }).catch(() => null);
-        addActivityLog({
-            level: isMuted ? 'warn' : 'info',
-            category: 'adminlog',
-            message: isMuted ? `Timed out ${newMember.user.tag}.` : `Removed timeout for ${newMember.user.tag}.`
-        });
     }
 
     // 2. Zmeny rolí
@@ -312,6 +341,7 @@ async function sendTestAdminLogMessage(guild) {
 }
 
 async function logModerationAction(guild, {
+    eventKey = null,
     title,
     color = 0xF5A623,
     targetUser = null,
@@ -320,11 +350,11 @@ async function logModerationAction(guild, {
     reason = null,
     extraFields = []
 } = {}) {
-    const mod = getModerationSettings();
-    if (!mod?.logToAdminLog || !guild) return false;
+    if (!guild) return false;
 
     const ctx = await getAdminLogChannel(guild);
     if (!ctx) return false;
+    if (eventKey && !ctx.config.events?.[eventKey]) return false;
 
     const cleanTargetId = targetUser?.id || targetId;
     const embed = new EmbedBuilder()
@@ -364,5 +394,6 @@ module.exports = {
     logMemberUpdate,
     logVoiceState,
     sendTestAdminLogMessage,
-    logModerationAction
+    logModerationAction,
+    suppressNextAdminLogEvent
 };
