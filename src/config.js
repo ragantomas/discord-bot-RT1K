@@ -46,9 +46,21 @@ const TEMPVOICE_DEFAULTS = {
     userLimit: 0
 };
 
+const RANK_UPDATER_DEFAULTS = {
+    activeIntervalMinutes: 5,
+    postMatchDelayMinutes: 4,
+    backgroundIntervalMinutes: 60,
+    inactiveIntervalHours: 12,
+    useSteamApi: true,
+    useDiscordPresence: true
+};
+
 const INTERVALS = {
     RANK_UPDATE_MS: 1 * 60 * 60 * 1000,
     RANK_UPDATE_DELAY_MS: 2000,
+    RANK_STEAM_POLL_MS: 2 * 60 * 1000,
+    RANK_WORKER_TICK_MS: 2000,
+    RANK_INACTIVE_DAYS: 14,
     PATCH_CHECK_MS: 5 * 60 * 1000,
     CS_STATUS_TICK_MS: 10 * 1000
 };
@@ -72,5 +84,6 @@ module.exports = {
     PATCHBOT_DEFAULTS,
     CSSTATUS_DEFAULTS,
     TEMPVOICE_DEFAULTS,
+    RANK_UPDATER_DEFAULTS,
     INTERVALS
 };

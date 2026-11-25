@@ -9,7 +9,8 @@ const {
     CSSTATUS_DB_FILE,
     PATCHBOT_DEFAULTS,
     CSSTATUS_DEFAULTS,
-    TEMPVOICE_DEFAULTS
+    TEMPVOICE_DEFAULTS,
+    RANK_UPDATER_DEFAULTS
 } = require('../config');
 
 const MAX_POSTED_GIDS = 50;
@@ -84,6 +85,9 @@ function getDefaultSettings() {
             channelId: null,
             notifyRankUp: true,
             notifyDerank: true
+        },
+        rankUpdater: {
+            ...RANK_UPDATER_DEFAULTS
         },
         adminLog: {
             enabled: false,
@@ -219,7 +223,13 @@ function normalizeSettings(raw) {
     const cs = src.csStatus && csStatusValid(src.csStatus) ? src.csStatus : {};
     const bs = src.botStatus && typeof src.botStatus === 'object' ? src.botStatus : {};
     const rf = src.rankFeed && typeof src.rankFeed === 'object' ? src.rankFeed : {};
+    const ru = src.rankUpdater && typeof src.rankUpdater === 'object' ? src.rankUpdater : {};
     const al = src.adminLog && typeof src.adminLog === 'object' ? src.adminLog : {};
+    const clampInt = (val, min, max, fallback) => {
+        const n = Number(val);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.min(Math.max(Math.round(n), min), max);
+    };
     const alEvents = al.events && typeof al.events === 'object' ? al.events : {};
     const wl = src.welcome && typeof src.welcome === 'object' ? src.welcome : {};
     const tk = src.tickets && typeof src.tickets === 'object' ? src.tickets : {};
@@ -328,6 +338,14 @@ function normalizeSettings(raw) {
             channelId: rf.channelId || null,
             notifyRankUp: typeof rf.notifyRankUp === 'boolean' ? rf.notifyRankUp : true,
             notifyDerank: typeof rf.notifyDerank === 'boolean' ? rf.notifyDerank : true
+        },
+        rankUpdater: {
+            activeIntervalMinutes: clampInt(ru.activeIntervalMinutes, 3, 30, RANK_UPDATER_DEFAULTS.activeIntervalMinutes),
+            postMatchDelayMinutes: clampInt(ru.postMatchDelayMinutes, 2, 15, RANK_UPDATER_DEFAULTS.postMatchDelayMinutes),
+            backgroundIntervalMinutes: clampInt(ru.backgroundIntervalMinutes, 15, 720, RANK_UPDATER_DEFAULTS.backgroundIntervalMinutes),
+            inactiveIntervalHours: clampInt(ru.inactiveIntervalHours, 6, 48, RANK_UPDATER_DEFAULTS.inactiveIntervalHours),
+            useSteamApi: typeof ru.useSteamApi === 'boolean' ? ru.useSteamApi : RANK_UPDATER_DEFAULTS.useSteamApi,
+            useDiscordPresence: typeof ru.useDiscordPresence === 'boolean' ? ru.useDiscordPresence : RANK_UPDATER_DEFAULTS.useDiscordPresence
         },
         adminLog: {
             enabled: typeof al.enabled === 'boolean' ? al.enabled : false,
@@ -790,6 +808,16 @@ function updateModerationSettings(patch) {
     }).moderation;
 }
 
+function getRankUpdaterSettings() {
+    return loadSettings().rankUpdater;
+}
+
+function updateRankUpdaterSettings(patch) {
+    return updateSettings(s => {
+        s.rankUpdater = { ...s.rankUpdater, ...patch };
+    }).rankUpdater;
+}
+
 module.exports = {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -820,6 +848,8 @@ module.exports = {
     updateBotStatusSettings,
     getRankFeedSettings,
     updateRankFeedSettings,
+    getRankUpdaterSettings,
+    updateRankUpdaterSettings,
     getAdminLogSettings,
     updateAdminLogSettings,
     getAnnouncementsHistory,

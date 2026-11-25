@@ -1,9 +1,10 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { loadUsers, saveUsers } = require('../../storage/usersStore');
+const { loadUsers, saveUsers, appendEloHistory } = require('../../storage/usersStore');
 const { resolveSteam64Id } = require('../../services/steam');
 const { updateMemberRank } = require('../../services/ranks');
 const { updateBotStatus } = require('../../services/botStatus');
 const { addActivityLog } = require('../../services/activityLog');
+const { syncLinkedPlayer } = require('../../tasks/rankUpdater');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -28,8 +29,18 @@ module.exports = {
         if (result.error) return interaction.editReply(result.error);
 
         const users = loadUsers();
-        users[interaction.user.id] = { steamId, elo: result.elo };
+        const now = Date.now();
+        const newEntry = {
+            steamId,
+            elo: result.elo,
+            eloHistory: [],
+            lastCheckedAt: now,
+            lastEloChangedAt: now
+        };
+        appendEloHistory(newEntry, result.elo, now);
+        users[interaction.user.id] = newEntry;
         saveUsers(users);
+        syncLinkedPlayer(interaction.user.id, newEntry);
         updateBotStatus(interaction.client);
 
         addActivityLog({

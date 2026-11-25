@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const { loadUsers, saveUsers } = require('../../storage/usersStore');
 const { removeRankRoles } = require('../../services/ranks');
 const { updateBotStatus } = require('../../services/botStatus');
+const { syncLinkedPlayer } = require('../../tasks/rankUpdater');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -17,6 +18,7 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
         delete users[interaction.user.id];
         saveUsers(users);
+        syncLinkedPlayer(interaction.user.id, null);
         updateBotStatus(interaction.client);
 
         await removeRankRoles(interaction.member);

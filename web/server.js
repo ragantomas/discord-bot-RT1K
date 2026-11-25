@@ -5,7 +5,7 @@ const cookieParser = require('cookie-parser');
 const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 const { OWNER_ID, DB_FILE, SETTINGS_FILE } = require('../src/config');
-const { loadUsers, saveUsers, usersFileExists, normalizeEloHistory } = require('../src/storage/usersStore');
+const { loadUsers, saveUsers, usersFileExists, normalizeEloHistory, normalizeUserEntry, appendEloHistory } = require('../src/storage/usersStore');
 const {
     normalizeWarningsData,
     loadWarnings,
@@ -51,6 +51,7 @@ const {
 } = require('../src/storage/settingsStore');
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank } = require('../src/services/ranks');
+const { syncLinkedPlayer, rescheduleRankUpdater, getRankUpdaterStatus } = require('../src/tasks/rankUpdater');
 const { getPlayerActivity, getAllPlayerActivity, getDailyActivity } = require('../src/services/playerActivity');
 const { updateBotStatus } = require('../src/services/botStatus');
 const {
@@ -1033,8 +1034,18 @@ function startWebServer(client) {
         }
 
         const users = loadUsers();
-        users[userId] = { steamId, elo: result.elo };
+        const now = Date.now();
+        const newEntry = {
+            steamId,
+            elo: result.elo,
+            eloHistory: [],
+            lastCheckedAt: now,
+            lastEloChangedAt: now
+        };
+        appendEloHistory(newEntry, result.elo, now);
+        users[userId] = newEntry;
         saveUsers(users);
+        syncLinkedPlayer(userId, newEntry);
         updateBotStatus(client);
         logDashboardAudit(req, `Prepojený hráč ${member.displayName} (${steamId}).`, 'success', userId);
 
@@ -1057,6 +1068,7 @@ function startWebServer(client) {
 
         delete users[userId];
         saveUsers(users);
+        syncLinkedPlayer(userId, null);
         updateBotStatus(client);
 
         const member = await guild.members.fetch(userId).catch(() => null);
@@ -1288,11 +1300,12 @@ function startWebServer(client) {
         return res.status(400).json({ error: 'Neznáma voice akcia.' });
     });
 
-    // --- Nastavenia (Všeobecné + CS2 Rank roly) ---
+    // --- Nastavenia (Všeobecné + CS2 Rank roly + Aktualizácia rankov) ---
     app.get('/api/settings', (req, res) => {
         return res.json({
             settings: loadSettings(),
             steamApiKeyConfigured: Boolean(process.env.STEAM_API_KEY?.trim()),
+            rankUpdaterStatus: getRankUpdaterStatus(),
             ownerId: OWNER_ID
         });
     });
@@ -1309,6 +1322,7 @@ function startWebServer(client) {
         const allowedChannelBypassRoleIds = uniqueStringIds(body.allowedChannelBypassRoleIds);
         const unrankedRoleId = body.unrankedRoleId ? String(body.unrankedRoleId).trim() : null;
         const rankRolesInput = Array.isArray(body.rankRoles) ? body.rankRoles : null;
+        const rankUpdaterInput = body.rankUpdater && typeof body.rankUpdater === 'object' ? body.rankUpdater : null;
 
         for (const roleId of dashboardRoleIds) {
             if (roleId === guild.id) {
@@ -1372,6 +1386,36 @@ function startWebServer(client) {
             validatedRanks.push({ min: Math.round(min), roleId, color });
         }
 
+        let nextRankUpdater = null;
+        if (rankUpdaterInput) {
+            const activeIntervalMinutes = Number(rankUpdaterInput.activeIntervalMinutes);
+            const postMatchDelayMinutes = Number(rankUpdaterInput.postMatchDelayMinutes);
+            const backgroundIntervalMinutes = Number(rankUpdaterInput.backgroundIntervalMinutes);
+            const inactiveIntervalHours = Number(rankUpdaterInput.inactiveIntervalHours);
+
+            if (!Number.isFinite(activeIntervalMinutes) || activeIntervalMinutes < 3 || activeIntervalMinutes > 30) {
+                return res.status(400).json({ error: 'Interval počas hry musí byť medzi 3 a 30 minútami.' });
+            }
+            if (!Number.isFinite(postMatchDelayMinutes) || postMatchDelayMinutes < 2 || postMatchDelayMinutes > 15) {
+                return res.status(400).json({ error: 'Interval po zápase musí byť medzi 2 a 15 minútami.' });
+            }
+            if (!Number.isFinite(backgroundIntervalMinutes) || backgroundIntervalMinutes < 15 || backgroundIntervalMinutes > 720) {
+                return res.status(400).json({ error: 'Interval na pozadí musí byť medzi 15 a 720 minútami.' });
+            }
+            if (!Number.isFinite(inactiveIntervalHours) || inactiveIntervalHours < 6 || inactiveIntervalHours > 48) {
+                return res.status(400).json({ error: 'Interval pre neaktívnych musí byť medzi 6 a 48 hodinami.' });
+            }
+
+            nextRankUpdater = {
+                activeIntervalMinutes: Math.round(activeIntervalMinutes),
+                postMatchDelayMinutes: Math.round(postMatchDelayMinutes),
+                backgroundIntervalMinutes: Math.round(backgroundIntervalMinutes),
+                inactiveIntervalHours: Math.round(inactiveIntervalHours),
+                useSteamApi: rankUpdaterInput.useSteamApi !== false,
+                useDiscordPresence: rankUpdaterInput.useDiscordPresence !== false
+            };
+        }
+
         const botStatusInput = body.botStatus && typeof body.botStatus === 'object' ? body.botStatus : null;
         const nextBotStatus = botStatusInput
             ? { text: typeof botStatusInput.text === 'string' ? botStatusInput.text.trim().slice(0, 128) : '' }
@@ -1383,15 +1427,25 @@ function startWebServer(client) {
             s.allowedChannelBypassRoleIds = allowedChannelBypassRoleIds;
             s.unrankedRoleId = unrankedRoleId;
             s.rankRoles = validatedRanks;
+            if (nextRankUpdater) {
+                s.rankUpdater = nextRankUpdater;
+            }
             if (nextBotStatus) {
                 s.botStatus = nextBotStatus;
             }
         });
 
+        if (nextRankUpdater) {
+            rescheduleRankUpdater();
+        }
         updateBotStatus(client, { force: true });
-        logDashboardAudit(req, 'Aktualizované všeobecné nastavenia, status bota a CS2 rank roly.');
+        logDashboardAudit(req, 'Aktualizované nastavenia.');
 
-        return res.json({ ok: true, settings: updated });
+        return res.json({
+            ok: true,
+            settings: updated,
+            rankUpdaterStatus: getRankUpdaterStatus()
+        });
     });
 
     // --- TempVoice (viacero nezávislých konfigurácií, vypnutie nič nemaže) ---
@@ -1882,14 +1936,9 @@ function startWebServer(client) {
             const clean = {};
             for (const [uid, val] of Object.entries(rawMap)) {
                 if (!/^\d{15,22}$/.test(uid)) continue;
-                if (typeof val === 'string' && /^\d{17}$/.test(val)) {
-                    clean[uid] = { steamId: val, elo: null, eloHistory: [] };
-                } else if (val && typeof val === 'object' && /^\d{17}$/.test(String(val.steamId || ''))) {
-                    clean[uid] = {
-                        steamId: String(val.steamId),
-                        elo: typeof val.elo === 'number' ? val.elo : null,
-                        eloHistory: normalizeEloHistory(val.eloHistory)
-                    };
+                const normalized = normalizeUserEntry(val);
+                if (normalized && /^\d{17}$/.test(normalized.steamId)) {
+                    clean[uid] = normalized;
                 }
             }
             return clean;
@@ -1906,7 +1955,7 @@ function startWebServer(client) {
             }
         } else if (
             payload.tempVoice || payload.patchBot || payload.joinRoles ||
-            payload.csStatus || payload.rankRoles || payload.adminLog ||
+            payload.csStatus || payload.rankRoles || payload.rankUpdater || payload.adminLog ||
             payload.rankFeed || payload.welcome || payload.tickets || payload.moderation
         ) {
             // 2. Samostatný settings.json
@@ -1928,6 +1977,7 @@ function startWebServer(client) {
             restored.push('users');
         }
 
+        rescheduleRankUpdater();
         updateBotStatus(client, { force: true });
         logDashboardAudit(req, `Obnovená záloha zo súboru (${restored.join(' + ')}).`, 'warn');
 

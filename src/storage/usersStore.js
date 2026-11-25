@@ -3,6 +3,12 @@ const { DB_FILE } = require('../config');
 
 const MAX_ELO_HISTORY = 30;
 
+function normalizeOptionalTimestamp(val) {
+    return typeof val === 'number' && Number.isFinite(val) && val > 0
+        ? Math.round(val)
+        : null;
+}
+
 function normalizeEloHistory(rawHistory) {
     if (!Array.isArray(rawHistory)) return [];
     const cleaned = rawHistory
@@ -46,15 +52,43 @@ function appendEloHistory(entry, elo, timestamp = Date.now()) {
     return entry.eloHistory;
 }
 
+function normalizeUserEntry(val) {
+    if (typeof val === 'string') {
+        return { steamId: val, elo: null, eloHistory: [] };
+    }
+    if (!val || typeof val !== 'object') return null;
+
+    const normalized = {
+        ...val,
+        steamId: String(val.steamId || '').trim(),
+        elo: typeof val.elo === 'number' && Number.isFinite(val.elo) ? Math.round(val.elo) : null,
+        eloHistory: normalizeEloHistory(val.eloHistory)
+    };
+
+    const lastCheckedAt = normalizeOptionalTimestamp(val.lastCheckedAt);
+    const lastCs2SeenAt = normalizeOptionalTimestamp(val.lastCs2SeenAt);
+    const lastEloChangedAt = normalizeOptionalTimestamp(val.lastEloChangedAt);
+
+    if (lastCheckedAt) normalized.lastCheckedAt = lastCheckedAt;
+    else delete normalized.lastCheckedAt;
+
+    if (lastCs2SeenAt) normalized.lastCs2SeenAt = lastCs2SeenAt;
+    else delete normalized.lastCs2SeenAt;
+
+    if (lastEloChangedAt) normalized.lastEloChangedAt = lastEloChangedAt;
+    else delete normalized.lastEloChangedAt;
+
+    return normalized;
+}
+
 function loadUsers() {
     if (!fs.existsSync(DB_FILE)) return {};
     const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    // Automatická konverzia zo starého formátu ("id": "7656...") na objekt + normalizácia eloHistory
+    // Automatická konverzia zo starého formátu ("id": "7656...") na objekt + normalizácia metadát
     for (const [id, val] of Object.entries(raw)) {
-        if (typeof val === 'string') {
-            raw[id] = { steamId: val, elo: null, eloHistory: [] };
-        } else if (val && typeof val === 'object') {
-            val.eloHistory = normalizeEloHistory(val.eloHistory);
+        const normalized = normalizeUserEntry(val);
+        if (normalized) {
+            raw[id] = normalized;
         }
     }
     return raw;
@@ -71,6 +105,7 @@ function usersFileExists() {
 module.exports = {
     MAX_ELO_HISTORY,
     normalizeEloHistory,
+    normalizeUserEntry,
     appendEloHistory,
     loadUsers,
     saveUsers,

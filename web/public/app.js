@@ -8,6 +8,7 @@ const state = {
     playerFilter: 'all',
     settings: null,
     steamApiKeyConfigured: false,
+    rankUpdaterStatus: null,
     tempRooms: [],
     tvDraftSetups: [],
     pbDraftChannelIds: [],
@@ -4195,6 +4196,9 @@ function renderSettings() {
     const statusText = typeof s.botStatus?.text === 'string' ? s.botStatus.text : '';
     const statusPreview = resolveBotStatusPreview(statusText);
     const rankRoles = Array.isArray(s.rankRoles) ? s.rankRoles : [];
+    const ru = s.rankUpdater || {};
+    const ruStatus = state.rankUpdaterStatus || null;
+    const ruRateLimited = Boolean(ruStatus?.rateLimitedUntil && ruStatus.rateLimitedUntil > Date.now());
 
     container.innerHTML = `
         <form id="general-settings-form" class="space-y-6">
@@ -4267,6 +4271,64 @@ function renderSettings() {
                     <span id="set-status-preview" class="text-xs font-medium ${statusPreview ? 'text-slate-200' : 'text-slate-500 italic'} truncate">
                         ${statusPreview ? escapeHtml(statusPreview) : 'Žiadny status'}
                     </span>
+                </div>
+            </div>
+
+            <div class="card p-6 space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                        <i data-lucide="refresh-cw" class="w-4 h-4 text-emerald-400"></i>
+                        <span>Aktualizácia rankov</span>
+                    </h3>
+                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                        <span class="px-2.5 py-1 rounded-full ${state.steamApiKeyConfigured ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'}">
+                            Steam API: ${state.steamApiKeyConfigured ? 'Pripojené' : 'Chýba kľúč'}
+                        </span>
+                        ${ruStatus ? `<span class="px-2.5 py-1 rounded-full bg-bg-elevated border border-slate-700/80 text-slate-300">V CS2: ${ruStatus.playingCount}</span>` : ''}
+                        ${ruRateLimited ? `<span class="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Pauza po limite</span>` : ''}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="space-y-1.5">
+                        <label for="set-ru-active" class="text-xs font-medium text-slate-400">Počas hry</label>
+                        <div class="relative">
+                            <input id="set-ru-active" type="number" min="3" max="30" step="1" class="input-field pr-12" value="${ru.activeIntervalMinutes ?? 5}" />
+                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">min</span>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="set-ru-postmatch" class="text-xs font-medium text-slate-400">Po zápase</label>
+                        <div class="relative">
+                            <input id="set-ru-postmatch" type="number" min="2" max="15" step="1" class="input-field pr-12" value="${ru.postMatchDelayMinutes ?? 4}" />
+                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">min</span>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="set-ru-bg" class="text-xs font-medium text-slate-400">Na pozadí</label>
+                        <div class="relative">
+                            <input id="set-ru-bg" type="number" min="15" max="720" step="1" class="input-field pr-12" value="${ru.backgroundIntervalMinutes ?? 60}" />
+                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">min</span>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="set-ru-inactive" class="text-xs font-medium text-slate-400">Neaktívni</label>
+                        <div class="relative">
+                            <input id="set-ru-inactive" type="number" min="6" max="48" step="1" class="input-field pr-10" value="${ru.inactiveIntervalHours ?? 12}" />
+                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">h</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                        <span class="text-sm font-medium text-white">Steam API</span>
+                        ${renderToggleSwitch('set-ru-steam', ru.useSteamApi !== false)}
+                    </div>
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-bg-elevated/60 border border-slate-800">
+                        <span class="text-sm font-medium text-white">Discord aktivita</span>
+                        ${renderToggleSwitch('set-ru-discord', ru.useDiscordPresence !== false)}
+                    </div>
                 </div>
             </div>
 
@@ -4442,16 +4504,27 @@ function renderSettings() {
                     allowedChannelBypassRoleIds: state.allowedChannelBypassDraftRoleIds.filter(Boolean),
                     unrankedRoleId: document.getElementById('set-unranked-role').value,
                     rankRoles: rankRows,
+                    rankUpdater: {
+                        activeIntervalMinutes: Number(document.getElementById('set-ru-active')?.value),
+                        postMatchDelayMinutes: Number(document.getElementById('set-ru-postmatch')?.value),
+                        backgroundIntervalMinutes: Number(document.getElementById('set-ru-bg')?.value),
+                        inactiveIntervalHours: Number(document.getElementById('set-ru-inactive')?.value),
+                        useSteamApi: Boolean(document.getElementById('set-ru-steam')?.checked),
+                        useDiscordPresence: Boolean(document.getElementById('set-ru-discord')?.checked)
+                    },
                     botStatus: {
                         text: textInput.value.trim()
                     }
                 })
             });
             state.settings = res.settings;
+            if (res.rankUpdaterStatus) {
+                state.rankUpdaterStatus = res.rankUpdaterStatus;
+            }
             syncDraftsFromSettings();
             setDirty(false);
             renderSettings();
-            showToast('Všeobecné nastavenia, status bota a rank roly boli uložené.');
+            showToast('Nastavenia boli uložené.');
         } catch (err) {
             showToast(err.message, 'error');
         } finally {
@@ -5184,6 +5257,7 @@ async function reloadAllDashboardData() {
     state.players = playersRes.players || [];
     state.settings = settingsRes.settings;
     state.steamApiKeyConfigured = Boolean(settingsRes.steamApiKeyConfigured);
+    state.rankUpdaterStatus = settingsRes.rankUpdaterStatus || null;
     state.tempRooms = roomsRes.rooms || [];
     state.logs = logsRes.logs || [];
     state.announcementsHistory = annRes.history || [];
