@@ -1,5 +1,5 @@
 import { Activity, RefreshCw, Save } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
@@ -18,13 +18,20 @@ export function CsStatusPage() {
   const { showToast } = useToast();
   const { settings, meta, initialLoading, setSettingsSlice, refreshOverview } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [channelId, setChannelId] = useState<string | null>(null);
-  const [intervalVal, setIntervalVal] = useState(5);
-  const [intervalUnit, setIntervalUnit] = useState<'s' | 'm'>('m');
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.csStatus.enabled));
+  const [channelId, setChannelId] = useState<string | null>(
+    () => settings?.csStatus.channelId ?? null,
+  );
+  const [intervalVal, setIntervalVal] = useState(
+    () => splitIntervalParts(settings?.csStatus.intervalSeconds ?? 300).value,
+  );
+  const [intervalUnit, setIntervalUnit] = useState<'s' | 'm'>(
+    () => splitIntervalParts(settings?.csStatus.intervalSeconds ?? 300).unit,
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -37,8 +44,11 @@ export function CsStatusPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

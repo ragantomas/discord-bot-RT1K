@@ -1,5 +1,5 @@
 import { Save, UserPlus } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
@@ -15,11 +15,16 @@ export function JoinRolesPage() {
   const { showToast } = useToast();
   const { settings, meta, initialLoading, setSettingsSlice, refreshOverview } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [memberRoleIds, setMemberRoleIds] = useState<string[]>([]);
-  const [botRoleIds, setBotRoleIds] = useState<string[]>([]);
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.joinRoles.enabled));
+  const [memberRoleIds, setMemberRoleIds] = useState<string[]>(() => [
+    ...(settings?.joinRoles.memberRoleIds || []),
+  ]);
+  const [botRoleIds, setBotRoleIds] = useState<string[]>(() => [
+    ...(settings?.joinRoles.botRoleIds || []),
+  ]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -30,8 +35,11 @@ export function JoinRolesPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

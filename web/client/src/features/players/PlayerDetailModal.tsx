@@ -51,8 +51,8 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  const loadDetail = useCallback(async (uid: string) => {
-    setLoading(true);
+  const loadDetail = useCallback(async (uid: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await playersApi.detail(uid);
       setDetail(res);
@@ -62,7 +62,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
       showToast(err instanceof Error ? err.message : String(err), 'error');
       onCloseRef.current();
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [showToast]);
 
@@ -82,7 +82,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
     try {
       await playersApi.setNickname(userId, nickname);
       showToast(t('players.detail.nicknameSaved'));
-      await Promise.all([loadDetail(userId), refreshPlayers()]);
+      await Promise.all([loadDetail(userId, { silent: true }), refreshPlayers()]);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     } finally {
@@ -97,7 +97,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
       await playersApi.addRole(userId, selectedRoleId);
       setSelectedRoleId(null);
       showToast(t('players.detail.roleAdded'));
-      await Promise.all([loadDetail(userId), refreshPlayers()]);
+      await Promise.all([loadDetail(userId, { silent: true }), refreshPlayers()]);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     } finally {
@@ -111,7 +111,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
     try {
       await playersApi.removeRole(userId, roleId);
       showToast(t('players.detail.roleRemoved'));
-      await Promise.all([loadDetail(userId), refreshPlayers()]);
+      await Promise.all([loadDetail(userId, { silent: true }), refreshPlayers()]);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     } finally {
@@ -125,7 +125,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
     try {
       await playersApi.voiceAction(userId, { action, channelId: targetVoiceId });
       showToast(t('players.detail.voiceDone'));
-      await Promise.all([loadDetail(userId), refreshPlayers()]);
+      await Promise.all([loadDetail(userId, { silent: true }), refreshPlayers()]);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     } finally {
@@ -185,7 +185,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
       {loading || !detail ? (
         <SkeletonCard rows={4} />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 min-h-[340px]">
           <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
             {tabs.map((tab) => (
               <button
@@ -290,13 +290,14 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
                       value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
                       placeholder={t('players.detail.nicknamePlaceholder')}
-                      className="input-field"
+                      className="input-field flex-1 min-w-0"
                     />
                     <Button
                       variant="primary"
                       loading={savingNick}
                       onClick={() => void handleSaveNickname()}
                       icon={<Save className="w-4 h-4" />}
+                      className="whitespace-nowrap shrink-0 h-[42px]"
                     >
                       {t('common.save')}
                     </Button>
@@ -331,6 +332,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
                         channels={meta?.voiceChannels ?? []}
                         value={targetVoiceId}
                         onChange={setTargetVoiceId}
+                        className="flex-1 min-w-0"
                       />
                       <Button
                         size="sm"
@@ -338,6 +340,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
                         loading={voiceBusy}
                         disabled={!targetVoiceId || targetVoiceId === detail.voice.channelId}
                         onClick={() => void handleVoiceAction('move')}
+                        className="whitespace-nowrap shrink-0 h-[42px]"
                       >
                         {t('players.detail.move')}
                       </Button>
@@ -406,6 +409,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
                     value={selectedRoleId}
                     onChange={setSelectedRoleId}
                     onlyEditable
+                    className="flex-1 min-w-0"
                   />
                   <Button
                     variant="primary"
@@ -413,6 +417,7 @@ export function PlayerDetailModal({ userId, onClose, onOpenModeration }: PlayerD
                     disabled={!selectedRoleId}
                     onClick={() => void handleAddRole()}
                     icon={<Plus className="w-4 h-4" />}
+                    className="whitespace-nowrap shrink-0 h-[42px]"
                   >
                     {t('players.detail.addRole')}
                   </Button>

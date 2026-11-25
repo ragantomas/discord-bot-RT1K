@@ -51,25 +51,44 @@ export function SettingsPage() {
     reloadAll,
   } = useDashboard();
 
-  const [dashboardRoleIds, setDashboardRoleIds] = useState<string[]>([]);
-  const [allowedChannelId, setAllowedChannelId] = useState<string | null>(null);
-  const [bypassRoleIds, setBypassRoleIds] = useState<string[]>([]);
-  const [botStatusText, setBotStatusText] = useState('');
-  const [rankUpdater, setRankUpdater] = useState<RankUpdaterSettings>({
-    activeIntervalMinutes: 5,
-    postMatchDelayMinutes: 4,
-    backgroundIntervalMinutes: 60,
-    inactiveIntervalHours: 12,
-    useSteamApi: true,
-    useDiscordPresence: true,
-  });
-  const [unrankedRoleId, setUnrankedRoleId] = useState<string | null>(null);
-  const [rankRoles, setRankRoles] = useState<EditableRankRow[]>([]);
+  const [dashboardRoleIds, setDashboardRoleIds] = useState<string[]>(() => [
+    ...(settings?.dashboardRoleIds || []),
+  ]);
+  const [allowedChannelId, setAllowedChannelId] = useState<string | null>(
+    () => settings?.allowedChannelId ?? null,
+  );
+  const [bypassRoleIds, setBypassRoleIds] = useState<string[]>(() => [
+    ...(settings?.allowedChannelBypassRoleIds || []),
+  ]);
+  const [botStatusText, setBotStatusText] = useState(() => settings?.botStatus?.text || '');
+  const [rankUpdater, setRankUpdater] = useState<RankUpdaterSettings>(() =>
+    settings?.rankUpdater
+      ? { ...settings.rankUpdater }
+      : {
+          activeIntervalMinutes: 5,
+          postMatchDelayMinutes: 4,
+          backgroundIntervalMinutes: 60,
+          inactiveIntervalHours: 12,
+          useSteamApi: true,
+          useDiscordPresence: true,
+        },
+  );
+  const [unrankedRoleId, setUnrankedRoleId] = useState<string | null>(
+    () => settings?.unrankedRoleId ?? null,
+  );
+  const [rankRoles, setRankRoles] = useState<EditableRankRow[]>(() =>
+    (settings?.rankRoles || []).map((r) => ({
+      min: r.min,
+      roleId: r.roleId,
+      color: formatHexColor(r.color, '#808080'),
+    })),
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -90,8 +109,11 @@ export function SettingsPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

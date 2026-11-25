@@ -1,5 +1,5 @@
 import { Save, Send, TrendingDown, TrendingUp } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
@@ -15,13 +15,20 @@ export function RankFeedPage() {
   const { showToast } = useToast();
   const { settings, meta, initialLoading, setSettingsSlice, refreshOverview } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [channelId, setChannelId] = useState<string | null>(null);
-  const [notifyRankUp, setNotifyRankUp] = useState(true);
-  const [notifyDerank, setNotifyDerank] = useState(true);
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.rankFeed.enabled));
+  const [channelId, setChannelId] = useState<string | null>(
+    () => settings?.rankFeed.channelId ?? null,
+  );
+  const [notifyRankUp, setNotifyRankUp] = useState(
+    () => settings?.rankFeed.notifyRankUp !== false,
+  );
+  const [notifyDerank, setNotifyDerank] = useState(
+    () => settings?.rankFeed.notifyDerank !== false,
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -33,8 +40,11 @@ export function RankFeedPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

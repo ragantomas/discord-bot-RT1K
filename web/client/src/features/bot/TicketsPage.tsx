@@ -1,5 +1,5 @@
 import { RefreshCw, Save, Send, Shield, Ticket, XCircle } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ticketsApi } from '@/api/tickets';
 import { Button } from '@/components/ui/Button';
@@ -29,19 +29,32 @@ export function TicketsPage() {
     refreshOverview,
   } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [logChannelId, setLogChannelId] = useState<string | null>(null);
-  const [panelChannelId, setPanelChannelId] = useState<string | null>(null);
-  const [supportRoleIds, setSupportRoleIds] = useState<string[]>([]);
-  const [panelTitle, setPanelTitle] = useState('');
-  const [panelDescription, setPanelDescription] = useState('');
-  const [panelColor, setPanelColor] = useState('#5865F2');
-  const [panelButtonLabel, setPanelButtonLabel] = useState('');
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.tickets.enabled));
+  const [categoryId, setCategoryId] = useState<string | null>(
+    () => settings?.tickets.categoryId ?? null,
+  );
+  const [logChannelId, setLogChannelId] = useState<string | null>(
+    () => settings?.tickets.logChannelId ?? null,
+  );
+  const [panelChannelId, setPanelChannelId] = useState<string | null>(
+    () => settings?.tickets.panelChannelId ?? null,
+  );
+  const [supportRoleIds, setSupportRoleIds] = useState<string[]>(() => [
+    ...(settings?.tickets.supportRoleIds || []),
+  ]);
+  const [panelTitle, setPanelTitle] = useState(() => settings?.tickets.panelTitle || '');
+  const [panelDescription, setPanelDescription] = useState(
+    () => settings?.tickets.panelDescription || '',
+  );
+  const [panelColor, setPanelColor] = useState(() => settings?.tickets.panelColor || '#5865F2');
+  const [panelButtonLabel, setPanelButtonLabel] = useState(
+    () => settings?.tickets.panelButtonLabel || '',
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingPanel, setSendingPanel] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -59,8 +72,11 @@ export function TicketsPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

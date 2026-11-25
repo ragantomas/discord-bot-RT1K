@@ -1,5 +1,5 @@
 import { Newspaper, Save, Send } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
@@ -18,14 +18,19 @@ export function PatchBotPage() {
   const { showToast } = useToast();
   const { settings, meta, initialLoading, setSettingsSlice, refreshOverview } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [channelIds, setChannelIds] = useState<string[]>([]);
-  const [mode, setMode] = useState<'all' | 'patchnotes'>('all');
-  const [roleId, setRoleId] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.patchBot.enabled));
+  const [channelIds, setChannelIds] = useState<string[]>(() => [
+    ...(settings?.patchBot.channelIds || []),
+  ]);
+  const [mode, setMode] = useState<'all' | 'patchnotes'>(() =>
+    settings?.patchBot.mode === 'patchnotes' ? 'patchnotes' : 'all',
+  );
+  const [roleId, setRoleId] = useState<string | null>(() => settings?.patchBot.roleId ?? null);
   const [withPing, setWithPing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingLatest, setSendingLatest] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -37,8 +42,11 @@ export function PatchBotPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

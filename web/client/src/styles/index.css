@@ -7,6 +7,10 @@
     color-scheme: dark;
   }
 
+  html {
+    scrollbar-gutter: stable;
+  }
+
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -35,6 +39,7 @@
 
   .nav-item {
     color: #94a3b8;
+    border: 1px solid transparent;
   }
 
   .nav-item:hover {

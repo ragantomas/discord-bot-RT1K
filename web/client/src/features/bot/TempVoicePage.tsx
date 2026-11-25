@@ -10,7 +10,7 @@ import {
   UserX,
   Volume2,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tempVoiceApi } from '@/api/tempvoice';
 import { Button } from '@/components/ui/Button';
@@ -44,12 +44,19 @@ export function TempVoicePage() {
     refreshMeta,
   } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [setups, setSetups] = useState<TempVoiceSetup[]>([]);
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.tempVoice.enabled));
+  const [setups, setSetups] = useState<TempVoiceSetup[]>(() =>
+    (settings?.tempVoice.setups || []).map((s) => ({
+      ...s,
+      lockRoleIds: [...(s.lockRoleIds || [])],
+      createTriggerChannel: false,
+    })),
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshingRooms, setRefreshingRooms] = useState(false);
   const [renamingRoom, setRenamingRoom] = useState<TempVoiceRoom | null>(null);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -65,8 +72,11 @@ export function TempVoicePage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

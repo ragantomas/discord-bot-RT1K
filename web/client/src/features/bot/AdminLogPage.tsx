@@ -11,7 +11,7 @@ import {
   UserPlus,
   VolumeX,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
@@ -40,12 +40,18 @@ export function AdminLogPage() {
   const { settings, overview, meta, initialLoading, setSettingsSlice, refreshOverview } =
     useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [channelId, setChannelId] = useState<string | null>(null);
-  const [events, setEvents] = useState<AdminLogEvents>(DEFAULT_EVENTS);
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.adminLog.enabled));
+  const [channelId, setChannelId] = useState<string | null>(
+    () => settings?.adminLog.channelId ?? null,
+  );
+  const [events, setEvents] = useState<AdminLogEvents>(() => ({
+    ...DEFAULT_EVENTS,
+    ...(settings?.adminLog.events || {}),
+  }));
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -56,8 +62,11 @@ export function AdminLogPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

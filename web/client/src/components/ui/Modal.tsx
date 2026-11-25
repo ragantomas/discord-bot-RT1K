@@ -31,13 +31,13 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-8 sm:pt-14 bg-black/75 backdrop-blur-sm p-4 overflow-y-auto"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className={`bg-bg-surface border border-slate-700/70 rounded-2xl w-full ${maxWidthClass} p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto`}
+        className={`bg-bg-surface border border-slate-700/70 rounded-2xl w-full ${maxWidthClass} p-6 shadow-2xl space-y-5 max-h-[calc(100vh-4rem)] overflow-y-auto`}
       >
         {(title || headerRight) && (
           <div className="flex items-center justify-between gap-3">

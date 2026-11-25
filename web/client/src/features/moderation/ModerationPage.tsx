@@ -13,7 +13,7 @@ import {
   UserX,
   VolumeX,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { moderationApi } from '@/api/moderation';
 import { Button } from '@/components/ui/Button';
@@ -51,15 +51,25 @@ export function ModerationPage() {
     refreshOverview,
   } = useDashboard();
 
-  const [enabled, setEnabled] = useState(false);
-  const [adminRoleIds, setAdminRoleIds] = useState<string[]>([]);
-  const [dmUser, setDmUser] = useState(true);
-  const [commands, setCommands] = useState<ModerationCommandsConfig>(DEFAULT_COMMANDS);
-  const [aeEnabled, setAeEnabled] = useState(false);
-  const [rules, setRules] = useState<AutoEscalationRule[]>([]);
+  const [enabled, setEnabled] = useState(() => Boolean(settings?.moderation.enabled));
+  const [adminRoleIds, setAdminRoleIds] = useState<string[]>(() => [
+    ...(settings?.moderation.adminRoleIds || []),
+  ]);
+  const [dmUser, setDmUser] = useState(() => settings?.moderation.dmUser !== false);
+  const [commands, setCommands] = useState<ModerationCommandsConfig>(() => ({
+    ...DEFAULT_COMMANDS,
+    ...(settings?.moderation.commands || {}),
+  }));
+  const [aeEnabled, setAeEnabled] = useState(() =>
+    Boolean(settings?.moderation.autoEscalation?.enabled),
+  );
+  const [rules, setRules] = useState<AutoEscalationRule[]>(() =>
+    (settings?.moderation.autoEscalation?.rules || []).map((r) => ({ ...r })),
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshingBans, setRefreshingBans] = useState(false);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -74,8 +84,11 @@ export function ModerationPage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

@@ -1,5 +1,5 @@
 import { Hand, LogOut, Mail, MessageSquare, Save, Send } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
@@ -17,10 +17,13 @@ export function WelcomePage() {
   const { showToast } = useToast();
   const { settings, meta, initialLoading, setSettingsSlice, refreshOverview } = useDashboard();
 
-  const [form, setForm] = useState<WelcomeSettings | null>(null);
+  const [form, setForm] = useState<WelcomeSettings | null>(() =>
+    settings ? { ...settings.welcome } : null,
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testingTarget, setTestingTarget] = useState<string | null>(null);
+  const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -29,8 +32,11 @@ export function WelcomePage() {
   }, [settings]);
 
   useEffect(() => {
-    syncFromSettings();
-  }, [syncFromSettings]);
+    if (settings && syncedSettingsRef.current !== settings) {
+      syncedSettingsRef.current = settings;
+      syncFromSettings();
+    }
+  }, [settings, syncFromSettings]);
 
   const updateField = <K extends keyof WelcomeSettings>(key: K, value: WelcomeSettings[K]) => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
