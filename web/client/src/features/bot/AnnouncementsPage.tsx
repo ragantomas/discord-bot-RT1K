@@ -1,4 +1,4 @@
-import { Bot, Edit3, Eraser, Eye, Megaphone, RefreshCw, Send, X } from 'lucide-react';
+import { Bot, Edit3, Eraser, Eye, Megaphone, Send, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { announcementsApi } from '@/api/announcements';
@@ -57,14 +57,12 @@ export function AnnouncementsPage() {
     meta,
     announcementsHistory,
     setAnnouncementsHistory,
-    refreshAnnouncementsHistory,
     initialLoading,
   } = useDashboard();
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editing, setEditing] = useState<AnnouncementHistoryEntry | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [failedImageUrls, setFailedImageUrls] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -161,15 +159,6 @@ export function AnnouncementsPage() {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleRefreshHistory = async () => {
-    setRefreshing(true);
-    try {
-      await refreshAnnouncementsHistory();
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -471,15 +460,6 @@ export function AnnouncementsPage() {
       <div className="card p-6 space-y-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-white">{t('announcements.historyTitle')}</h3>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={refreshing}
-            onClick={() => void handleRefreshHistory()}
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            {t('common.refresh')}
-          </Button>
         </div>
 
         {announcementsHistory.length === 0 ? (

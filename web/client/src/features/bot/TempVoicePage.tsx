@@ -3,7 +3,6 @@ import {
   Lock,
   Mic,
   Plus,
-  RefreshCw,
   Save,
   Trash2,
   Unlock,
@@ -54,7 +53,6 @@ export function TempVoicePage() {
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [refreshingRooms, setRefreshingRooms] = useState(false);
   const [renamingRoom, setRenamingRoom] = useState<TempVoiceRoom | null>(null);
   const syncedSettingsRef = useRef(settings);
 
@@ -396,22 +394,6 @@ export function TempVoicePage() {
               {t('tempvoice.activeRooms')} ({tempRooms.length})
             </span>
           </h3>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={refreshingRooms}
-            onClick={async () => {
-              setRefreshingRooms(true);
-              try {
-                await refreshTempRooms();
-              } finally {
-                setRefreshingRooms(false);
-              }
-            }}
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            {t('common.refresh')}
-          </Button>
         </div>
 
         {tempRooms.length === 0 ? (

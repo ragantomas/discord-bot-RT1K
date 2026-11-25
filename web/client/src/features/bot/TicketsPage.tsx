@@ -1,4 +1,4 @@
-import { RefreshCw, Save, Send, Shield, Ticket, XCircle } from 'lucide-react';
+import { Save, Send, Shield, Ticket, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ticketsApi } from '@/api/tickets';
@@ -53,7 +53,6 @@ export function TicketsPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingPanel, setSendingPanel] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const syncedSettingsRef = useRef(settings);
 
   const syncFromSettings = useCallback(() => {
@@ -318,23 +317,6 @@ export function TicketsPage() {
           <h3 className="text-base font-semibold text-white">
             {t('tickets.openTickets')} ({openTickets.length})
           </h3>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={refreshing}
-            onClick={async () => {
-              setRefreshing(true);
-              try {
-                await refreshOpenTickets();
-                showToast(t('tickets.refreshedToast'));
-              } finally {
-                setRefreshing(false);
-              }
-            }}
-            icon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            {t('common.refresh')}
-          </Button>
         </div>
 
         {openTickets.length === 0 ? (

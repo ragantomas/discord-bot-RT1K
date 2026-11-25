@@ -1,4 +1,4 @@
-import { RefreshCw, ScrollText, Search, Trash2 } from 'lucide-react';
+import { ScrollText, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { logsApi } from '@/api/logs';
@@ -17,11 +17,10 @@ export function ActivityLogPage() {
   const lang = getAppLanguage();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-  const { logs, setLogs, refreshLogs, initialLoading } = useDashboard();
+  const { logs, setLogs, initialLoading } = useDashboard();
 
   const [category, setCategory] = useState<string>('all');
   const [search, setSearch] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -38,15 +37,6 @@ export function ActivityLogPage() {
       );
     });
   }, [logs, category, search]);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await refreshLogs();
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   const handleClear = async () => {
     const ok = await confirm({
@@ -87,15 +77,6 @@ export function ActivityLogPage() {
                 className="input-field pl-9"
               />
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={refreshing}
-              onClick={() => void handleRefresh()}
-              icon={<RefreshCw className="w-3.5 h-3.5" />}
-            >
-              {t('common.refresh')}
-            </Button>
             <Button
               size="sm"
               variant="danger"
