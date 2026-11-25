@@ -325,6 +325,8 @@
       "roleChanges": "Zmeny rolí",
       "messageDelete": "Zmazané správy",
       "messageEdit": "Upravené správy",
+      "nicknameChanges": "Zmeny prezývok",
+      "serverChanges": "Kanály a roly",
       "voiceActivity": "Voice aktivita"
     },
     "testSent": "Testovacia Admin Log správa bola odoslaná.",

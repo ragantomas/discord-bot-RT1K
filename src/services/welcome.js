@@ -1,7 +1,7 @@
 const { EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { getWelcomeSettings } = require('../storage/settingsStore');
 const { pickSlovakPlural } = require('./botStatus');
-const { addActivityLog } = require('./activityLog');
+const { addActivityLog, addThrottledErrorLog } = require('./activityLog');
 
 function hexToInt(hex, fallback = 0x5865F2) {
     if (typeof hex !== 'string') return fallback;
@@ -103,15 +103,29 @@ async function handleMemberWelcome(member) {
 
     if (config.channelEnabled && config.channelId) {
         const channel = await resolveTextChannelWithPerms(member.guild, config.channelId);
-        const embed = channel ? buildChannelWelcomeEmbed(config, member) : null;
-        if (channel && embed) {
-            const sent = await channel.send({ embeds: [embed] }).catch(() => null);
-            if (sent) {
-                addActivityLog({
-                    level: 'info',
-                    category: 'welcome',
-                    message: `Sent welcome message to #${channel.name} for ${member.user.tag}.`
-                });
+        if (!channel) {
+            addThrottledErrorLog({
+                key: `welcome:channel:${config.channelId}`,
+                category: 'welcome',
+                message: `Cannot send welcome message to channel ${config.channelId}: missing channel or permissions.`
+            });
+        } else {
+            const embed = buildChannelWelcomeEmbed(config, member);
+            if (embed) {
+                try {
+                    await channel.send({ embeds: [embed] });
+                    addActivityLog({
+                        level: 'info',
+                        category: 'welcome',
+                        message: `Sent welcome message to #${channel.name} for ${member.user.tag}.`
+                    });
+                } catch (err) {
+                    addThrottledErrorLog({
+                        key: `welcome:channel:${config.channelId}`,
+                        category: 'welcome',
+                        message: `Failed to send welcome message to #${channel.name}: ${err?.message || err}`
+                    });
+                }
             }
         }
     }
@@ -138,14 +152,29 @@ async function handleMemberGoodbye(member) {
     if (config.ignoreBots !== false && member.user.bot) return;
 
     const channel = await resolveTextChannelWithPerms(member.guild, config.goodbyeChannelId);
-    const embed = channel ? buildGoodbyeEmbed(config, member) : null;
-    if (channel && embed) {
-        const sent = await channel.send({ embeds: [embed] }).catch(() => null);
-        if (sent) {
+    if (!channel) {
+        addThrottledErrorLog({
+            key: `welcome:goodbye:${config.goodbyeChannelId}`,
+            category: 'welcome',
+            message: `Cannot send goodbye message to channel ${config.goodbyeChannelId}: missing channel or permissions.`
+        });
+        return;
+    }
+
+    const embed = buildGoodbyeEmbed(config, member);
+    if (embed) {
+        try {
+            await channel.send({ embeds: [embed] });
             addActivityLog({
                 level: 'info',
                 category: 'welcome',
                 message: `Sent goodbye message to #${channel.name} (${member.user.tag}).`
+            });
+        } catch (err) {
+            addThrottledErrorLog({
+                key: `welcome:goodbye:${config.goodbyeChannelId}`,
+                category: 'welcome',
+                message: `Failed to send goodbye message to #${channel.name}: ${err?.message || err}`
             });
         }
     }

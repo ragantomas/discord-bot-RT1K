@@ -325,6 +325,8 @@
       "roleChanges": "Role changes",
       "messageDelete": "Deleted messages",
       "messageEdit": "Edited messages",
+      "nicknameChanges": "Nickname changes",
+      "serverChanges": "Channels & roles",
       "voiceActivity": "Voice activity"
     },
     "testSent": "Test Admin Log message sent.",

@@ -1,9 +1,10 @@
 const { Events } = require('discord.js');
 const { loadSettings, updateSettings } = require('../storage/settingsStore');
+const { logRoleDelete } = require('../services/adminLog');
 
 module.exports = {
     name: Events.GuildRoleDelete,
-    execute(role) {
+    async execute(role) {
         if (!role?.guild?.id) return;
 
         const current = loadSettings();
@@ -28,9 +29,8 @@ module.exports = {
             hasTempVoiceLockRole ||
             hasTicketSupportRole;
 
-        if (!needsUpdate) return;
-
-        updateSettings(settings => {
+        if (needsUpdate) {
+            updateSettings(settings => {
             if (hasDashboardRole) {
                 settings.dashboardRoleIds = (settings.dashboardRoleIds || []).filter(id => id !== role.id);
                 console.warn(`Rola pre prístup do dashboardu (${role.id}) bola zmazaná.`);
@@ -70,6 +70,9 @@ module.exports = {
                 settings.tickets.supportRoleIds = (settings.tickets.supportRoleIds || []).filter(id => id !== role.id);
                 console.warn(`Support rola pre tickety (${role.id}) bola zmazaná.`);
             }
-        });
+            });
+        }
+
+        await logRoleDelete(role).catch(console.error);
     }
 };

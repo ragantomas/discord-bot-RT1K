@@ -4,8 +4,10 @@ import {
   Edit3,
   Lock,
   Mic,
+  PenLine,
   Save,
   Send,
+  Server,
   ShieldCheck,
   Tag,
   Trash2,
@@ -35,6 +37,8 @@ const DEFAULT_EVENTS: AdminLogEvents = {
   roleChanges: true,
   messageDelete: true,
   messageEdit: true,
+  nicknameChanges: true,
+  serverChanges: true,
   voiceActivity: false,
 };
 
@@ -115,6 +119,8 @@ export function AdminLogPage() {
     { key: 'roleChanges', labelKey: 'adminlog.ev.roleChanges', icon: <Tag className="w-4 h-4 text-sky-400 shrink-0" /> },
     { key: 'messageDelete', labelKey: 'adminlog.ev.messageDelete', icon: <Trash2 className="w-4 h-4 text-red-400 shrink-0" /> },
     { key: 'messageEdit', labelKey: 'adminlog.ev.messageEdit', icon: <Edit3 className="w-4 h-4 text-amber-300 shrink-0" /> },
+    { key: 'nicknameChanges', labelKey: 'adminlog.ev.nicknameChanges', icon: <PenLine className="w-4 h-4 text-cyan-400 shrink-0" /> },
+    { key: 'serverChanges', labelKey: 'adminlog.ev.serverChanges', icon: <Server className="w-4 h-4 text-violet-400 shrink-0" /> },
     { key: 'voiceActivity', labelKey: 'adminlog.ev.voiceActivity', icon: <Mic className="w-4 h-4 text-brand shrink-0" /> },
   ];
 

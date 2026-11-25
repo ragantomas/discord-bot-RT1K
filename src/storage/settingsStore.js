@@ -102,6 +102,8 @@ function getDefaultSettings() {
                 roleChanges: true,
                 messageDelete: true,
                 messageEdit: true,
+                nicknameChanges: true,
+                serverChanges: true,
                 voiceActivity: false
             }
         },
@@ -367,6 +369,8 @@ function normalizeSettings(raw) {
                     roleChanges: typeof alEvents.roleChanges === 'boolean' ? alEvents.roleChanges : true,
                     messageDelete: typeof alEvents.messageDelete === 'boolean' ? alEvents.messageDelete : true,
                     messageEdit: typeof alEvents.messageEdit === 'boolean' ? alEvents.messageEdit : true,
+                    nicknameChanges: typeof alEvents.nicknameChanges === 'boolean' ? alEvents.nicknameChanges : true,
+                    serverChanges: typeof alEvents.serverChanges === 'boolean' ? alEvents.serverChanges : true,
                     voiceActivity: typeof alEvents.voiceActivity === 'boolean' ? alEvents.voiceActivity : false
                 }
             };

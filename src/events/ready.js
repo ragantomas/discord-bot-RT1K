@@ -4,6 +4,7 @@ const { registerCommands } = require('../handlers/commandHandler');
 const { startScheduledTasks } = require('../tasks');
 const { cleanupTempRoomsOnStartup } = require('../services/tempVoice');
 const { seedActiveVoiceSessions } = require('../services/playerActivity');
+const { seedInvites } = require('../services/inviteTracker');
 
 module.exports = {
     name: Events.ClientReady,
@@ -12,6 +13,7 @@ module.exports = {
         console.log(`Bot je online ako ${client.user.tag}!`);
         updateBotStatus(client, { force: true });
         seedActiveVoiceSessions(client);
+        seedInvites(client).catch(console.error);
 
         await registerCommands(client);
         await cleanupTempRoomsOnStartup(client);

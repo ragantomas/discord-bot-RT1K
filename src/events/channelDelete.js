@@ -7,10 +7,12 @@ const {
     getOpenTicket,
     deleteOpenTicket
 } = require('../storage/settingsStore');
+const { logChannelDelete } = require('../services/adminLog');
 
 module.exports = {
     name: Events.ChannelDelete,
-    execute(channel) {
+    async execute(channel) {
+        const wasManaged = Boolean(getTempRoom(channel.id) || getOpenTicket(channel.id));
         if (getTempRoom(channel.id)) {
             deleteTempRoom(channel.id);
         }
@@ -41,9 +43,8 @@ module.exports = {
             current.tickets?.logChannelId === channel.id ||
             current.tickets?.panelChannelId === channel.id;
 
-        if (!needsUpdate) return;
-
-        updateSettings(settings => {
+        if (needsUpdate) {
+            updateSettings(settings => {
             if (settings.allowedChannelId === channel.id) {
                 settings.allowedChannelId = null;
                 console.warn('Povolený kanál pre príkazy bota bol zmazaný a resetovaný na všetky kanály.');
@@ -121,6 +122,11 @@ module.exports = {
             if (Array.isArray(settings.announcementsHistory) && settings.announcementsHistory.some(item => item.channelId === channel.id)) {
                 settings.announcementsHistory = settings.announcementsHistory.filter(item => item.channelId !== channel.id);
             }
-        });
+            });
+        }
+
+        if (!wasManaged) {
+            await logChannelDelete(channel).catch(console.error);
+        }
     }
 };

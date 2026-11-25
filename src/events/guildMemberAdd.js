@@ -4,11 +4,14 @@ const { logMemberJoin } = require('../services/adminLog');
 const { handleMemberWelcome } = require('../services/welcome');
 const { updateBotStatus } = require('../services/botStatus');
 const { recordMemberJoin } = require('../services/playerActivity');
+const { resolveMemberJoinInvite } = require('../services/inviteTracker');
 
 module.exports = {
     name: Events.GuildMemberAdd,
     async execute(member) {
         recordMemberJoin(member);
+
+        const inviteInfo = await resolveMemberJoinInvite(member).catch(() => null);
 
         try {
             await assignJoinRole(member);
@@ -23,7 +26,7 @@ module.exports = {
         }
 
         try {
-            await logMemberJoin(member);
+            await logMemberJoin(member, inviteInfo);
         } catch (err) {
             console.error('Chyba pri admin logu príchodu člena:', err);
         }

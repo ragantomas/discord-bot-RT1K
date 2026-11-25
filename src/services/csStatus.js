@@ -9,6 +9,7 @@ const {
     getCsStatusSettings,
     updateCsStatusSettings
 } = require('../storage/settingsStore');
+const { addThrottledErrorLog } = require('./activityLog');
 
 const REQUEST_TIMEOUT_MS = 8000;
 
@@ -278,15 +279,24 @@ async function updateGuildStatusMessage(client, { snapshot = null, forceNewMessa
     const payload = buildCsStatusMessagePayload(activeSnapshot);
 
     let message = null;
-    if (!forceNewMessage && config.messageId) {
-        const existingMessage = await channel.messages.fetch(config.messageId).catch(() => null);
-        if (existingMessage) {
-            message = await existingMessage.edit(payload);
+    try {
+        if (!forceNewMessage && config.messageId) {
+            const existingMessage = await channel.messages.fetch(config.messageId).catch(() => null);
+            if (existingMessage) {
+                message = await existingMessage.edit(payload);
+            }
         }
-    }
 
-    if (!message) {
-        message = await channel.send(payload);
+        if (!message) {
+            message = await channel.send(payload);
+        }
+    } catch (err) {
+        addThrottledErrorLog({
+            key: `csstatus:send:${config.channelId}`,
+            category: 'system',
+            message: `CS2 Status failed to update #${channel.name || config.channelId}: ${err?.message || err}`
+        });
+        throw err;
     }
 
     updateCsStatusSettings({

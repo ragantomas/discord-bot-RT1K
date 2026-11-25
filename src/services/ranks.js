@@ -3,6 +3,7 @@ const { fetchLeetifyProfileDetailed } = require('./leetify');
 const { loadUsers, saveUsers, appendEloHistory } = require('../storage/usersStore');
 const { getRankSettings } = require('../storage/settingsStore');
 const { notifyRankChange } = require('./rankFeed');
+const { addThrottledErrorLog } = require('./activityLog');
 
 let isBulkUpdating = false;
 
@@ -135,6 +136,12 @@ async function updateMemberRank(member, steam64Id, users = null, options = {}) {
         };
     } catch (err) {
         console.error(err);
+        addThrottledErrorLog({
+            key: `ranks:update:${member.guild.id}`,
+            category: 'elo',
+            message: `Failed to update CS2 rank for ${member.displayName}: ${err?.message || err}`,
+            targetUserId: member.id
+        });
         return {
             error: options.lang === 'en'
                 ? 'Error communicating with Leetify or Discord.'

@@ -1,6 +1,6 @@
 const { PermissionFlagsBits } = require('discord.js');
 const { getJoinRolesSettings } = require('../storage/settingsStore');
-const { addActivityLog } = require('./activityLog');
+const { addActivityLog, addThrottledErrorLog } = require('./activityLog');
 
 function validateAssignableRole(guild, role) {
     if (!role) {
@@ -61,6 +61,11 @@ async function assignJoinRole(member) {
 
         if (!role.editable) {
             console.warn(`Bot nemôže priradiť join rolu ${role.name} (${role.id}) na serveri ${member.guild.id}.`);
+            addThrottledErrorLog({
+                key: `joinroles:editable:${role.id}`,
+                category: 'joinroles',
+                message: `Cannot assign join role @${role.name}: bot role is positioned below it.`
+            });
             continue;
         }
 
@@ -69,10 +74,20 @@ async function assignJoinRole(member) {
 
     if (rolesToAdd.length === 0) return true;
 
-    await member.roles.add(
-        rolesToAdd,
-        member.user.bot ? 'Automatické join role pre bota' : 'Automatické join role pre člena'
-    );
+    try {
+        await member.roles.add(
+            rolesToAdd,
+            member.user.bot ? 'Automatické join role pre bota' : 'Automatické join role pre člena'
+        );
+    } catch (err) {
+        addThrottledErrorLog({
+            key: `joinroles:add:${member.guild.id}`,
+            category: 'joinroles',
+            message: `Failed to assign join roles to ${member.user.tag}: ${err?.message || err}`,
+            targetUserId: member.id
+        });
+        throw err;
+    }
 
     addActivityLog({
         level: 'info',

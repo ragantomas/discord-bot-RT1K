@@ -20,7 +20,8 @@ const {
     deleteOpenTicket,
     getAllOpenTickets
 } = require('../storage/settingsStore');
-const { addActivityLog } = require('./activityLog');
+const { addActivityLog, addThrottledErrorLog } = require('./activityLog');
+const { suppressNextAdminLogEvent } = require('./adminLog');
 
 function hexToInt(hex, fallback = 0x5865F2) {
     if (typeof hex !== 'string') return fallback;
@@ -205,7 +206,14 @@ async function closeTicketChannel(client, channelId, closedByLabel, interaction 
                     )
                     .setTimestamp();
 
-                await logChannel.send({ embeds: [summaryEmbed], files: [attachment] }).catch(() => null);
+                await logChannel.send({ embeds: [summaryEmbed], files: [attachment] }).catch(err => {
+                    addThrottledErrorLog({
+                        key: `tickets:transcript:${logChannel.id}`,
+                        category: 'tickets',
+                        message: `Failed to send ticket #${numStr} transcript to #${logChannel.name || logChannel.id}: ${err?.message || err}`
+                    });
+                    return null;
+                });
             }
         }
     }
@@ -225,10 +233,12 @@ async function closeTicketChannel(client, channelId, closedByLabel, interaction 
         }
         if (channel) {
             setTimeout(() => {
+                suppressNextAdminLogEvent(guild.id, 'channelDelete', channel.id);
                 channel.delete(`Ticket #${numStr} zatvorený (${closedByLabel})`).catch(() => null);
             }, 2000);
         }
     } else if (channel) {
+        suppressNextAdminLogEvent(guild.id, 'channelDelete', channel.id);
         await channel.delete(`Ticket #${numStr} zatvorený (${closedByLabel})`).catch(() => null);
     }
 
@@ -372,8 +382,15 @@ async function handleTicketInteraction(interaction) {
                 parent: parentId,
                 permissionOverwrites
             });
+            suppressNextAdminLogEvent(guild.id, 'channelCreate', createdChannel.id);
         } catch (err) {
             console.error('Chyba pri vytváraní ticket kanála:', err);
+            addThrottledErrorLog({
+                key: `tickets:create:${guild.id}`,
+                category: 'tickets',
+                message: `Failed to create ticket channel: ${err?.message || err}`,
+                targetUserId: interaction.user.id
+            });
             return interaction.editReply('Nepodarilo sa vytvoriť súkromný ticket kanál (skontroluj oprávnenie Manage Channels).');
         }
 
@@ -403,7 +420,14 @@ async function handleTicketInteraction(interaction) {
             content: mentionParts.join(' '),
             embeds: [introEmbed],
             components: [buildTicketControlRow(null)]
-        }).catch(() => null);
+        }).catch(err => {
+            addThrottledErrorLog({
+                key: `tickets:intro:${createdChannel.id}`,
+                category: 'tickets',
+                message: `Failed to send ticket #${numStr} intro message: ${err?.message || err}`
+            });
+            return null;
+        });
 
         addActivityLog({
             level: 'info',

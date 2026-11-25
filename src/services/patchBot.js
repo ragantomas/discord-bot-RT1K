@@ -10,7 +10,7 @@ const {
     formatSteamContentsToMarkdown,
     truncateForEmbed
 } = require('./steamNews');
-const { addActivityLog } = require('./activityLog');
+const { addActivityLog, addThrottledErrorLog } = require('./activityLog');
 
 const MODE_LABELS = {
     all: 'Všetky oficiálne CS2 oznámenia',
@@ -119,6 +119,11 @@ async function checkAndPostUpdates(client) {
                 sentAny = true;
             } catch (err) {
                 console.error(`Chyba pri posielaní CS2 updatu do kanála ${channel.id}:`, err);
+                addThrottledErrorLog({
+                    key: `patchbot:send:${channel.id}`,
+                    category: 'patchbot',
+                    message: `PatchBot failed to post to #${channel.name || channel.id}: ${err?.message || err}`
+                });
             }
         }
         if (sentAny) {

@@ -4,6 +4,7 @@ const { ACTIVITY_LOG_FILE } = require('../config');
 const MAX_LOGS = 500;
 let nextId = 1;
 let persistTimer = null;
+const errorCooldowns = new Map();
 
 function loadPersistedLogs() {
     try {
@@ -83,6 +84,30 @@ function addActivityLog({ level = 'info', category = 'system', message = '', act
     return entry;
 }
 
+function addThrottledErrorLog({
+    key,
+    category = 'system',
+    message = '',
+    cooldownMs = 5 * 60 * 1000,
+    actor = null,
+    targetUserId = null
+} = {}) {
+    if (!message) return null;
+    const now = Date.now();
+    const cacheKey = String(key || `${category}:${message.slice(0, 80)}`);
+    const until = errorCooldowns.get(cacheKey) || 0;
+    if (now < until) return null;
+
+    errorCooldowns.set(cacheKey, now + cooldownMs);
+    if (errorCooldowns.size > 200) {
+        for (const [k, exp] of errorCooldowns.entries()) {
+            if (exp <= now) errorCooldowns.delete(k);
+        }
+    }
+
+    return addActivityLog({ level: 'error', category, message, actor, targetUserId });
+}
+
 function getActivityLogs({ category = 'all', limit = MAX_LOGS } = {}) {
     const filtered = category && category !== 'all'
         ? logs.filter(item => item.category === category)
@@ -98,6 +123,7 @@ function clearActivityLogs() {
 module.exports = {
     MAX_LOGS,
     addActivityLog,
+    addThrottledErrorLog,
     getActivityLogs,
     clearActivityLogs,
     persistNow

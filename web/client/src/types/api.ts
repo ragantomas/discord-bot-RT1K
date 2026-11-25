@@ -394,6 +394,8 @@ export interface AdminLogEvents {
   roleChanges: boolean;
   messageDelete: boolean;
   messageEdit: boolean;
+  nicknameChanges: boolean;
+  serverChanges: boolean;
   voiceActivity: boolean;
 }
 

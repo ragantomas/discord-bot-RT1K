@@ -7,7 +7,8 @@ const {
     getAllTempRooms
 } = require('../storage/settingsStore');
 const { buildControlPanel, refreshControlPanel } = require('./tempVoicePanel');
-const { addActivityLog } = require('./activityLog');
+const { addActivityLog, addThrottledErrorLog } = require('./activityLog');
+const { suppressNextAdminLogEvent } = require('./adminLog');
 const { updateBotStatus } = require('./botStatus');
 
 function formatRoomName(template, member) {
@@ -94,18 +95,33 @@ async function createTempRoom(member, guildConfig) {
         }
     ];
 
-    const newChannel = await guild.channels.create({
-        name: roomName,
-        type: ChannelType.GuildVoice,
-        parent: parentId || undefined,
-        bitrate,
-        userLimit,
-        permissionOverwrites
-    });
+    let newChannel;
+    try {
+        newChannel = await guild.channels.create({
+            name: roomName,
+            type: ChannelType.GuildVoice,
+            parent: parentId || undefined,
+            bitrate,
+            userLimit,
+            permissionOverwrites
+        });
+    } catch (err) {
+        console.error('Chyba pri vytváraní TempVoice miestnosti:', err);
+        addThrottledErrorLog({
+            key: `tempvoice:create:${guild.id}`,
+            category: 'tempvoice',
+            message: `Failed to create TempVoice room for ${member.displayName}: ${err?.message || err}`,
+            targetUserId: member.id
+        });
+        return null;
+    }
+
+    suppressNextAdminLogEvent(guild.id, 'channelCreate', newChannel.id);
 
     try {
         await member.voice.setChannel(newChannel);
     } catch (err) {
+        suppressNextAdminLogEvent(guild.id, 'channelDelete', newChannel.id);
         await newChannel.delete('Nepodarilo sa presunúť používateľa do dočasnej miestnosti').catch(() => null);
         return null;
     }
@@ -129,6 +145,11 @@ async function createTempRoom(member, guildConfig) {
 
     const panelMessage = await newChannel.send(buildControlPanel(newChannel, room)).catch(err => {
         console.error('Chyba pri odosielaní ovládacieho panelu TempVoice:', err);
+        addThrottledErrorLog({
+            key: `tempvoice:panel:${guild.id}`,
+            category: 'tempvoice',
+            message: `Failed to send TempVoice control panel to #${newChannel.name}: ${err?.message || err}`
+        });
         return null;
     });
 
@@ -149,6 +170,7 @@ async function handleRoomLeave(channel, leavingMember) {
     if (humanMembers.size === 0) {
         deleteTempRoom(channel.id);
         updateBotStatus(channel.client);
+        suppressNextAdminLogEvent(channel.guild.id, 'channelDelete', channel.id);
         await channel.delete('Dočasná miestnosť je prázdna').catch(() => null);
         return;
     }
@@ -185,6 +207,7 @@ async function cleanupTempRoomsOnStartup(client) {
         const humanMembers = channel.members.filter(m => !m.user.bot);
         if (humanMembers.size === 0) {
             deleteTempRoom(room.channelId);
+            suppressNextAdminLogEvent(guild.id, 'channelDelete', channel.id);
             await channel.delete('Čistenie prázdnej TempVoice miestnosti po reštarte').catch(() => null);
         } else if (!humanMembers.has(room.ownerId)) {
             const nextOwner = humanMembers.first();
@@ -247,6 +270,7 @@ async function closeTempRoom(client, channelId) {
         : null;
 
     if (channel) {
+        suppressNextAdminLogEvent(guild.id, 'channelDelete', channel.id);
         await channel.delete('Zatvorené cez webový dashboard').catch(() => null);
     }
 

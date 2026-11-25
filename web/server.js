@@ -2089,6 +2089,8 @@ function startWebServer(client) {
                 roleChanges: Boolean(events.roleChanges),
                 messageDelete: Boolean(events.messageDelete),
                 messageEdit: Boolean(events.messageEdit),
+                nicknameChanges: Boolean(events.nicknameChanges),
+                serverChanges: Boolean(events.serverChanges),
                 voiceActivity: Boolean(events.voiceActivity)
             }
         });
