@@ -445,6 +445,11 @@
       "1d": "1 day",
       "7d": "7 days"
     },
+    "units": {
+      "minutes": "Min",
+      "hours": "Hours",
+      "days": "Days"
+    },
     "banDelete": {
       "none": "Don't delete",
       "1h": "Last hour",

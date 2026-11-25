@@ -5,7 +5,7 @@ import { moderationApi } from '@/api/moderation';
 import { Button } from '@/components/ui/Button';
 import { SkeletonCard } from '@/components/ui/Feedback';
 import { Modal } from '@/components/ui/Modal';
-import { BAN_DELETE_PRESETS, TIMEOUT_PRESETS } from '@/config/constants';
+import { BAN_DELETE_PRESETS } from '@/config/constants';
 import { useConfirm } from '@/context/ConfirmContext';
 import { useDashboard } from '@/context/DashboardContext';
 import { useToast } from '@/context/ToastContext';
@@ -19,6 +19,20 @@ interface PlayerModModalProps {
   onOpenDetail: (userId: string) => void;
 }
 
+type TimeoutUnit = 'm' | 'h' | 'd';
+
+const UNIT_MULTIPLIER: Record<TimeoutUnit, number> = {
+  m: 1,
+  h: 60,
+  d: 1440,
+};
+
+const UNIT_MAX: Record<TimeoutUnit, number> = {
+  m: 40320,
+  h: 672,
+  d: 28,
+};
+
 export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModalProps) {
   const { t } = useTranslation();
   const lang = getAppLanguage();
@@ -29,7 +43,8 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
   const [warnings, setWarnings] = useState<WarningItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [warnReason, setWarnReason] = useState('');
-  const [timeoutMinutes, setTimeoutMinutes] = useState(60);
+  const [timeoutAmount, setTimeoutAmount] = useState(10);
+  const [timeoutUnit, setTimeoutUnit] = useState<TimeoutUnit>('m');
   const [timeoutReason, setTimeoutReason] = useState('');
   const [actionReason, setActionReason] = useState('');
   const [banDeleteSec, setBanDeleteSec] = useState(0);
@@ -54,7 +69,8 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
       setWarnReason('');
       setTimeoutReason('');
       setActionReason('');
-      setTimeoutMinutes(60);
+      setTimeoutAmount(10);
+      setTimeoutUnit('m');
       setBanDeleteSec(0);
       void loadWarnings(playerId);
     } else {
@@ -206,7 +222,7 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
     <Modal
       open={Boolean(player)}
       onClose={onClose}
-      maxWidthClass="max-w-2xl"
+      maxWidthClass="max-w-3xl"
       title={
         player ? (
           <div className="flex items-center gap-3 min-w-0">
@@ -314,13 +330,14 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
                 value={warnReason}
                 onChange={(e) => setWarnReason(e.target.value)}
                 placeholder={t('moderation.modal.warnReasonPlaceholder')}
-                className="input-field"
+                className="input-field flex-1 min-w-0"
               />
               <Button
                 variant="primary"
                 loading={busy}
                 disabled={!warnReason.trim()}
                 onClick={() => void handleWarn()}
+                className="whitespace-nowrap shrink-0 h-[42px]"
               >
                 {t('moderation.modal.issueWarn')}
               </Button>
@@ -335,45 +352,63 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
                 <span>{t('moderation.modal.timeoutHeading')}</span>
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
-                {TIMEOUT_PRESETS.map((p) => (
-                  <button
-                    key={p.minutes}
-                    type="button"
-                    onClick={() => setTimeoutMinutes(p.minutes)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
-                      timeoutMinutes === p.minutes
-                        ? 'bg-brand text-white border-brand'
-                        : 'bg-bg-base text-slate-300 border-slate-700 hover:bg-bg-hover'
-                    }`}
-                  >
-                    {t(p.labelKey)}
-                  </button>
-                ))}
-              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="number"
+                    min={1}
+                    max={UNIT_MAX[timeoutUnit]}
+                    value={timeoutAmount}
+                    onChange={(e) => setTimeoutAmount(Math.max(1, Number(e.target.value) || 1))}
+                    className="input-field w-24"
+                  />
+                  <div className="inline-flex items-center p-1 rounded-xl bg-bg-base border border-slate-700 h-[42px] shrink-0">
+                    {(
+                      [
+                        { id: 'm', label: t('moderation.units.minutes') },
+                        { id: 'h', label: t('moderation.units.hours') },
+                        { id: 'd', label: t('moderation.units.days') },
+                      ] as const
+                    ).map((u) => {
+                      const active = timeoutUnit === u.id;
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            setTimeoutUnit(u.id);
+                            setTimeoutAmount((prev) => Math.min(Math.max(1, prev), UNIT_MAX[u.id]));
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                            active
+                              ? 'bg-brand text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {u.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={40320}
-                  value={timeoutMinutes}
-                  onChange={(e) => setTimeoutMinutes(Number(e.target.value))}
-                  className="input-field"
-                />
                 <input
                   type="text"
                   value={timeoutReason}
                   onChange={(e) => setTimeoutReason(e.target.value)}
                   placeholder={t('moderation.modal.timeoutReasonPlaceholder')}
-                  className="input-field sm:col-span-2"
+                  className="input-field flex-1 min-w-0"
                 />
               </div>
 
               <Button
                 variant="secondary"
                 loading={busy}
-                onClick={() => void handleTimeout(timeoutMinutes)}
+                onClick={() =>
+                  void handleTimeout(
+                    Math.min(40320, Math.max(1, Math.round(timeoutAmount * UNIT_MULTIPLIER[timeoutUnit]))),
+                  )
+                }
               >
                 {t('moderation.modal.timeoutApply')}
               </Button>

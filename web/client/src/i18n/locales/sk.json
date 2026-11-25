@@ -445,6 +445,11 @@
       "1d": "1 deň",
       "7d": "7 dní"
     },
+    "units": {
+      "minutes": "Min",
+      "hours": "Hod",
+      "days": "Dni"
+    },
     "banDelete": {
       "none": "Nemazať",
       "1h": "Posledná hodina",
