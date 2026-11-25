@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -718,8 +719,10 @@ function startWebServer(client) {
     app.use(express.json({ limit: '1mb' }));
     app.use(cookieParser(sessionSecret));
 
+    const distDir = path.join(__dirname, 'dist');
     const publicDir = path.join(__dirname, 'public');
-    app.use(express.static(publicDir));
+    const staticDir = fs.existsSync(path.join(distDir, 'index.html')) ? distDir : publicDir;
+    app.use(express.static(staticDir));
 
     // --- Discord OAuth2 ---
     app.get('/auth/discord', (req, res) => {
@@ -2744,7 +2747,7 @@ function startWebServer(client) {
         if (req.method !== 'GET' || req.path.startsWith('/api/') || req.path.startsWith('/auth/')) {
             return next();
         }
-        return res.sendFile(path.join(publicDir, 'index.html'));
+        return res.sendFile(path.join(staticDir, 'index.html'));
     });
 
     const port = Number(process.env.PORT || process.env.SERVER_PORT || 15655);

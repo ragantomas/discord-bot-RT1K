@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "web:dev": "npm --prefix web/client run dev",
+    "web:build": "npm --prefix web/client run build",
+    "web:typecheck": "npm --prefix web/client run typecheck"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
