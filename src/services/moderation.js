@@ -40,6 +40,11 @@ function canModerateTarget(guild, actorMember, targetMember, lang = 'sk') {
     }
 
     const me = guild.members.me;
+    const botId = me?.id || guild.client?.user?.id;
+    if (botId && targetMember.id === botId) {
+        return { ok: false, error: pickLang(lang, 'Cannot moderate the bot.', 'Nie je možné moderovať bota.') };
+    }
+
     if (me && me.roles.highest.position <= targetMember.roles.highest.position) {
         return { ok: false, error: pickLang(lang, 'Bot role is too low to moderate this user.', 'Rola bota je príliš nízko na moderovanie tohto používateľa.') };
     }
@@ -431,6 +436,10 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
 
     if (userId === OWNER_ID || userId === guild.ownerId) {
         return { ok: false, error: pickLang(lang, 'Cannot ban the server owner.', 'Nie je možné zabanovať majiteľa servera.') };
+    }
+    const botId = guild.members.me?.id || guild.client?.user?.id;
+    if (botId && userId === botId) {
+        return { ok: false, error: pickLang(lang, 'Cannot ban the bot.', 'Nie je možné zabanovať bota.') };
     }
     if (actorMember && actorMember.id === userId) {
         return { ok: false, error: pickLang(lang, 'You cannot ban yourself.', 'Nemôžeš zabanovať sám seba.') };

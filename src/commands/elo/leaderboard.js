@@ -29,8 +29,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setTitle('🏆 CS2 Premier Leaderboard')
             .setColor(0xF5A623)
-            .setDescription(lines.join('\n'))
-            .setFooter({ text: 'Aktualizuje sa každú hodinu alebo cez /update' });
+            .setDescription(lines.join('\n'));
 
         return interaction.editReply({ embeds: [embed] });
     }
