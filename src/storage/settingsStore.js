@@ -100,6 +100,8 @@ function getDefaultSettings() {
                 warnings: true,
                 channelActions: true,
                 roleChanges: true,
+                messageDelete: true,
+                messageEdit: true,
                 voiceActivity: false
             }
         },
@@ -363,6 +365,8 @@ function normalizeSettings(raw) {
                     warnings: typeof alEvents.warnings === 'boolean' ? alEvents.warnings : legacyModLog,
                     channelActions: typeof alEvents.channelActions === 'boolean' ? alEvents.channelActions : legacyModLog,
                     roleChanges: typeof alEvents.roleChanges === 'boolean' ? alEvents.roleChanges : true,
+                    messageDelete: typeof alEvents.messageDelete === 'boolean' ? alEvents.messageDelete : true,
+                    messageEdit: typeof alEvents.messageEdit === 'boolean' ? alEvents.messageEdit : true,
                     voiceActivity: typeof alEvents.voiceActivity === 'boolean' ? alEvents.voiceActivity : false
                 }
             };

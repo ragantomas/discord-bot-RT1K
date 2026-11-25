@@ -323,6 +323,8 @@
       "warnings": "Warnings",
       "channelActions": "Channel actions",
       "roleChanges": "Role changes",
+      "messageDelete": "Deleted messages",
+      "messageEdit": "Edited messages",
       "voiceActivity": "Voice activity"
     },
     "testSent": "Test Admin Log message sent.",

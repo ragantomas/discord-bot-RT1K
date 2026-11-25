@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { addActivityLog } = require('../../services/activityLog');
-const { logModerationAction } = require('../../services/adminLog');
+const { logModerationAction, suppressNextAdminLogEvent } = require('../../services/adminLog');
 
 module.exports = {
     adminOnly: true,
@@ -58,6 +58,7 @@ module.exports = {
             return interaction.editReply('Nenašli sa žiadne správy mladšie ako 14 dní na zmazanie.');
         }
 
+        suppressNextAdminLogEvent(interaction.guild.id, 'messageBulkDelete', channel.id);
         const deleted = await channel.bulkDelete(candidates, true);
         const deletedCount = deleted.size;
 

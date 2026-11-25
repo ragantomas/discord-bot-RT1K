@@ -2087,6 +2087,8 @@ function startWebServer(client) {
                 warnings: Boolean(events.warnings),
                 channelActions: Boolean(events.channelActions),
                 roleChanges: Boolean(events.roleChanges),
+                messageDelete: Boolean(events.messageDelete),
+                messageEdit: Boolean(events.messageEdit),
                 voiceActivity: Boolean(events.voiceActivity)
             }
         });

@@ -386,6 +386,158 @@ async function logModerationAction(guild, {
     return true;
 }
 
+function truncateText(text, max = 1000) {
+    const clean = String(text || '').trim();
+    if (!clean) return '*Bez textu*';
+    return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+async function logMessageDelete(message) {
+    if (!message?.guild) return;
+    if (message.author?.bot) return;
+    if (message.partial && !message.author && !message.content && !message.attachments?.size) return;
+
+    const ctx = await getAdminLogChannel(message.guild);
+    if (!ctx || !ctx.config.events?.messageDelete) return;
+    if (message.channelId === ctx.config.channelId) return;
+
+    let deletedByField = null;
+    if (message.author?.id && message.guild.members?.me?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
+        try {
+            const logs = await message.guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 5 });
+            const now = Date.now();
+            const audit = logs.entries.find(
+                entry =>
+                    entry.targetId === message.author.id &&
+                    entry.extra?.channel?.id === message.channelId &&
+                    (now - entry.createdTimestamp) < 8000
+            );
+            if (audit?.executor && audit.executor.id !== message.author.id) {
+                deletedByField = { name: 'Zmazal', value: `<@${audit.executor.id}>`, inline: true };
+            }
+        } catch {
+            // Ignore audit log fetch failure
+        }
+    }
+
+    const embed = new EmbedBuilder()
+        .setTitle('🗑️ Zmazaná správa')
+        .setColor(0xED4245)
+        .addFields(
+            {
+                name: 'Autor',
+                value: message.author ? `<@${message.author.id}> (${message.author.tag})` : '*Neznámy*',
+                inline: true
+            },
+            { name: 'Kanál', value: `<#${message.channelId}>`, inline: true }
+        )
+        .setFooter({
+            text: message.author ? `ID: ${message.author.id} • Správa: ${message.id}` : `Správa: ${message.id}`
+        })
+        .setTimestamp();
+
+    if (message.author && typeof message.author.displayAvatarURL === 'function') {
+        embed.setThumbnail(message.author.displayAvatarURL({ size: 128 }));
+    }
+    if (deletedByField) {
+        embed.addFields(deletedByField);
+    }
+    embed.addFields({ name: 'Obsah', value: truncateText(message.content, 1000), inline: false });
+
+    if (message.attachments?.size > 0) {
+        const attachmentLines = [...message.attachments.values()]
+            .slice(0, 5)
+            .map(att => `[${att.name || 'súbor'}](${att.url})`)
+            .join('\n');
+        embed.addFields({ name: 'Prílohy', value: truncateText(attachmentLines, 1000), inline: false });
+    }
+
+    await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+
+    const channelName = message.channel?.name || message.channelId;
+    const authorTag = message.author?.tag || 'unknown user';
+    addActivityLog({
+        level: 'info',
+        category: 'adminlog',
+        message: `Deleted message by ${authorTag} in #${channelName}.`,
+        targetUserId: message.author?.id || null
+    });
+}
+
+async function logMessageBulkDelete(messages, channel) {
+    if (!channel?.guild || !messages?.size) return;
+    if (consumeSuppressedAdminLogEvent(channel.guild.id, 'messageBulkDelete', channel.id)) return;
+
+    const ctx = await getAdminLogChannel(channel.guild);
+    if (!ctx || !ctx.config.events?.messageDelete) return;
+    if (channel.id === ctx.config.channelId) return;
+
+    const embed = new EmbedBuilder()
+        .setTitle('🧹 Hromadné zmazanie správ')
+        .setColor(0xED4245)
+        .addFields(
+            { name: 'Kanál', value: `<#${channel.id}>`, inline: true },
+            { name: 'Počet', value: String(messages.size), inline: true }
+        )
+        .setTimestamp();
+
+    await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+
+    addActivityLog({
+        level: 'info',
+        category: 'adminlog',
+        message: `Bulk deleted ${messages.size} messages in #${channel.name || channel.id}.`
+    });
+}
+
+async function logMessageUpdate(oldMessage, newMessage) {
+    if (!newMessage?.guild || newMessage.author?.bot) return;
+    if (oldMessage?.partial || typeof oldMessage?.content !== 'string' || typeof newMessage.content !== 'string') {
+        return;
+    }
+    if (oldMessage.content === newMessage.content) return;
+
+    const ctx = await getAdminLogChannel(newMessage.guild);
+    if (!ctx || !ctx.config.events?.messageEdit) return;
+    if (newMessage.channelId === ctx.config.channelId) return;
+
+    const embed = new EmbedBuilder()
+        .setTitle('✏️ Upravená správa')
+        .setColor(0xF5A623)
+        .addFields(
+            {
+                name: 'Autor',
+                value: newMessage.author ? `<@${newMessage.author.id}> (${newMessage.author.tag})` : '*Neznámy*',
+                inline: true
+            },
+            { name: 'Kanál', value: `<#${newMessage.channelId}>`, inline: true },
+            { name: 'Predtým', value: truncateText(oldMessage.content, 1000), inline: false },
+            { name: 'Potom', value: truncateText(newMessage.content, 1000), inline: false }
+        )
+        .setFooter({
+            text: newMessage.author ? `ID: ${newMessage.author.id} • Správa: ${newMessage.id}` : `Správa: ${newMessage.id}`
+        })
+        .setTimestamp();
+
+    if (newMessage.url) {
+        embed.setDescription(`[Prejsť na správu](${newMessage.url})`);
+    }
+    if (newMessage.author && typeof newMessage.author.displayAvatarURL === 'function') {
+        embed.setThumbnail(newMessage.author.displayAvatarURL({ size: 128 }));
+    }
+
+    await ctx.channel.send({ embeds: [embed] }).catch(() => null);
+
+    const channelName = newMessage.channel?.name || newMessage.channelId;
+    const authorTag = newMessage.author?.tag || 'unknown user';
+    addActivityLog({
+        level: 'info',
+        category: 'adminlog',
+        message: `Edited message by ${authorTag} in #${channelName}.`,
+        targetUserId: newMessage.author?.id || null
+    });
+}
+
 module.exports = {
     logMemberJoin,
     logMemberLeave,
@@ -393,6 +545,9 @@ module.exports = {
     logBanRemove,
     logMemberUpdate,
     logVoiceState,
+    logMessageDelete,
+    logMessageBulkDelete,
+    logMessageUpdate,
     sendTestAdminLogMessage,
     logModerationAction,
     suppressNextAdminLogEvent

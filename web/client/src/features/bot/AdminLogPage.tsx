@@ -1,12 +1,14 @@
 import {
   AlertTriangle,
   Ban,
+  Edit3,
   Lock,
   Mic,
   Save,
   Send,
   ShieldCheck,
   Tag,
+  Trash2,
   UserMinus,
   UserPlus,
   VolumeX,
@@ -31,6 +33,8 @@ const DEFAULT_EVENTS: AdminLogEvents = {
   warnings: true,
   channelActions: true,
   roleChanges: true,
+  messageDelete: true,
+  messageEdit: true,
   voiceActivity: false,
 };
 
@@ -109,6 +113,8 @@ export function AdminLogPage() {
     { key: 'warnings', labelKey: 'adminlog.ev.warnings', icon: <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0" /> },
     { key: 'channelActions', labelKey: 'adminlog.ev.channelActions', icon: <Lock className="w-4 h-4 text-indigo-400 shrink-0" /> },
     { key: 'roleChanges', labelKey: 'adminlog.ev.roleChanges', icon: <Tag className="w-4 h-4 text-sky-400 shrink-0" /> },
+    { key: 'messageDelete', labelKey: 'adminlog.ev.messageDelete', icon: <Trash2 className="w-4 h-4 text-red-400 shrink-0" /> },
+    { key: 'messageEdit', labelKey: 'adminlog.ev.messageEdit', icon: <Edit3 className="w-4 h-4 text-amber-300 shrink-0" /> },
     { key: 'voiceActivity', labelKey: 'adminlog.ev.voiceActivity', icon: <Mic className="w-4 h-4 text-brand shrink-0" /> },
   ];
 

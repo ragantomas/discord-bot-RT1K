@@ -392,6 +392,8 @@ export interface AdminLogEvents {
   warnings: boolean;
   channelActions: boolean;
   roleChanges: boolean;
+  messageDelete: boolean;
+  messageEdit: boolean;
   voiceActivity: boolean;
 }
 
