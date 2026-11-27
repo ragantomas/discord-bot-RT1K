@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { DB_FILE } = require('../config');
+const { writeJsonAtomic } = require('./atomicWrite');
 
 const MAX_ELO_HISTORY = 30;
 
@@ -95,7 +96,7 @@ function loadUsers() {
 }
 
 function saveUsers(users) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(users, null, 2));
+    writeJsonAtomic(DB_FILE, users);
 }
 
 function usersFileExists() {

@@ -5,6 +5,10 @@ settings.json
 activity.json
 warnings.json
 player_activity.json
+moderation.json
+bot.log
+bot.log.old
+*.tmp
 .DS_Store
 __MACOSX/
 .vscode/

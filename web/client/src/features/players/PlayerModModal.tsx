@@ -34,6 +34,8 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
   const [timeoutReason, setTimeoutReason] = useState('');
   const [actionReason, setActionReason] = useState('');
   const [banDeleteSec, setBanDeleteSec] = useState(0);
+  const [banType, setBanType] = useState<'permanent' | 'temp'>('permanent');
+  const [banDurationMinutes, setBanDurationMinutes] = useState(1440);
   const [busy, setBusy] = useState(false);
 
   const loadWarnings = useCallback(async (uid: string) => {
@@ -57,6 +59,8 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
       setActionReason('');
       setTimeoutMinutes(10);
       setBanDeleteSec(0);
+      setBanType('permanent');
+      setBanDurationMinutes(1440);
       void loadWarnings(playerId);
     } else {
       setWarnings([]);
@@ -191,6 +195,7 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
       await moderationApi.ban({
         userId: player.userId,
         deleteMessageSeconds: banDeleteSec,
+        durationMinutes: banType === 'temp' ? banDurationMinutes : null,
         reason: actionReason.trim() || undefined,
       });
       showToast(t('moderation.modal.bannedToast', { name: player.displayName }));
@@ -389,6 +394,43 @@ export function PlayerModModal({ player, onClose, onOpenDetail }: PlayerModModal
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center p-1 rounded-xl bg-bg-base border border-slate-700 h-[42px] shrink-0">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setBanType('permanent')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    banType === 'permanent'
+                      ? 'bg-red-500/80 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {t('moderation.modal.banPermanent')}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setBanType('temp')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    banType === 'temp'
+                      ? 'bg-amber-500/80 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {t('moderation.modal.banTemporary')}
+                </button>
+              </div>
+              {banType === 'temp' && (
+                <DurationUnitInput
+                  minutes={banDurationMinutes}
+                  onChangeMinutes={setBanDurationMinutes}
+                  maxMinutes={525600}
+                  disabled={busy}
+                />
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2">

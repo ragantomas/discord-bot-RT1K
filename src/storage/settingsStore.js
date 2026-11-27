@@ -12,8 +12,23 @@ const {
     TEMPVOICE_DEFAULTS,
     RANK_UPDATER_DEFAULTS
 } = require('../config');
+const { writeJsonAtomic } = require('./atomicWrite');
 
 const MAX_POSTED_GIDS = 50;
+const ADMIN_LOG_EVENT_KEYS = [
+    'memberJoin',
+    'memberLeave',
+    'bans',
+    'timeouts',
+    'warnings',
+    'channelActions',
+    'roleChanges',
+    'messageDelete',
+    'messageEdit',
+    'nicknameChanges',
+    'serverChanges',
+    'voiceActivity'
+];
 
 function uniqueStringIds(list) {
     if (!Array.isArray(list)) return [];
@@ -92,6 +107,8 @@ function getDefaultSettings() {
         adminLog: {
             enabled: false,
             channelId: null,
+            ignoredChannelIds: [],
+            eventChannels: Object.fromEntries(ADMIN_LOG_EVENT_KEYS.map(k => [k, null])),
             events: {
                 memberJoin: true,
                 memberLeave: true,
@@ -356,9 +373,18 @@ function normalizeSettings(raw) {
             const legacyModLog = typeof raw?.moderation?.logToAdminLog === 'boolean'
                 ? raw.moderation.logToAdminLog
                 : true;
+            const rawEventChannels = al.eventChannels && typeof al.eventChannels === 'object' && !Array.isArray(al.eventChannels)
+                ? al.eventChannels
+                : {};
+            const eventChannels = {};
+            for (const key of ADMIN_LOG_EVENT_KEYS) {
+                eventChannels[key] = rawEventChannels[key] ? String(rawEventChannels[key]).trim() : null;
+            }
             return {
                 enabled: typeof al.enabled === 'boolean' ? al.enabled : false,
                 channelId: al.channelId || null,
+                ignoredChannelIds: uniqueStringIds(al.ignoredChannelIds),
+                eventChannels,
                 events: {
                     memberJoin: typeof alEvents.memberJoin === 'boolean' ? alEvents.memberJoin : true,
                     memberLeave: typeof alEvents.memberLeave === 'boolean' ? alEvents.memberLeave : true,
@@ -544,7 +570,7 @@ function settingsFileExists() {
 
 function saveSettings(settings) {
     const normalized = normalizeSettings(settings);
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(normalized, null, 2));
+    writeJsonAtomic(SETTINGS_FILE, normalized);
     return normalized;
 }
 
@@ -699,6 +725,10 @@ function updateAdminLogSettings(patch) {
         s.adminLog = {
             ...s.adminLog,
             ...patch,
+            eventChannels: {
+                ...(s.adminLog.eventChannels || {}),
+                ...(patch.eventChannels || {})
+            },
             events: {
                 ...s.adminLog.events,
                 ...(patch.events || {})

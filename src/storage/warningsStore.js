@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { WARNINGS_FILE } = require('../config');
+const { writeJsonAtomic } = require('./atomicWrite');
 
 function normalizeWarningsData(raw) {
     const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -59,7 +60,7 @@ function loadWarnings() {
 
 function saveWarnings(data) {
     const normalized = normalizeWarningsData(data);
-    fs.writeFileSync(WARNINGS_FILE, JSON.stringify(normalized, null, 2));
+    writeJsonAtomic(WARNINGS_FILE, normalized);
     return normalized;
 }
 

@@ -24,6 +24,8 @@ const TEMPVOICE_DB_FILE = path.join(__dirname, '..', 'tempvoice.json');
 const PATCHBOT_DB_FILE = path.join(__dirname, '..', 'patchbot.json');
 const JOINROLES_DB_FILE = path.join(__dirname, '..', 'joinroles.json');
 const CSSTATUS_DB_FILE = path.join(__dirname, '..', 'csstatus.json');
+const MODERATION_FILE = path.join(__dirname, '..', 'moderation.json');
+const BOT_LOG_FILE = path.join(__dirname, '..', 'bot.log');
 
 const CS2_APP_ID = 730;
 const CS2_ICON_URL = 'https://shared.fastly.steamstatic.com/community_assets/images/apps/730/8dbc71957312bbd3baea65848b545be9eae2a355.jpg';
@@ -77,6 +79,8 @@ module.exports = {
     ACTIVITY_LOG_FILE,
     WARNINGS_FILE,
     PLAYER_ACTIVITY_FILE,
+    MODERATION_FILE,
+    BOT_LOG_FILE,
     TEMPVOICE_DB_FILE,
     PATCHBOT_DB_FILE,
     JOINROLES_DB_FILE,

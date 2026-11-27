@@ -106,5 +106,12 @@ export const DEFAULT_TEMPVOICE_SETUP_FACTORY = (index: number): TempVoiceSetup =
   createTriggerChannel: false,
 });
 
-export const BACKUP_TARGETS = ['all', 'settings', 'users'] as const;
-export type BackupTarget = (typeof BACKUP_TARGETS)[number];
+export const BACKUP_PARTS = [
+  'settings',
+  'users',
+  'warnings',
+  'moderation',
+  'playerActivity',
+  'activityLog',
+] as const;
+export type BackupPart = (typeof BACKUP_PARTS)[number];

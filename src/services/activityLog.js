@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { ACTIVITY_LOG_FILE } = require('../config');
+const { writeJsonAtomic } = require('../storage/atomicWrite');
 
 const MAX_LOGS = 500;
 let nextId = 1;
@@ -41,7 +42,7 @@ function persistNow() {
         persistTimer = null;
     }
     try {
-        fs.writeFileSync(ACTIVITY_LOG_FILE, JSON.stringify(logs, null, 2));
+        writeJsonAtomic(ACTIVITY_LOG_FILE, logs);
     } catch (err) {
         console.error('Chyba pri ukladaní Activity Logu:', err);
     }
@@ -52,7 +53,7 @@ function schedulePersist() {
     persistTimer = setTimeout(() => {
         persistTimer = null;
         try {
-            fs.writeFileSync(ACTIVITY_LOG_FILE, JSON.stringify(logs, null, 2));
+            writeJsonAtomic(ACTIVITY_LOG_FILE, logs);
         } catch (err) {
             console.error('Chyba pri ukladaní Activity Logu:', err);
         }
@@ -120,11 +121,40 @@ function clearActivityLogs() {
     persistNow();
 }
 
+function exportActivityLogs() {
+    return logs.map(item => ({ ...item }));
+}
+
+function restoreActivityLogs(rawLogs) {
+    if (!Array.isArray(rawLogs)) return [];
+    const cleaned = rawLogs
+        .filter(item => item && typeof item === 'object' && typeof item.message === 'string' && item.message.trim())
+        .slice(0, MAX_LOGS)
+        .map((item, idx) => ({
+            id: typeof item.id === 'number' && Number.isFinite(item.id) ? item.id : idx + 1,
+            timestamp: typeof item.timestamp === 'number' && Number.isFinite(item.timestamp) ? item.timestamp : Date.now(),
+            level: typeof item.level === 'string' ? item.level : 'info',
+            category: typeof item.category === 'string' ? item.category : 'system',
+            message: String(item.message).slice(0, 500),
+            actor: item.actor ? String(item.actor).slice(0, 80) : null,
+            targetUserId: item.targetUserId ? String(item.targetUserId).trim() : null
+        }));
+
+    logs.length = 0;
+    logs.push(...cleaned);
+    const maxId = logs.reduce((max, item) => (item.id > max ? item.id : max), 0);
+    nextId = maxId + 1;
+    persistNow();
+    return exportActivityLogs();
+}
+
 module.exports = {
     MAX_LOGS,
     addActivityLog,
     addThrottledErrorLog,
     getActivityLogs,
     clearActivityLogs,
+    exportActivityLogs,
+    restoreActivityLogs,
     persistNow
 };

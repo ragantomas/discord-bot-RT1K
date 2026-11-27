@@ -1,4 +1,7 @@
 require('dotenv').config();
+const { initBotLogger, registerProcessHandlers } = require('./src/services/botLogger');
+initBotLogger();
+
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const { loadCommands } = require('./src/handlers/commandHandler');
 const { loadEvents } = require('./src/handlers/eventHandler');
@@ -22,6 +25,7 @@ const client = new Client({
     }
 });
 
+registerProcessHandlers(client);
 loadCommands(client);
 loadEvents(client);
 startWebServer(client);

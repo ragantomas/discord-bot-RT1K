@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { banMember } = require('../../services/moderation');
+const { banMember, parseDurationMinutes, MAX_TEMPBAN_MINUTES } = require('../../services/moderation');
 
 module.exports = {
     adminOnly: true,
@@ -14,6 +14,9 @@ module.exports = {
         )
         .addStringOption(opt =>
             opt.setName('dovod').setDescription('Dôvod banu').setRequired(false).setMaxLength(400)
+        )
+        .addStringOption(opt =>
+            opt.setName('trvanie').setDescription('Dočasný ban (napr. 30m, 6h, 7d — prázdne = trvalý)').setRequired(false).setMaxLength(32)
         )
         .addIntegerOption(opt =>
             opt.setName('zmazat_spravy')
@@ -30,7 +33,20 @@ module.exports = {
     async execute(interaction) {
         const targetUser = interaction.options.getUser('pouzivatel', true);
         const reason = interaction.options.getString('dovod') || 'Bez dôvodu';
+        const rawDuration = interaction.options.getString('trvanie');
         const deleteMessageSeconds = interaction.options.getInteger('zmazat_spravy') ?? 0;
+
+        let durationMinutes = null;
+        if (rawDuration) {
+            durationMinutes = parseDurationMinutes(rawDuration);
+            if (!durationMinutes || durationMinutes > MAX_TEMPBAN_MINUTES) {
+                return interaction.reply({
+                    content: 'Neplatné trvanie banu. Použi formát napr. `30m`, `6h` alebo `7d` (max 365 dní).',
+                    ephemeral: true
+                });
+            }
+        }
+
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
         const res = await banMember({
@@ -38,6 +54,7 @@ module.exports = {
             targetUser,
             targetMember,
             deleteMessageSeconds,
+            durationMinutes,
             reason,
             moderatorId: interaction.user.id,
             moderatorTag: interaction.user.tag,
@@ -49,10 +66,12 @@ module.exports = {
         }
 
         const embed = new EmbedBuilder()
-            .setTitle('🔨 Používateľ dostal ban')
+            .setTitle(`${res.expiresAt ? '⏳ Používateľ dostal dočasný ban' : '🔨 Používateľ dostal ban'} · Case #${res.caseId}`)
             .setColor(0xED4245)
             .addFields(
                 { name: 'Používateľ', value: `<@${targetUser.id}>`, inline: true },
+                ...(res.durationLabel ? [{ name: 'Trvanie', value: res.durationLabel, inline: true }] : []),
+                ...(res.expiresAt ? [{ name: 'Vyprší', value: `<t:${Math.floor(res.expiresAt / 1000)}:R>`, inline: true }] : []),
                 { name: 'Dôvod', value: reason, inline: false }
             )
             .setTimestamp();

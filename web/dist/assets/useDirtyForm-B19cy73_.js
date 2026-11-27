@@ -1,0 +1,1 @@
+import{a as r}from"./i18n-vendor-CtzIKq_g.js";import{u as a}from"./index-p0CqPo1a.js";function m(t,s,u){const{registerDirty:c,clearDirty:e}=a(),f=r.useRef(s),o=r.useRef(u);f.current=s,o.current=u,r.useEffect(()=>{t?c({onSave:()=>f.current(),onDiscard:()=>o.current()}):e()},[t,c,e]),r.useEffect(()=>()=>e(),[e])}export{m as u};

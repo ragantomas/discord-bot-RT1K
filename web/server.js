@@ -5,7 +5,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const { ChannelType, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
-const { OWNER_ID, DB_FILE, SETTINGS_FILE } = require('../src/config');
+const { OWNER_ID, DB_FILE, SETTINGS_FILE, BOT_LOG_FILE } = require('../src/config');
 const { loadUsers, saveUsers, usersFileExists, normalizeEloHistory, normalizeUserEntry, appendEloHistory } = require('../src/storage/usersStore');
 const {
     normalizeWarningsData,
@@ -14,6 +14,13 @@ const {
     getUserWarnings,
     getAllWarningsByUser
 } = require('../src/storage/warningsStore');
+const {
+    loadModerationData,
+    saveModerationData,
+    normalizeModerationData,
+    getModerationCases,
+    getTempBan
+} = require('../src/storage/moderationStore');
 const {
     uniqueStringIds,
     getDefaultTempVoiceSetup,
@@ -53,7 +60,13 @@ const {
 const { resolveSteam64Id } = require('../src/services/steam');
 const { getRankForElo, removeRankRoles, updateMemberRank } = require('../src/services/ranks');
 const { syncLinkedPlayer, rescheduleRankUpdater, getRankUpdaterStatus } = require('../src/tasks/rankUpdater');
-const { getPlayerActivity, getAllPlayerActivity, getDailyActivity } = require('../src/services/playerActivity');
+const {
+    getPlayerActivity,
+    getAllPlayerActivity,
+    getDailyActivity,
+    exportPlayerActivityData,
+    restorePlayerActivityData
+} = require('../src/services/playerActivity');
 const { updateBotStatus } = require('../src/services/botStatus');
 const {
     toggleTempRoomLock,
@@ -67,7 +80,13 @@ const { fetchCs2News } = require('../src/services/steamNews');
 const { sendPatchToChannel } = require('../src/services/patchBot');
 const { validateAssignableRole } = require('../src/services/joinRoles');
 const { parseIntervalSeconds, updateGuildStatusMessage } = require('../src/services/csStatus');
-const { addActivityLog, getActivityLogs, clearActivityLogs } = require('../src/services/activityLog');
+const {
+    addActivityLog,
+    getActivityLogs,
+    clearActivityLogs,
+    exportActivityLogs,
+    restoreActivityLogs
+} = require('../src/services/activityLog');
 const { sendTestRankFeedMessage } = require('../src/services/rankFeed');
 const { sendTestAdminLogMessage } = require('../src/services/adminLog');
 const { sendTestWelcome } = require('../src/services/welcome');
@@ -1900,6 +1919,39 @@ function startWebServer(client) {
     });
 
     // --- Backups ---
+    const VALID_BACKUP_PARTS = ['settings', 'users', 'warnings', 'moderation', 'playerActivity', 'activityLog'];
+
+    function buildBackupPayloadForParts(parts) {
+        const payload = { exportedAt: new Date().toISOString() };
+        for (const part of parts) {
+            if (part === 'settings') payload.settings = loadSettings();
+            else if (part === 'users') payload.users = loadUsers();
+            else if (part === 'warnings') payload.warnings = loadWarnings();
+            else if (part === 'moderation') payload.moderation = loadModerationData();
+            else if (part === 'playerActivity') payload.playerActivity = exportPlayerActivityData();
+            else if (part === 'activityLog') payload.activityLog = exportActivityLogs();
+        }
+        return payload;
+    }
+
+    app.get('/api/backup/download', (req, res) => {
+        const rawParts = String(req.query.parts || '').trim();
+        const parts = rawParts
+            ? [...new Set(rawParts.split(',').map(s => s.trim()).filter(p => VALID_BACKUP_PARTS.includes(p)))]
+            : [...VALID_BACKUP_PARTS];
+
+        if (parts.length === 0) {
+            return res.status(400).json({ error: 'Select at least one backup part.' });
+        }
+
+        const payload = buildBackupPayloadForParts(parts);
+        const dateTag = new Date().toISOString().slice(0, 10);
+        logDashboardAudit(req, `Downloaded backup (${parts.join(', ')}).`);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="backup-bot-${dateTag}.json"`);
+        return res.send(JSON.stringify(payload, null, 2));
+    });
+
     app.get('/api/backup/download/:target', (req, res) => {
         const target = req.params.target;
 
@@ -1920,12 +1972,7 @@ function startWebServer(client) {
         }
 
         if (target === 'all') {
-            const payload = {
-                exportedAt: new Date().toISOString(),
-                users: loadUsers(),
-                settings: loadSettings(),
-                warnings: loadWarnings()
-            };
+            const payload = buildBackupPayloadForParts(VALID_BACKUP_PARTS);
             const dateTag = new Date().toISOString().slice(0, 10);
             logDashboardAudit(req, 'Downloaded full backup.');
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -1956,14 +2003,41 @@ function startWebServer(client) {
             return clean;
         }
 
-        // 1. Full backup { users, settings, warnings? }
-        if (payload.users && typeof payload.users === 'object' && payload.settings && typeof payload.settings === 'object') {
-            saveUsers(normalizeUsersMap(payload.users));
-            saveSettings(payload.settings);
-            restored.push('users', 'settings');
-            if (payload.warnings && typeof payload.warnings === 'object') {
+        const hasMultiSectionKeys = Boolean(
+            payload.exportedAt ||
+            (payload.users && typeof payload.users === 'object') ||
+            (payload.settings && typeof payload.settings === 'object') ||
+            (payload.warnings && typeof payload.warnings === 'object') ||
+            (payload.moderation && typeof payload.moderation === 'object') ||
+            (payload.playerActivity && typeof payload.playerActivity === 'object') ||
+            Array.isArray(payload.activityLog)
+        );
+
+        // 1. Multi-section or full backup
+        if (hasMultiSectionKeys) {
+            if (payload.users && typeof payload.users === 'object' && !Array.isArray(payload.users)) {
+                saveUsers(normalizeUsersMap(payload.users));
+                restored.push('users');
+            }
+            if (payload.settings && typeof payload.settings === 'object' && !Array.isArray(payload.settings)) {
+                saveSettings(payload.settings);
+                restored.push('settings');
+            }
+            if (payload.warnings && typeof payload.warnings === 'object' && !Array.isArray(payload.warnings)) {
                 saveWarnings(normalizeWarningsData(payload.warnings));
                 restored.push('warnings');
+            }
+            if (payload.moderation && typeof payload.moderation === 'object' && !Array.isArray(payload.moderation)) {
+                saveModerationData(normalizeModerationData(payload.moderation));
+                restored.push('moderation');
+            }
+            if (payload.playerActivity && typeof payload.playerActivity === 'object' && !Array.isArray(payload.playerActivity)) {
+                restorePlayerActivityData(payload.playerActivity);
+                restored.push('playerActivity');
+            }
+            if (Array.isArray(payload.activityLog)) {
+                restoreActivityLogs(payload.activityLog);
+                restored.push('activityLog');
             }
         } else if (
             payload.tempVoice || payload.patchBot || payload.joinRoles ||
@@ -1983,10 +2057,14 @@ function startWebServer(client) {
                 )
             );
             if (!looksLikeUsers) {
-                return res.status(400).json({ error: 'Unrecognized backup format. Upload users.json, settings.json, or a full backup.' });
+                return res.status(400).json({ error: 'Unrecognized backup format. Upload users.json, settings.json, or a backup archive.' });
             }
             saveUsers(normalizeUsersMap(payload));
             restored.push('users');
+        }
+
+        if (restored.length === 0) {
+            return res.status(400).json({ error: 'Backup file did not contain any valid sections to restore.' });
         }
 
         rescheduleRankUpdater();
@@ -2054,31 +2132,63 @@ function startWebServer(client) {
         const { guild } = req.dashboardAuth;
         const body = req.body || {};
         const events = body.events && typeof body.events === 'object' ? body.events : {};
+        const rawEventChannels = body.eventChannels && typeof body.eventChannels === 'object' && !Array.isArray(body.eventChannels)
+            ? body.eventChannels
+            : {};
 
         const enabled = Boolean(body.enabled);
         const channelId = body.channelId ? String(body.channelId).trim() : null;
+        const ignoredChannelIds = uniqueStringIds(body.ignoredChannelIds);
 
-        if (channelId) {
-            const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-            if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-                return res.status(400).json({ error: 'Selected Admin Log channel does not exist or is not a text channel.' });
+        const validateAdminLogTextChannel = async (chId, checkPerms) => {
+            const ch = guild.channels.cache.get(chId) || await guild.channels.fetch(chId).catch(() => null);
+            if (!ch || (ch.type !== ChannelType.GuildText && ch.type !== ChannelType.GuildAnnouncement)) {
+                return { ok: false, error: 'Selected Admin Log channel does not exist or is not a text channel.' };
             }
-            if (enabled && !hasChannelPermissions(guild, channel, [
+            if (checkPerms && !hasChannelPermissions(guild, ch, [
                 PermissionFlagsBits.ViewChannel,
                 PermissionFlagsBits.SendMessages,
                 PermissionFlagsBits.EmbedLinks
             ])) {
-                return res.status(400).json({
-                    error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${channel.name}.`
-                });
+                return {
+                    ok: false,
+                    error: `Bot lacks View Channel, Send Messages, and Embed Links permissions in #${ch.name}.`
+                };
+            }
+            return { ok: true };
+        };
+
+        if (channelId) {
+            const check = await validateAdminLogTextChannel(channelId, enabled);
+            if (!check.ok) {
+                return res.status(400).json({ error: check.error });
             }
         } else if (enabled) {
             return res.status(400).json({ error: 'Select a target channel to enable Admin Log.' });
         }
 
+        const eventKeys = [
+            'memberJoin', 'memberLeave', 'bans', 'timeouts', 'warnings',
+            'channelActions', 'roleChanges', 'messageDelete', 'messageEdit',
+            'nicknameChanges', 'serverChanges', 'voiceActivity'
+        ];
+        const eventChannels = {};
+        for (const key of eventKeys) {
+            const overrideId = rawEventChannels[key] ? String(rawEventChannels[key]).trim() : null;
+            if (overrideId) {
+                const check = await validateAdminLogTextChannel(overrideId, enabled && Boolean(events[key]));
+                if (!check.ok) {
+                    return res.status(400).json({ error: check.error });
+                }
+            }
+            eventChannels[key] = overrideId;
+        }
+
         const saved = updateAdminLogSettings({
             enabled,
             channelId,
+            ignoredChannelIds,
+            eventChannels,
             events: {
                 memberJoin: Boolean(events.memberJoin),
                 memberLeave: Boolean(events.memberLeave),
@@ -2542,12 +2652,13 @@ function startWebServer(client) {
             return res.status(400).json({ error: resWarn.error });
         }
 
-        logDashboardAudit(req, `Issued warning #${resWarn.warning.id} to ${targetUser?.tag || userId}.`, 'warn', userId);
+        logDashboardAudit(req, `Issued warning #${resWarn.warning.id} (Case #${resWarn.caseId}) to ${targetUser?.tag || userId}.`, 'warn', userId);
         return res.json({
             ok: true,
             warning: resWarn.warning,
             total: resWarn.total,
             escalation: resWarn.escalation,
+            caseId: resWarn.caseId,
             warnings: getUserWarnings(userId)
         });
     });
@@ -2638,8 +2749,8 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Timed out ${targetMember.displayName} (${result.durationLabel}).`, 'warn', userId);
-        return res.json({ ok: true, durationLabel: result.durationLabel });
+        logDashboardAudit(req, `Timed out ${targetMember.displayName} (${result.durationLabel}, Case #${result.caseId}).`, 'warn', userId);
+        return res.json({ ok: true, durationLabel: result.durationLabel, caseId: result.caseId });
     });
 
     app.post('/api/moderation/kick', async (req, res) => {
@@ -2665,8 +2776,8 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Kicked ${targetMember.displayName}.`, 'warn', userId);
-        return res.json({ ok: true });
+        logDashboardAudit(req, `Kicked ${targetMember.displayName} (Case #${result.caseId}).`, 'warn', userId);
+        return res.json({ ok: true, caseId: result.caseId });
     });
 
     app.post('/api/moderation/ban', async (req, res) => {
@@ -2674,6 +2785,9 @@ function startWebServer(client) {
         const userId = String(req.body?.userId || '').trim();
         const reason = String(req.body?.reason || '').trim() || undefined;
         const deleteMessageSeconds = Number(req.body?.deleteMessageSeconds) || 0;
+        const durationMinutes = req.body?.durationMinutes !== undefined && req.body?.durationMinutes !== null && req.body?.durationMinutes !== ''
+            ? Number(req.body.durationMinutes)
+            : null;
 
         if (!/^\d{15,22}$/.test(userId)) {
             return res.status(400).json({ error: 'Invalid user ID.' });
@@ -2687,6 +2801,7 @@ function startWebServer(client) {
             targetUser,
             targetMember,
             deleteMessageSeconds,
+            durationMinutes,
             reason,
             moderatorId: sessionUser.id,
             moderatorTag: getActorName(req),
@@ -2697,8 +2812,20 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Banned ${result.targetTag}.`, 'warn', userId);
-        return res.json({ ok: true });
+        logDashboardAudit(
+            req,
+            result.durationLabel
+                ? `Tempbanned ${result.targetTag} (${result.durationLabel}, Case #${result.caseId}).`
+                : `Banned ${result.targetTag} (Case #${result.caseId}).`,
+            'warn',
+            userId
+        );
+        return res.json({
+            ok: true,
+            caseId: result.caseId,
+            expiresAt: result.expiresAt,
+            durationLabel: result.durationLabel
+        });
     });
 
     app.get('/api/moderation/bans', async (req, res) => {
@@ -2708,13 +2835,18 @@ function startWebServer(client) {
             return res.status(400).json({ error: 'Bot lacks Ban Members permission to view bans.' });
         }
 
-        const bans = [...bansCol.values()].map(b => ({
-            userId: b.user.id,
-            username: b.user.username,
-            tag: b.user.tag,
-            avatarUrl: b.user.displayAvatarURL({ size: 64 }),
-            reason: b.reason || null
-        }));
+        const bans = [...bansCol.values()].map(b => {
+            const tb = getTempBan(b.user.id);
+            return {
+                userId: b.user.id,
+                username: b.user.username,
+                tag: b.user.tag,
+                avatarUrl: b.user.displayAvatarURL({ size: 64 }),
+                reason: b.reason || null,
+                expiresAt: tb?.expiresAt || null,
+                caseId: tb?.caseId || null
+            };
+        });
 
         return res.json({ bans });
     });
@@ -2736,11 +2868,24 @@ function startWebServer(client) {
             return res.status(400).json({ error: result.error });
         }
 
-        logDashboardAudit(req, `Unbanned ${result.targetTag}.`);
-        return res.json({ ok: true });
+        logDashboardAudit(req, `Unbanned ${result.targetTag} (Case #${result.caseId}).`);
+        return res.json({ ok: true, caseId: result.caseId });
     });
 
-    // --- Dashboard Activity Log ---
+    app.get('/api/moderation/cases', (req, res) => {
+        const userId = req.query.userId ? String(req.query.userId).trim() : null;
+        const limit = Number(req.query.limit || 100);
+        return res.json({ cases: getModerationCases({ userId, limit }) });
+    });
+
+    // --- Dashboard Activity Log & bot.log ---
+    app.get('/api/logs/download', (req, res) => {
+        if (!BOT_LOG_FILE || !fs.existsSync(BOT_LOG_FILE)) {
+            return res.status(404).json({ error: 'bot.log does not exist yet.' });
+        }
+        logDashboardAudit(req, 'Downloaded bot.log.');
+        return res.download(BOT_LOG_FILE, 'bot.log');
+    });
     app.get('/api/logs', (req, res) => {
         const category = String(req.query.category || 'all');
         const limit = Number(req.query.limit || 500);

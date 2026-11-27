@@ -29,5 +29,14 @@ export default defineConfig({
     outDir: path.resolve(__dirname, '../dist'),
     emptyOutDir: true,
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'i18n-vendor': ['i18next', 'react-i18next'],
+          'icons-vendor': ['lucide-react'],
+        },
+      },
+    },
   },
 });

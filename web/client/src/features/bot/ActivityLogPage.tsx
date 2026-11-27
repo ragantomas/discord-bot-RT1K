@@ -1,4 +1,4 @@
-import { ScrollText, Search, Trash2 } from 'lucide-react';
+import { Download, ScrollText, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { logsApi } from '@/api/logs';
@@ -77,6 +77,16 @@ export function ActivityLogPage() {
                 className="input-field pl-9"
               />
             </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                window.location.href = '/api/logs/download';
+              }}
+              icon={<Download className="w-3.5 h-3.5" />}
+            >
+              {t('logs.downloadBotLog')}
+            </Button>
             <Button
               size="sm"
               variant="danger"

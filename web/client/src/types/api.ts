@@ -402,6 +402,8 @@ export interface AdminLogEvents {
 export interface AdminLogSettings {
   enabled: boolean;
   channelId: string | null;
+  ignoredChannelIds?: string[];
+  eventChannels?: Partial<Record<keyof AdminLogEvents, string | null>>;
   events: AdminLogEvents;
 }
 
@@ -487,6 +489,21 @@ export interface BanEntry {
   tag: string;
   avatarUrl: string;
   reason: string | null;
+  expiresAt?: number | null;
+  caseId?: number | null;
+}
+
+export interface ModerationCase {
+  caseId: number;
+  action: 'warn' | 'timeout' | 'timeout_remove' | 'kick' | 'ban' | 'tempban' | 'unban' | string;
+  userId: string;
+  userTag: string;
+  moderatorId: string | null;
+  moderatorTag: string;
+  reason: string;
+  durationMinutes: number | null;
+  expiresAt: number | null;
+  createdAt: number;
 }
 
 export interface AnnouncementHistoryEntry {

@@ -28,6 +28,9 @@ module.exports = {
         const pbMatches = (current.patchBot?.channelIds || []).includes(channel.id);
         const annMatches = (current.announcementsHistory || []).some(item => item.channelId === channel.id);
 
+        const adminLogIgnoredMatches = (current.adminLog?.ignoredChannelIds || []).includes(channel.id);
+        const adminLogEventMatches = Object.values(current.adminLog?.eventChannels || {}).includes(channel.id);
+
         const needsUpdate =
             current.allowedChannelId === channel.id ||
             tvMatchesTrigger ||
@@ -37,6 +40,8 @@ module.exports = {
             current.csStatus?.channelId === channel.id ||
             current.rankFeed?.channelId === channel.id ||
             current.adminLog?.channelId === channel.id ||
+            adminLogIgnoredMatches ||
+            adminLogEventMatches ||
             current.welcome?.channelId === channel.id ||
             current.welcome?.goodbyeChannelId === channel.id ||
             current.tickets?.categoryId === channel.id ||
@@ -89,6 +94,16 @@ module.exports = {
                 settings.adminLog.channelId = null;
                 settings.adminLog.enabled = false;
                 console.warn('Kanál pre Admin Log bol zmazaný.');
+            }
+            if (Array.isArray(settings.adminLog?.ignoredChannelIds)) {
+                settings.adminLog.ignoredChannelIds = settings.adminLog.ignoredChannelIds.filter(id => id !== channel.id);
+            }
+            if (settings.adminLog?.eventChannels && typeof settings.adminLog.eventChannels === 'object') {
+                for (const key of Object.keys(settings.adminLog.eventChannels)) {
+                    if (settings.adminLog.eventChannels[key] === channel.id) {
+                        settings.adminLog.eventChannels[key] = null;
+                    }
+                }
             }
 
             if (settings.welcome?.channelId === channel.id) {

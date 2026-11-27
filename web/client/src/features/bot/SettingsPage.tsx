@@ -579,6 +579,15 @@ export function SettingsPage() {
           >
             {t('backup.restore')}
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              window.location.href = '/api/logs/download';
+            }}
+            icon={<Archive className="w-4 h-4 text-sky-400" />}
+          >
+            {t('logs.downloadBotLog')}
+          </Button>
         </div>
       </div>
 

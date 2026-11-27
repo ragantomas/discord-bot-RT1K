@@ -25,12 +25,27 @@ function consumeSuppressedAdminLogEvent(guildId, eventType, userId) {
     return expiresAt > Date.now();
 }
 
-async function getAdminLogChannel(guild) {
-    const config = getAdminLogSettings();
-    if (!config?.enabled || !config.channelId || !guild) return null;
+function isAdminLogChannel(config, channelId) {
+    if (!config || !channelId) return false;
+    if (config.channelId === channelId) return true;
+    return Object.values(config.eventChannels || {}).includes(channelId);
+}
 
-    const channel = guild.channels.cache.get(config.channelId)
-        || await guild.channels.fetch(config.channelId).catch(() => null);
+function isIgnoredChannel(config, channelId) {
+    if (!channelId) return false;
+    if (isAdminLogChannel(config, channelId)) return true;
+    return Array.isArray(config?.ignoredChannelIds) && config.ignoredChannelIds.includes(channelId);
+}
+
+async function getAdminLogChannel(guild, eventKey = null) {
+    const config = getAdminLogSettings();
+    if (!config?.enabled || !guild) return null;
+
+    const targetChannelId = (eventKey && config.eventChannels?.[eventKey]) || config.channelId;
+    if (!targetChannelId) return null;
+
+    const channel = guild.channels.cache.get(targetChannelId)
+        || await guild.channels.fetch(targetChannelId).catch(() => null);
     if (!channel || !channel.isTextBased()) return null;
     return { channel, config };
 }
@@ -68,7 +83,7 @@ async function fetchRecentAuditEntry(guild, eventType, targetId) {
 
 async function logMemberJoin(member, inviteInfo = null) {
     if (!member?.guild || !member.user) return;
-    const ctx = await getAdminLogChannel(member.guild);
+    const ctx = await getAdminLogChannel(member.guild, 'memberJoin');
     if (!ctx || !ctx.config.events?.memberJoin) return;
 
     const createdUnix = Math.floor(member.user.createdTimestamp / 1000);
@@ -109,7 +124,7 @@ async function logMemberJoin(member, inviteInfo = null) {
 async function logMemberLeave(member) {
     if (!member?.guild || !member.user) return;
     if (consumeSuppressedAdminLogEvent(member.guild.id, 'memberLeave', member.id)) return;
-    const ctx = await getAdminLogChannel(member.guild);
+    const ctx = await getAdminLogChannel(member.guild, 'memberLeave');
     if (!ctx || !ctx.config.events?.memberLeave) return;
 
     const kickAudit = await fetchRecentAuditEntry(member.guild, AuditLogEvent.MemberKick, member.id);
@@ -151,7 +166,7 @@ async function logMemberLeave(member) {
 async function logBanAdd(ban) {
     if (!ban?.guild || !ban.user) return;
     if (consumeSuppressedAdminLogEvent(ban.guild.id, 'banAdd', ban.user.id)) return;
-    const ctx = await getAdminLogChannel(ban.guild);
+    const ctx = await getAdminLogChannel(ban.guild, 'bans');
     if (!ctx || !ctx.config.events?.bans) return;
 
     const audit = await fetchRecentAuditEntry(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
@@ -180,7 +195,7 @@ async function logBanAdd(ban) {
 async function logBanRemove(ban) {
     if (!ban?.guild || !ban.user) return;
     if (consumeSuppressedAdminLogEvent(ban.guild.id, 'banRemove', ban.user.id)) return;
-    const ctx = await getAdminLogChannel(ban.guild);
+    const ctx = await getAdminLogChannel(ban.guild, 'bans');
     if (!ctx || !ctx.config.events?.bans) return;
 
     const audit = await fetchRecentAuditEntry(ban.guild, AuditLogEvent.MemberBanRemove, ban.user.id);
@@ -206,10 +221,9 @@ async function logBanRemove(ban) {
 
 async function logMemberUpdate(oldMember, newMember) {
     if (!newMember?.guild || !newMember.user) return;
-    const ctx = await getAdminLogChannel(newMember.guild);
-    if (!ctx) return;
-
-    const events = ctx.config.events || {};
+    const baseConfig = getAdminLogSettings();
+    if (!baseConfig?.enabled) return;
+    const events = baseConfig.events || {};
 
     // 1. Timeout zmeny
     const oldTimeout = oldMember.communicationDisabledUntilTimestamp || 0;
@@ -218,34 +232,37 @@ async function logMemberUpdate(oldMember, newMember) {
     if (oldTimeout !== newTimeout) {
         const suppressedTimeout = consumeSuppressedAdminLogEvent(newMember.guild.id, 'timeout', newMember.id);
         if (!suppressedTimeout && events.timeouts) {
-            const audit = await fetchRecentAuditEntry(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
-            const now = Date.now();
-            const isMuted = newTimeout > now;
+            const timeoutCtx = await getAdminLogChannel(newMember.guild, 'timeouts');
+            if (timeoutCtx) {
+                const audit = await fetchRecentAuditEntry(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
+                const now = Date.now();
+                const isMuted = newTimeout > now;
 
-            const embed = new EmbedBuilder()
-                .setTitle(isMuted ? '🔇 Používateľ dostal Timeout' : '🔊 Timeout bol zrušený')
-                .setColor(isMuted ? 0xF5A623 : 0x57F287)
-                .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
-                .addFields(
-                    { name: 'Používateľ', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true },
-                    { name: 'Moderátor', value: audit?.executor ? `<@${audit.executor.id}>` : '*Neznámy*', inline: true }
-                )
-                .setFooter({ text: `ID: ${newMember.id}` })
-                .setTimestamp();
+                const embed = new EmbedBuilder()
+                    .setTitle(isMuted ? '🔇 Používateľ dostal Timeout' : '🔊 Timeout bol zrušený')
+                    .setColor(isMuted ? 0xF5A623 : 0x57F287)
+                    .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
+                    .addFields(
+                        { name: 'Používateľ', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true },
+                        { name: 'Moderátor', value: audit?.executor ? `<@${audit.executor.id}>` : '*Neznámy*', inline: true }
+                    )
+                    .setFooter({ text: `ID: ${newMember.id}` })
+                    .setTimestamp();
 
-            if (isMuted) {
-                embed.addFields(
-                    { name: 'Vyprší', value: `<t:${Math.floor(newTimeout / 1000)}:R>`, inline: true },
-                    { name: 'Dôvod', value: audit?.reason || '*Neuvedený*', inline: false }
-                );
+                if (isMuted) {
+                    embed.addFields(
+                        { name: 'Vyprší', value: `<t:${Math.floor(newTimeout / 1000)}:R>`, inline: true },
+                        { name: 'Dôvod', value: audit?.reason || '*Neuvedený*', inline: false }
+                    );
+                }
+
+                await sendAdminLogEmbed(timeoutCtx.channel, embed, 'timeouts');
+                addActivityLog({
+                    level: isMuted ? 'warn' : 'info',
+                    category: 'adminlog',
+                    message: isMuted ? `Timed out ${newMember.user.tag}.` : `Removed timeout for ${newMember.user.tag}.`
+                });
             }
-
-            await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
-            addActivityLog({
-                level: isMuted ? 'warn' : 'info',
-                category: 'adminlog',
-                message: isMuted ? `Timed out ${newMember.user.tag}.` : `Removed timeout for ${newMember.user.tag}.`
-            });
         }
     }
 
@@ -258,63 +275,69 @@ async function logMemberUpdate(oldMember, newMember) {
         const removed = oldRoles.filter(r => !newRoles.has(r.id) && r.id !== newMember.guild.id);
 
         if (added.size > 0 || removed.size > 0) {
-            const lines = [];
-            if (added.size > 0) {
-                lines.push(`**Pridané:** ${added.map(r => `<@&${r.id}>`).join(', ')}`);
+            const roleCtx = await getAdminLogChannel(newMember.guild, 'roleChanges');
+            if (roleCtx) {
+                const lines = [];
+                if (added.size > 0) {
+                    lines.push(`**Pridané:** ${added.map(r => `<@&${r.id}>`).join(', ')}`);
+                }
+                if (removed.size > 0) {
+                    lines.push(`**Odobrané:** ${removed.map(r => `<@&${r.id}>`).join(', ')}`);
+                }
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🏷️ Zmena rolí člena')
+                    .setColor(0x5865F2)
+                    .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
+                    .setDescription(`<@${newMember.id}> (${newMember.user.tag})\n${lines.join('\n')}`)
+                    .setFooter({ text: `ID: ${newMember.id}` })
+                    .setTimestamp();
+
+                await sendAdminLogEmbed(roleCtx.channel, embed, 'roleChanges');
+
+                const summaryParts = [];
+                if (added.size > 0) summaryParts.push(`added: ${added.map(r => `@${r.name}`).join(', ')}`);
+                if (removed.size > 0) summaryParts.push(`removed: ${removed.map(r => `@${r.name}`).join(', ')}`);
+                addActivityLog({
+                    level: 'info',
+                    category: 'adminlog',
+                    message: `Role changes for ${newMember.user.tag} (${summaryParts.join('; ')}).`
+                });
             }
-            if (removed.size > 0) {
-                lines.push(`**Odobrané:** ${removed.map(r => `<@&${r.id}>`).join(', ')}`);
-            }
-
-            const embed = new EmbedBuilder()
-                .setTitle('🏷️ Zmena rolí člena')
-                .setColor(0x5865F2)
-                .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
-                .setDescription(`<@${newMember.id}> (${newMember.user.tag})\n${lines.join('\n')}`)
-                .setFooter({ text: `ID: ${newMember.id}` })
-                .setTimestamp();
-
-            await sendAdminLogEmbed(ctx.channel, embed, 'roleChanges');
-
-            const summaryParts = [];
-            if (added.size > 0) summaryParts.push(`added: ${added.map(r => `@${r.name}`).join(', ')}`);
-            if (removed.size > 0) summaryParts.push(`removed: ${removed.map(r => `@${r.name}`).join(', ')}`);
-            addActivityLog({
-                level: 'info',
-                category: 'adminlog',
-                message: `Role changes for ${newMember.user.tag} (${summaryParts.join('; ')}).`
-            });
         }
     }
 
     // 3. Zmena prezývky
     if (events.nicknameChanges && !oldMember.partial && oldMember.nickname !== newMember.nickname) {
-        const audit = await fetchRecentAuditEntry(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
-        const embed = new EmbedBuilder()
-            .setTitle('🏷️ Zmena prezývky')
-            .setColor(0x5865F2)
-            .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
-            .addFields(
-                { name: 'Používateľ', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true }
-            )
-            .setFooter({ text: `ID: ${newMember.id}` })
-            .setTimestamp();
+        const nickCtx = await getAdminLogChannel(newMember.guild, 'nicknameChanges');
+        if (nickCtx) {
+            const audit = await fetchRecentAuditEntry(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
+            const embed = new EmbedBuilder()
+                .setTitle('🏷️ Zmena prezývky')
+                .setColor(0x5865F2)
+                .setThumbnail(newMember.displayAvatarURL({ size: 128 }))
+                .addFields(
+                    { name: 'Používateľ', value: `<@${newMember.id}> (${newMember.user.tag})`, inline: true }
+                )
+                .setFooter({ text: `ID: ${newMember.id}` })
+                .setTimestamp();
 
-        if (audit?.executor && audit.executor.id !== newMember.id) {
-            embed.addFields({ name: 'Zmenil', value: `<@${audit.executor.id}>`, inline: true });
+            if (audit?.executor && audit.executor.id !== newMember.id) {
+                embed.addFields({ name: 'Zmenil', value: `<@${audit.executor.id}>`, inline: true });
+            }
+            embed.addFields(
+                { name: 'Predtým', value: oldMember.nickname || '*Predvolené meno*', inline: false },
+                { name: 'Potom', value: newMember.nickname || '*Predvolené meno*', inline: false }
+            );
+
+            await sendAdminLogEmbed(nickCtx.channel, embed, 'nicknameChanges');
+            addActivityLog({
+                level: 'info',
+                category: 'adminlog',
+                message: `Nickname changed for ${newMember.user.tag}: "${oldMember.nickname || newMember.user.username}" → "${newMember.nickname || newMember.user.username}".`,
+                targetUserId: newMember.id
+            });
         }
-        embed.addFields(
-            { name: 'Predtým', value: oldMember.nickname || '*Predvolené meno*', inline: false },
-            { name: 'Potom', value: newMember.nickname || '*Predvolené meno*', inline: false }
-        );
-
-        await sendAdminLogEmbed(ctx.channel, embed, 'nicknameChanges');
-        addActivityLog({
-            level: 'info',
-            category: 'adminlog',
-            message: `Nickname changed for ${newMember.user.tag}: "${oldMember.nickname || newMember.user.username}" → "${newMember.nickname || newMember.user.username}".`,
-            targetUserId: newMember.id
-        });
     }
 }
 
@@ -324,8 +347,11 @@ async function logVoiceState(oldState, newState) {
     if (!member || !guild || member.user?.bot) return;
     if (oldState.channelId === newState.channelId) return;
 
-    const ctx = await getAdminLogChannel(guild);
+    const ctx = await getAdminLogChannel(guild, 'voiceActivity');
     if (!ctx || !ctx.config.events?.voiceActivity) return;
+    if (isIgnoredChannel(ctx.config, newState.channelId || oldState.channelId) && (!oldState.channelId || isIgnoredChannel(ctx.config, oldState.channelId))) {
+        return;
+    }
 
     let title = '🎙️ Hlasová aktivita';
     let color = 0x5865F2;
@@ -411,7 +437,7 @@ async function logModerationAction(guild, {
 } = {}) {
     if (!guild) return false;
 
-    const ctx = await getAdminLogChannel(guild);
+    const ctx = await getAdminLogChannel(guild, eventKey);
     if (!ctx) return false;
     if (eventKey && !ctx.config.events?.[eventKey]) return false;
 
@@ -456,9 +482,9 @@ async function logMessageDelete(message) {
     if (message.author?.bot) return;
     if (message.partial && !message.author && !message.content && !message.attachments?.size) return;
 
-    const ctx = await getAdminLogChannel(message.guild);
+    const ctx = await getAdminLogChannel(message.guild, 'messageDelete');
     if (!ctx || !ctx.config.events?.messageDelete) return;
-    if (message.channelId === ctx.config.channelId) return;
+    if (isIgnoredChannel(ctx.config, message.channelId)) return;
 
     let deletedByField = null;
     if (message.author?.id && message.guild.members?.me?.permissions.has(PermissionFlagsBits.ViewAuditLog)) {
@@ -527,9 +553,9 @@ async function logMessageBulkDelete(messages, channel) {
     if (!channel?.guild || !messages?.size) return;
     if (consumeSuppressedAdminLogEvent(channel.guild.id, 'messageBulkDelete', channel.id)) return;
 
-    const ctx = await getAdminLogChannel(channel.guild);
+    const ctx = await getAdminLogChannel(channel.guild, 'messageDelete');
     if (!ctx || !ctx.config.events?.messageDelete) return;
-    if (channel.id === ctx.config.channelId) return;
+    if (isIgnoredChannel(ctx.config, channel.id)) return;
 
     const embed = new EmbedBuilder()
         .setTitle('🧹 Hromadné zmazanie správ')
@@ -556,9 +582,9 @@ async function logMessageUpdate(oldMessage, newMessage) {
     }
     if (oldMessage.content === newMessage.content) return;
 
-    const ctx = await getAdminLogChannel(newMessage.guild);
+    const ctx = await getAdminLogChannel(newMessage.guild, 'messageEdit');
     if (!ctx || !ctx.config.events?.messageEdit) return;
-    if (newMessage.channelId === ctx.config.channelId) return;
+    if (isIgnoredChannel(ctx.config, newMessage.channelId)) return;
 
     const embed = new EmbedBuilder()
         .setTitle('✏️ Upravená správa')
@@ -622,7 +648,7 @@ async function logChannelCreate(channel) {
     if (consumeSuppressedAdminLogEvent(channel.guild.id, 'channelCreate', channel.id)) return;
     if (getTempRoom(channel.id) || getOpenTicket(channel.id)) return;
 
-    const ctx = await getAdminLogChannel(channel.guild);
+    const ctx = await getAdminLogChannel(channel.guild, 'serverChanges');
     if (!ctx || !ctx.config.events?.serverChanges) return;
 
     const audit = await fetchRecentAuditEntry(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
@@ -652,8 +678,8 @@ async function logChannelDelete(channel) {
     if (!channel?.guild) return;
     if (consumeSuppressedAdminLogEvent(channel.guild.id, 'channelDelete', channel.id)) return;
 
-    const ctx = await getAdminLogChannel(channel.guild);
-    if (!ctx || !ctx.config.events?.serverChanges || channel.id === ctx.config.channelId) return;
+    const ctx = await getAdminLogChannel(channel.guild, 'serverChanges');
+    if (!ctx || !ctx.config.events?.serverChanges || isAdminLogChannel(ctx.config, channel.id)) return;
 
     const audit = await fetchRecentAuditEntry(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
     const embed = new EmbedBuilder()
@@ -682,7 +708,7 @@ async function logChannelUpdate(oldChannel, newChannel) {
     if (!newChannel?.guild || !oldChannel?.name || oldChannel.name === newChannel.name) return;
     if (getTempRoom(newChannel.id) || getOpenTicket(newChannel.id)) return;
 
-    const ctx = await getAdminLogChannel(newChannel.guild);
+    const ctx = await getAdminLogChannel(newChannel.guild, 'serverChanges');
     if (!ctx || !ctx.config.events?.serverChanges) return;
 
     const audit = await fetchRecentAuditEntry(newChannel.guild, AuditLogEvent.ChannelUpdate, newChannel.id);
@@ -711,7 +737,7 @@ async function logChannelUpdate(oldChannel, newChannel) {
 
 async function logRoleCreate(role) {
     if (!role?.guild || role.id === role.guild.id) return;
-    const ctx = await getAdminLogChannel(role.guild);
+    const ctx = await getAdminLogChannel(role.guild, 'serverChanges');
     if (!ctx || !ctx.config.events?.serverChanges) return;
 
     const audit = await fetchRecentAuditEntry(role.guild, AuditLogEvent.RoleCreate, role.id);
@@ -736,7 +762,7 @@ async function logRoleCreate(role) {
 
 async function logRoleDelete(role) {
     if (!role?.guild || role.id === role.guild.id) return;
-    const ctx = await getAdminLogChannel(role.guild);
+    const ctx = await getAdminLogChannel(role.guild, 'serverChanges');
     if (!ctx || !ctx.config.events?.serverChanges) return;
 
     const audit = await fetchRecentAuditEntry(role.guild, AuditLogEvent.RoleDelete, role.id);
@@ -761,7 +787,7 @@ async function logRoleDelete(role) {
 
 async function logRoleUpdate(oldRole, newRole) {
     if (!newRole?.guild || newRole.id === newRole.guild.id || oldRole.name === newRole.name) return;
-    const ctx = await getAdminLogChannel(newRole.guild);
+    const ctx = await getAdminLogChannel(newRole.guild, 'serverChanges');
     if (!ctx || !ctx.config.events?.serverChanges) return;
 
     const audit = await fetchRecentAuditEntry(newRole.guild, AuditLogEvent.RoleUpdate, newRole.id);

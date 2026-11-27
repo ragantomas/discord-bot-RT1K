@@ -26,7 +26,9 @@ import { useConfirm } from '@/context/ConfirmContext';
 import { useDashboard } from '@/context/DashboardContext';
 import { useToast } from '@/context/ToastContext';
 import { useDirtyForm } from '@/hooks/useDirtyForm';
-import type { AutoEscalationRule, BanEntry, EscalationAction, ModerationCommandsConfig } from '@/types/api';
+import { getAppLanguage } from '@/i18n';
+import type { AutoEscalationRule, BanEntry, EscalationAction, ModerationCase, ModerationCommandsConfig } from '@/types/api';
+import { formatDateTime } from '@/utils/format';
 
 const DEFAULT_COMMANDS: ModerationCommandsConfig = {
   warn: true,
@@ -40,6 +42,7 @@ const DEFAULT_COMMANDS: ModerationCommandsConfig = {
 
 export function ModerationPage() {
   const { t } = useTranslation();
+  const lang = getAppLanguage();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const {
@@ -70,7 +73,25 @@ export function ModerationPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshingBans, setRefreshingBans] = useState(false);
+  const [cases, setCases] = useState<ModerationCase[]>([]);
+  const [refreshingCases, setRefreshingCases] = useState(false);
   const syncedSettingsRef = useRef(settings);
+
+  const loadCases = useCallback(async () => {
+    setRefreshingCases(true);
+    try {
+      const res = await moderationApi.listCases(50);
+      setCases(res.cases || []);
+    } catch {
+      // Ignore transient errors loading cases list
+    } finally {
+      setRefreshingCases(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCases();
+  }, [loadCases]);
 
   const syncFromSettings = useCallback(() => {
     if (!settings) return;
@@ -143,7 +164,7 @@ export function ModerationPage() {
     try {
       await moderationApi.unban(ban.userId);
       showToast(t('moderation.unbannedToast', { name: ban.tag }));
-      await refreshBans();
+      await Promise.all([refreshBans(), loadCases()]);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err), 'error');
     }
@@ -416,8 +437,20 @@ export function ModerationPage() {
                     className="w-8 h-8 rounded-full object-cover shrink-0"
                   />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-white truncate">{b.tag}</div>
-                    <div className="text-xs text-slate-400 truncate">
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="text-sm font-medium text-white truncate">{b.tag}</span>
+                      {b.caseId && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300">
+                          #{b.caseId}
+                        </span>
+                      )}
+                      {b.expiresAt && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-300">
+                          {t('moderation.tempBanUntil', { date: formatDateTime(b.expiresAt, lang) })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400 truncate mt-0.5">
                       {b.userId}
                       {b.reason ? ` · ${b.reason}` : ''}
                     </div>
@@ -433,6 +466,62 @@ export function ModerationPage() {
                 </Button>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Moderation cases */}
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-white">
+            {t('moderation.casesTitle', { count: cases.length })}
+          </h3>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={refreshingCases}
+            onClick={() => void loadCases()}
+            icon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
+            {t('common.refresh')}
+          </Button>
+        </div>
+
+        {cases.length === 0 ? (
+          <EmptyState message={t('moderation.noCases')} />
+        ) : (
+          <div className="space-y-2">
+            {cases.map((c) => {
+              const badgeCls =
+                c.action === 'ban' || c.action === 'tempban'
+                  ? 'bg-red-500/15 border-red-500/30 text-red-300'
+                  : c.action === 'kick' || c.action === 'timeout' || c.action === 'warn'
+                    ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300';
+              return (
+                <div
+                  key={c.caseId}
+                  className="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[11px] font-mono text-slate-300">
+                        #{c.caseId}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-md border text-[11px] font-medium ${badgeCls}`}>
+                        {t(`moderation.caseActions.${c.action}`, { defaultValue: c.action })}
+                      </span>
+                      <span className="text-sm font-medium text-white truncate">{c.userTag}</span>
+                      <span className="text-xs text-slate-500">← {c.moderatorTag}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 truncate">{c.reason}</div>
+                  </div>
+                  <div className="text-xs text-slate-500 whitespace-nowrap shrink-0">
+                    {formatDateTime(c.createdAt, lang)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

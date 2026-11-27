@@ -1,0 +1,1 @@
+import{j as e}from"./index-p0CqPo1a.js";function l({checked:s,onChange:t,className:a="",...c}){return e.jsxs("label",{className:`toggle-switch ${a}`,children:[e.jsx("input",{type:"checkbox",checked:s,onChange:o=>t(o.target.checked),...c}),e.jsx("span",{className:"toggle-track"}),e.jsx("span",{className:"toggle-thumb"})]})}export{l as T};

@@ -1,4 +1,6 @@
 import {
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Gavel,
   Headphones,
@@ -38,6 +40,8 @@ export function PlayersPage() {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<PlayerFilter>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const [modUserId, setModUserId] = useState<string | null>(null);
@@ -113,6 +117,14 @@ export function PlayersPage() {
   };
 
 
+  const totalPages = Math.max(1, Math.ceil(filteredPlayers.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const startIdx = (safePage - 1) * pageSize;
+  const paginatedPlayers = useMemo(
+    () => filteredPlayers.slice(startIdx, startIdx + pageSize),
+    [filteredPlayers, startIdx, pageSize],
+  );
+
   if (initialLoading) {
     return <SkeletonCard rows={6} />;
   }
@@ -179,7 +191,10 @@ export function PlayersPage() {
               <button
                 key={btn.id}
                 type="button"
-                onClick={() => setFilter(btn.id)}
+                onClick={() => {
+                  setFilter(btn.id);
+                  setPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
                   filter === btn.id
                     ? 'bg-brand text-white border-brand'
@@ -196,7 +211,10 @@ export function PlayersPage() {
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               placeholder={t('common.search')}
               className="input-field pl-9"
             />
@@ -218,7 +236,7 @@ export function PlayersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-sm">
-                {filteredPlayers.map((p) => (
+                {paginatedPlayers.map((p) => (
                   <tr key={p.userId} className="hover:bg-bg-elevated/40 transition">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3 min-w-0">
@@ -354,6 +372,54 @@ export function PlayersPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {filteredPlayers.length > 0 && (
+          <div className="px-5 py-3.5 border-t border-slate-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-400">
+            <div className="flex items-center gap-3">
+              <span>
+                {t('players.showingRange', {
+                  from: startIdx + 1,
+                  to: Math.min(startIdx + pageSize, filteredPlayers.length),
+                  total: filteredPlayers.length,
+                })}
+              </span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-bg-elevated border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="p-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 disabled:opacity-40 transition"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-slate-300 font-medium px-1">
+                {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="p-1.5 rounded-lg bg-bg-elevated hover:bg-bg-hover border border-slate-700 text-slate-300 disabled:opacity-40 transition"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>

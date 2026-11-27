@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '@/api/settings';
 import { Button } from '@/components/ui/Button';
-import { TextChannelSelect } from '@/components/ui/DiscordSelects';
+import { ChannelListEditor, TextChannelSelect } from '@/components/ui/DiscordSelects';
 import { SkeletonCard } from '@/components/ui/Feedback';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { useDashboard } from '@/context/DashboardContext';
@@ -52,6 +52,12 @@ export function AdminLogPage() {
   const [channelId, setChannelId] = useState<string | null>(
     () => settings?.adminLog.channelId ?? null,
   );
+  const [ignoredChannelIds, setIgnoredChannelIds] = useState<string[]>(
+    () => [...(settings?.adminLog.ignoredChannelIds || [])],
+  );
+  const [eventChannels, setEventChannels] = useState<Partial<Record<keyof AdminLogEvents, string | null>>>(
+    () => ({ ...(settings?.adminLog.eventChannels || {}) }),
+  );
   const [events, setEvents] = useState<AdminLogEvents>(() => ({
     ...DEFAULT_EVENTS,
     ...(settings?.adminLog.events || {}),
@@ -65,6 +71,8 @@ export function AdminLogPage() {
     if (!settings) return;
     setEnabled(Boolean(settings.adminLog.enabled));
     setChannelId(settings.adminLog.channelId ?? null);
+    setIgnoredChannelIds([...(settings.adminLog.ignoredChannelIds || [])]);
+    setEventChannels({ ...(settings.adminLog.eventChannels || {}) });
     setEvents({ ...DEFAULT_EVENTS, ...(settings.adminLog.events || {}) });
     setDirty(false);
   }, [settings]);
@@ -79,7 +87,13 @@ export function AdminLogPage() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      const res = await settingsApi.saveAdminLog({ enabled, channelId, events });
+      const res = await settingsApi.saveAdminLog({
+        enabled,
+        channelId,
+        ignoredChannelIds: ignoredChannelIds.filter(Boolean),
+        eventChannels,
+        events,
+      });
       setSettingsSlice('adminLog', res.adminLog);
       setDirty(false);
       await refreshOverview();
@@ -89,7 +103,17 @@ export function AdminLogPage() {
     } finally {
       setSaving(false);
     }
-  }, [enabled, channelId, events, setSettingsSlice, refreshOverview, showToast, t]);
+  }, [
+    enabled,
+    channelId,
+    ignoredChannelIds,
+    eventChannels,
+    events,
+    setSettingsSlice,
+    refreshOverview,
+    showToast,
+    t,
+  ]);
 
   useDirtyForm(dirty, handleSave, syncFromSettings);
 
@@ -177,22 +201,49 @@ export function AdminLogPage() {
           {eventRows.map((ev) => (
             <div
               key={ev.key}
-              className="flex items-center justify-between gap-3 p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800"
+              className="p-3.5 rounded-xl bg-bg-elevated/60 border border-slate-800 space-y-2.5"
             >
-              <div className="text-sm font-medium text-white inline-flex items-center gap-2">
-                {ev.icon}
-                <span>{t(ev.labelKey)}</span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-white inline-flex items-center gap-2">
+                  {ev.icon}
+                  <span>{t(ev.labelKey)}</span>
+                </div>
+                <ToggleSwitch
+                  checked={Boolean(events[ev.key])}
+                  onChange={(v) => {
+                    setEvents((prev) => ({ ...prev, [ev.key]: v }));
+                    setDirty(true);
+                  }}
+                />
               </div>
-              <ToggleSwitch
-                checked={Boolean(events[ev.key])}
-                onChange={(v) => {
-                  setEvents((prev) => ({ ...prev, [ev.key]: v }));
+              <TextChannelSelect
+                channels={meta?.textChannels ?? []}
+                value={eventChannels[ev.key] ?? null}
+                onChange={(val) => {
+                  setEventChannels((prev) => ({ ...prev, [ev.key]: val }));
                   setDirty(true);
                 }}
+                noneLabel={t('adminlog.defaultChannel')}
+                disabled={!events[ev.key]}
+                className="text-xs py-1.5"
               />
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-bg-elevated/60 border border-slate-800 space-y-3">
+        <label className="text-sm font-semibold text-white block">
+          {t('adminlog.ignoredChannels')}
+        </label>
+        <ChannelListEditor
+          channels={meta?.textChannels ?? []}
+          value={ignoredChannelIds}
+          onChange={(next) => {
+            setIgnoredChannelIds(next);
+            setDirty(true);
+          }}
+        />
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3 pt-2">

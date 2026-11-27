@@ -6,10 +6,30 @@ const {
     deleteWarning,
     clearUserWarnings
 } = require('../storage/warningsStore');
+const {
+    recordModerationCase,
+    setTempBan,
+    deleteTempBan,
+    getDueTempBans
+} = require('../storage/moderationStore');
 const { addActivityLog } = require('./activityLog');
 const { logModerationAction, suppressNextAdminLogEvent } = require('./adminLog');
 
 const MAX_TIMEOUT_MINUTES = 28 * 24 * 60; // 40320 minút (28 dní - limit Discord API)
+const MAX_TEMPBAN_MINUTES = 365 * 24 * 60; // 365 dní
+
+function parseDurationMinutes(raw) {
+    const clean = String(raw || '').trim().toLowerCase();
+    if (!clean) return null;
+    const match = clean.match(/^(\d+)\s*(m|min|minut|minuty|minút|h|hod|hodin|hodiny|hodín|hr|hrs|d|den|deň|dni|dní|day|days)?$/i);
+    if (!match) return null;
+    const num = Number(match[1]);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    const unit = (match[2] || 'm').toLowerCase();
+    if (unit.startsWith('d')) return Math.round(num * 1440);
+    if (unit.startsWith('h')) return Math.round(num * 60);
+    return Math.round(num);
+}
 
 function isModerationCommandEnabled(modModuleKey) {
     const mod = getModerationSettings();
@@ -112,18 +132,27 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
         moderatorTag
     });
 
+    const modCase = recordModerationCase({
+        action: 'warn',
+        userId,
+        userTag: targetTag,
+        moderatorId,
+        moderatorTag,
+        reason: cleanReason
+    });
+
     await sendModDm(targetUser || member?.user, {
         guildName: guild.name,
         title: '⚠️ Dostal si varovanie',
         color: 0xF5A623,
         reason: cleanReason,
-        extra: `Počet varovaní: ${total}`
+        extra: `Počet varovaní: ${total} · Case #${modCase.caseId}`
     });
 
     const modText = moderatorId ? `<@${moderatorId}>` : moderatorTag;
     await logModerationAction(guild, {
         eventKey: 'warnings',
-        title: `⚠️ Varovanie #${warning.id}`,
+        title: `⚠️ Varovanie #${warning.id} · Case #${modCase.caseId}`,
         color: 0xF5A623,
         targetUser: targetUser || member?.user,
         targetId: userId,
@@ -135,7 +164,7 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Warn #${warning.id} for ${targetTag}: ${cleanReason}`,
+        message: `Case #${modCase.caseId} — Warn #${warning.id} for ${targetTag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: userId
     });
@@ -153,16 +182,25 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                     suppressNextAdminLogEvent(guild.id, 'timeout', member.id);
                     const ok = await member.timeout(mins * 60 * 1000, autoReason).then(() => true).catch(() => false);
                     if (ok) {
+                        const escCase = recordModerationCase({
+                            action: 'timeout',
+                            userId: member.id,
+                            userTag: targetTag,
+                            moderatorTag: 'Auto-escalation',
+                            reason: autoReason,
+                            durationMinutes: mins,
+                            expiresAt: Date.now() + mins * 60 * 1000
+                        });
                         await sendModDm(member.user, {
                             guildName: guild.name,
                             title: '🔇 Automatický timeout',
                             color: 0xF5A623,
                             reason: autoReason,
-                            extra: `Trvanie: ${formatDurationMinutes(mins)}`
+                            extra: `Trvanie: ${formatDurationMinutes(mins)} · Case #${escCase.caseId}`
                         });
                         await logModerationAction(guild, {
                             eventKey: 'timeouts',
-                            title: '🔇 Auto-eskalácia — Timeout',
+                            title: `🔇 Auto-eskalácia — Timeout · Case #${escCase.caseId}`,
                             color: 0xF5A623,
                             targetUser: member.user,
                             targetId: member.id,
@@ -173,11 +211,11 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         addActivityLog({
                             level: 'warn',
                             category: 'moderation',
-                            message: `Auto-timeout (${formatDurationMinutes(mins, 'en')}) for ${targetTag} after ${total} warnings.`,
+                            message: `Case #${escCase.caseId} — Auto-timeout (${formatDurationMinutes(mins, 'en')}) for ${targetTag} after ${total} warnings.`,
                             actor: 'Auto-escalation',
                             targetUserId: member.id
                         });
-                        escalation = { action: 'timeout', durationMinutes: mins };
+                        escalation = { action: 'timeout', durationMinutes: mins, caseId: escCase.caseId };
                     }
                 } else if (rule.action === 'kick' && member.kickable) {
                     await sendModDm(member.user, {
@@ -189,9 +227,16 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                     suppressNextAdminLogEvent(guild.id, 'memberLeave', member.id);
                     const ok = await member.kick(autoReason).then(() => true).catch(() => false);
                     if (ok) {
+                        const escCase = recordModerationCase({
+                            action: 'kick',
+                            userId: member.id,
+                            userTag: targetTag,
+                            moderatorTag: 'Auto-escalation',
+                            reason: autoReason
+                        });
                         await logModerationAction(guild, {
                             eventKey: 'memberLeave',
-                            title: '👢 Auto-eskalácia — Kick',
+                            title: `👢 Auto-eskalácia — Kick · Case #${escCase.caseId}`,
                             color: 0xED4245,
                             targetUser: member.user,
                             targetId: member.id,
@@ -201,11 +246,11 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         addActivityLog({
                             level: 'warn',
                             category: 'moderation',
-                            message: `Auto-kick for ${targetTag} after ${total} warnings.`,
+                            message: `Case #${escCase.caseId} — Auto-kick for ${targetTag} after ${total} warnings.`,
                             actor: 'Auto-escalation',
                             targetUserId: member.id
                         });
-                        escalation = { action: 'kick' };
+                        escalation = { action: 'kick', caseId: escCase.caseId };
                     }
                 } else if (rule.action === 'ban' && member.bannable) {
                     await sendModDm(member.user, {
@@ -217,9 +262,16 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                     suppressNextAdminLogEvent(guild.id, 'banAdd', member.id);
                     const ok = await guild.members.ban(member.id, { reason: autoReason }).then(() => true).catch(() => false);
                     if (ok) {
+                        const escCase = recordModerationCase({
+                            action: 'ban',
+                            userId: member.id,
+                            userTag: targetTag,
+                            moderatorTag: 'Auto-escalation',
+                            reason: autoReason
+                        });
                         await logModerationAction(guild, {
                             eventKey: 'bans',
-                            title: '🔨 Auto-eskalácia — Ban',
+                            title: `🔨 Auto-eskalácia — Ban · Case #${escCase.caseId}`,
                             color: 0xED4245,
                             targetUser: member.user,
                             targetId: member.id,
@@ -229,18 +281,18 @@ async function issueWarning({ guild, targetUser, targetMember = null, moderatorI
                         addActivityLog({
                             level: 'warn',
                             category: 'moderation',
-                            message: `Auto-ban for ${targetTag} after ${total} warnings.`,
+                            message: `Case #${escCase.caseId} — Auto-ban for ${targetTag} after ${total} warnings.`,
                             actor: 'Auto-escalation',
                             targetUserId: member.id
                         });
-                        escalation = { action: 'ban' };
+                        escalation = { action: 'ban', caseId: escCase.caseId };
                     }
                 }
             }
         }
     }
 
-    return { ok: true, warning, total, escalation };
+    return { ok: true, warning, total, escalation, caseId: modCase.caseId };
 }
 
 async function removeWarning({ guild, targetUserId, targetLabel = null, warningId, moderatorId = null, moderatorTag = 'Neznámy', lang = 'sk' }) {
@@ -317,18 +369,29 @@ async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Be
     suppressNextAdminLogEvent(guild.id, 'timeout', targetMember.id);
     await targetMember.timeout(mins * 60 * 1000, cleanReason);
 
+    const modCase = recordModerationCase({
+        action: 'timeout',
+        userId: targetMember.id,
+        userTag: targetMember.user.tag,
+        moderatorId,
+        moderatorTag,
+        reason: cleanReason,
+        durationMinutes: mins,
+        expiresAt: Date.now() + mins * 60 * 1000
+    });
+
     const durLabel = formatDurationMinutes(mins);
     await sendModDm(targetMember.user, {
         guildName: guild.name,
         title: '🔇 Dostal si timeout',
         color: 0xF5A623,
         reason: cleanReason,
-        extra: `Trvanie: ${durLabel}`
+        extra: `Trvanie: ${durLabel} · Case #${modCase.caseId}`
     });
 
     await logModerationAction(guild, {
         eventKey: 'timeouts',
-        title: '🔇 Timeout',
+        title: `🔇 Timeout · Case #${modCase.caseId}`,
         color: 0xF5A623,
         targetUser: targetMember.user,
         targetId: targetMember.id,
@@ -340,12 +403,12 @@ async function applyTimeout({ guild, targetMember, durationMinutes, reason = 'Be
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Timeout ${formatDurationMinutes(mins, 'en')} for ${targetMember.user.tag}: ${cleanReason}`,
+        message: `Case #${modCase.caseId} — Timeout ${formatDurationMinutes(mins, 'en')} for ${targetMember.user.tag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: targetMember.id
     });
 
-    return { ok: true, durationLabel: lang === 'en' ? formatDurationMinutes(mins, 'en') : durLabel };
+    return { ok: true, durationLabel: lang === 'en' ? formatDurationMinutes(mins, 'en') : durLabel, caseId: modCase.caseId };
 }
 
 async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
@@ -362,9 +425,18 @@ async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout'
     suppressNextAdminLogEvent(guild.id, 'timeout', targetMember.id);
     await targetMember.timeout(null, cleanReason);
 
+    const modCase = recordModerationCase({
+        action: 'timeout_remove',
+        userId: targetMember.id,
+        userTag: targetMember.user.tag,
+        moderatorId,
+        moderatorTag,
+        reason: cleanReason
+    });
+
     await logModerationAction(guild, {
         eventKey: 'timeouts',
-        title: '🔊 Timeout zrušený',
+        title: `🔊 Timeout zrušený · Case #${modCase.caseId}`,
         color: 0x57F287,
         targetUser: targetMember.user,
         targetId: targetMember.id,
@@ -375,12 +447,12 @@ async function removeTimeout({ guild, targetMember, reason = 'Zrušený timeout'
     addActivityLog({
         level: 'info',
         category: 'moderation',
-        message: `Removed timeout for ${targetMember.user.tag}.`,
+        message: `Case #${modCase.caseId} — Removed timeout for ${targetMember.user.tag}.`,
         actor: moderatorTag,
         targetUserId: targetMember.id
     });
 
-    return { ok: true };
+    return { ok: true, caseId: modCase.caseId };
 }
 
 async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
@@ -406,9 +478,18 @@ async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderat
     suppressNextAdminLogEvent(guild.id, 'memberLeave', targetUser.id);
     await targetMember.kick(cleanReason);
 
+    const modCase = recordModerationCase({
+        action: 'kick',
+        userId: targetUser.id,
+        userTag: targetUser.tag,
+        moderatorId,
+        moderatorTag,
+        reason: cleanReason
+    });
+
     await logModerationAction(guild, {
         eventKey: 'memberLeave',
-        title: '👢 Kick',
+        title: `👢 Kick · Case #${modCase.caseId}`,
         color: 0xF5A623,
         targetUser,
         targetId: targetUser.id,
@@ -419,15 +500,15 @@ async function kickMember({ guild, targetMember, reason = 'Bez dôvodu', moderat
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Kicked ${targetUser.tag}: ${cleanReason}`,
+        message: `Case #${modCase.caseId} — Kicked ${targetUser.tag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: targetUser.id
     });
 
-    return { ok: true, targetTag: targetUser.tag };
+    return { ok: true, targetTag: targetUser.tag, caseId: modCase.caseId };
 }
 
-async function banMember({ guild, targetUser = null, targetMember = null, deleteMessageSeconds = 0, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
+async function banMember({ guild, targetUser = null, targetMember = null, deleteMessageSeconds = 0, durationMinutes = null, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', actorMember = null, lang = 'sk' }) {
     const member = targetMember || (targetUser?.id ? guild.members.cache.get(targetUser.id) : null);
     const userId = targetUser?.id || member?.id;
     if (!userId) {
@@ -445,6 +526,18 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
         return { ok: false, error: pickLang(lang, 'You cannot ban yourself.', 'Nemôžeš zabanovať sám seba.') };
     }
 
+    let tempMins = null;
+    if (durationMinutes !== null && durationMinutes !== undefined && durationMinutes !== '') {
+        const parsed = Math.round(Number(durationMinutes));
+        if (!Number.isFinite(parsed) || parsed < 1 || parsed > MAX_TEMPBAN_MINUTES) {
+            return {
+                ok: false,
+                error: pickLang(lang, 'Tempban duration must be between 1 minute and 365 days.', 'Trvanie dočasného banu musí byť 1 minúta až 365 dní.')
+            };
+        }
+        tempMins = parsed;
+    }
+
     if (member) {
         const check = canModerateTarget(guild, actorMember, member, lang);
         if (!check.ok) return check;
@@ -453,6 +546,10 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
         }
     }
 
+    const isTemp = Boolean(tempMins);
+    const expiresAt = isTemp ? Date.now() + tempMins * 60 * 1000 : null;
+    const durLabelSk = isTemp ? formatDurationMinutes(tempMins, 'sk') : null;
+    const durLabelEn = isTemp ? formatDurationMinutes(tempMins, 'en') : null;
     const cleanReason = String(reason || '').trim().slice(0, 500) || 'Bez dôvodu';
     const userObj = targetUser || member?.user || null;
     const targetTag = userObj?.tag || `ID ${userId}`;
@@ -460,9 +557,10 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
     if (userObj) {
         await sendModDm(userObj, {
             guildName: guild.name,
-            title: '🔨 Bol si zabanovaný',
+            title: isTemp ? '🔨 Dostal si dočasný ban' : '🔨 Bol si zabanovaný',
             color: 0xED4245,
-            reason: cleanReason
+            reason: cleanReason,
+            extra: isTemp ? `Trvanie: ${durLabelSk}` : null
         });
     }
 
@@ -470,25 +568,66 @@ async function banMember({ guild, targetUser = null, targetMember = null, delete
     suppressNextAdminLogEvent(guild.id, 'banAdd', userId);
     await guild.members.ban(userId, { deleteMessageSeconds: delSec, reason: cleanReason });
 
+    const modCase = recordModerationCase({
+        action: isTemp ? 'tempban' : 'ban',
+        userId,
+        userTag: targetTag,
+        moderatorId,
+        moderatorTag,
+        reason: cleanReason,
+        durationMinutes: tempMins,
+        expiresAt
+    });
+
+    if (isTemp) {
+        setTempBan(userId, {
+            guildId: guild.id,
+            userId,
+            userTag: targetTag,
+            caseId: modCase.caseId,
+            reason: cleanReason,
+            expiresAt,
+            createdAt: Date.now()
+        });
+    } else {
+        deleteTempBan(userId);
+    }
+
+    const extraFields = isTemp
+        ? [
+            { name: 'Trvanie', value: durLabelSk, inline: true },
+            { name: 'Vyprší', value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true }
+        ]
+        : [];
+
     await logModerationAction(guild, {
         eventKey: 'bans',
-        title: '🔨 Ban',
+        title: `${isTemp ? '⏳ Tempban' : '🔨 Ban'} · Case #${modCase.caseId}`,
         color: 0xED4245,
         targetUser: userObj,
         targetId: userId,
         moderatorText: moderatorId ? `<@${moderatorId}>` : moderatorTag,
-        reason: cleanReason
+        reason: cleanReason,
+        extraFields
     });
 
     addActivityLog({
         level: 'warn',
         category: 'moderation',
-        message: `Banned ${targetTag}: ${cleanReason}`,
+        message: isTemp
+            ? `Case #${modCase.caseId} — Tempban (${durLabelEn}) for ${targetTag}: ${cleanReason}`
+            : `Case #${modCase.caseId} — Banned ${targetTag}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: userId
     });
 
-    return { ok: true, targetTag };
+    return {
+        ok: true,
+        targetTag,
+        caseId: modCase.caseId,
+        expiresAt,
+        durationLabel: isTemp ? (lang === 'en' ? durLabelEn : durLabelSk) : null
+    };
 }
 
 async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = null, moderatorTag = 'Neznámy', lang = 'sk' }) {
@@ -496,6 +635,8 @@ async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = 
     if (!/^\d{15,22}$/.test(cleanId)) {
         return { ok: false, error: pickLang(lang, 'Enter a valid Discord User ID.', 'Zadaj platné Discord User ID.') };
     }
+
+    deleteTempBan(cleanId);
 
     const banInfo = await guild.bans.fetch(cleanId).catch(() => null);
     if (!banInfo) {
@@ -506,9 +647,18 @@ async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = 
     suppressNextAdminLogEvent(guild.id, 'banRemove', cleanId);
     await guild.members.unban(cleanId, cleanReason);
 
+    const modCase = recordModerationCase({
+        action: 'unban',
+        userId: cleanId,
+        userTag: banInfo.user?.tag || `ID ${cleanId}`,
+        moderatorId,
+        moderatorTag,
+        reason: cleanReason
+    });
+
     await logModerationAction(guild, {
         eventKey: 'bans',
-        title: '🕊️ Unban',
+        title: `🕊️ Unban · Case #${modCase.caseId}`,
         color: 0x57F287,
         targetUser: banInfo.user,
         targetId: cleanId,
@@ -519,16 +669,44 @@ async function unbanUser({ guild, userId, reason = 'Bez dôvodu', moderatorId = 
     addActivityLog({
         level: 'info',
         category: 'moderation',
-        message: `Unbanned ${banInfo.user?.tag || cleanId}: ${cleanReason}`,
+        message: `Case #${modCase.caseId} — Unbanned ${banInfo.user?.tag || cleanId}: ${cleanReason}`,
         actor: moderatorTag,
         targetUserId: cleanId
     });
 
-    return { ok: true, targetTag: banInfo.user?.tag || cleanId };
+    return { ok: true, targetTag: banInfo.user?.tag || cleanId, caseId: modCase.caseId };
+}
+
+async function processExpiredTempBans(client) {
+    const due = getDueTempBans(Date.now());
+    if (due.length === 0) return;
+
+    for (const tb of due) {
+        const guild = (tb.guildId && (client.guilds.cache.get(tb.guildId) || await client.guilds.fetch(tb.guildId).catch(() => null)))
+            || client.guilds.cache.first();
+        if (!guild) continue;
+
+        const existingBan = await guild.bans.fetch(tb.userId).catch(() => null);
+        if (!existingBan) {
+            deleteTempBan(tb.userId);
+            continue;
+        }
+
+        await unbanUser({
+            guild,
+            userId: tb.userId,
+            reason: tb.caseId ? `Vypršal dočasný ban (Case #${tb.caseId})` : 'Vypršal dočasný ban',
+            moderatorTag: 'Auto-Unban'
+        }).catch(err => {
+            console.error(`Chyba pri automatickom unbane ${tb.userId}:`, err);
+        });
+    }
 }
 
 module.exports = {
     MAX_TIMEOUT_MINUTES,
+    MAX_TEMPBAN_MINUTES,
+    parseDurationMinutes,
     isModerationCommandEnabled,
     hasModerationAccess,
     canModerateTarget,
@@ -540,5 +718,6 @@ module.exports = {
     removeTimeout,
     kickMember,
     banMember,
-    unbanUser
+    unbanUser,
+    processExpiredTempBans
 };

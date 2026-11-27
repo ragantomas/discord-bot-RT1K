@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { PLAYER_ACTIVITY_FILE } = require('../config');
+const { writeJsonAtomic } = require('../storage/atomicWrite');
 
 const MAX_VOICE_HISTORY = 25;
 const MAX_DAILY_DAYS = 14;
@@ -21,12 +22,24 @@ function loadActivityMap() {
 
 const activityMap = loadActivityMap();
 
+function persistNow() {
+    if (persistTimer) {
+        clearTimeout(persistTimer);
+        persistTimer = null;
+    }
+    try {
+        writeJsonAtomic(PLAYER_ACTIVITY_FILE, activityMap);
+    } catch (err) {
+        console.error('Chyba pri ukladaní aktivity hráčov:', err);
+    }
+}
+
 function schedulePersist() {
     if (persistTimer) return;
     persistTimer = setTimeout(() => {
         persistTimer = null;
         try {
-            fs.writeFileSync(PLAYER_ACTIVITY_FILE, JSON.stringify(activityMap, null, 2));
+            writeJsonAtomic(PLAYER_ACTIVITY_FILE, activityMap);
         } catch (err) {
             console.error('Chyba pri ukladaní aktivity hráčov:', err);
         }
@@ -229,6 +242,47 @@ function getAllPlayerActivity() {
     return out;
 }
 
+function flushActiveVoiceSessionsInPlace() {
+    const now = Date.now();
+    for (const userId of activeVoiceSessions.keys()) {
+        const startedAt = activeVoiceSessions.get(userId);
+        if (!startedAt) continue;
+        const rec = ensureUserRecord(userId);
+        const elapsedSec = Math.max(0, Math.floor((now - startedAt) / 1000));
+        if (elapsedSec > 0) {
+            rec.voiceSecondsTotal = (Number(rec.voiceSecondsTotal) || 0) + elapsedSec;
+        }
+        activeVoiceSessions.set(userId, now);
+    }
+}
+
+function flushAllVoiceSessionsAndPersist() {
+    flushActiveVoiceSessionsInPlace();
+    persistNow();
+}
+
+function exportPlayerActivityData() {
+    flushActiveVoiceSessionsInPlace();
+    return JSON.parse(JSON.stringify(activityMap));
+}
+
+function restorePlayerActivityData(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return {};
+    }
+    for (const k of Object.keys(activityMap)) {
+        delete activityMap[k];
+    }
+    for (const [k, v] of Object.entries(raw)) {
+        if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+        if (k === '_daily' || /^\d{15,22}$/.test(k)) {
+            activityMap[k] = JSON.parse(JSON.stringify(v));
+        }
+    }
+    persistNow();
+    return exportPlayerActivityData();
+}
+
 module.exports = {
     recordMessageActivity,
     recordVoiceActivity,
@@ -237,5 +291,9 @@ module.exports = {
     seedActiveVoiceSessions,
     getDailyActivity,
     getPlayerActivity,
-    getAllPlayerActivity
+    getAllPlayerActivity,
+    flushAllVoiceSessionsAndPersist,
+    exportPlayerActivityData,
+    restorePlayerActivityData,
+    persistNow
 };
