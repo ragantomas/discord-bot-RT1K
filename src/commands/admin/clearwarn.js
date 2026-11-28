@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { removeWarning, clearAllWarnings } = require('../../services/moderation');
 
 module.exports = {
@@ -30,11 +30,11 @@ module.exports = {
                 moderatorTag: interaction.user.tag
             });
             if (!res.ok) {
-                return interaction.reply({ content: res.error, ephemeral: true });
+                return interaction.reply({ content: res.error, flags: MessageFlags.Ephemeral });
             }
             return interaction.reply({
                 content: `Varovanie **#${warningId}** pre <@${targetUser.id}> bolo zmazané. Zostáva: ${res.remaining}.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -46,12 +46,12 @@ module.exports = {
             moderatorTag: interaction.user.tag
         });
         if (!res.ok) {
-            return interaction.reply({ content: res.error, ephemeral: true });
+            return interaction.reply({ content: res.error, flags: MessageFlags.Ephemeral });
         }
 
         return interaction.reply({
             content: `Vymazané všetky varovania pre <@${targetUser.id}> (${res.removedCount}).`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 };

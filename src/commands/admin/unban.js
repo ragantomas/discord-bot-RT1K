@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { unbanUser } = require('../../services/moderation');
 
 module.exports = {
@@ -29,7 +29,7 @@ module.exports = {
         });
 
         if (!res.ok) {
-            return interaction.reply({ content: res.error, ephemeral: true });
+            return interaction.reply({ content: res.error, flags: MessageFlags.Ephemeral });
         }
 
         const embed = new EmbedBuilder()

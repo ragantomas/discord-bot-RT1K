@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { banMember, parseDurationMinutes, MAX_TEMPBAN_MINUTES } = require('../../services/moderation');
 
 module.exports = {
@@ -42,7 +42,7 @@ module.exports = {
             if (!durationMinutes || durationMinutes > MAX_TEMPBAN_MINUTES) {
                 return interaction.reply({
                     content: 'Neplatné trvanie banu. Použi formát napr. `30m`, `6h` alebo `7d` (max 365 dní).',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -62,7 +62,7 @@ module.exports = {
         });
 
         if (!res.ok) {
-            return interaction.reply({ content: res.error, ephemeral: true });
+            return interaction.reply({ content: res.error, flags: MessageFlags.Ephemeral });
         }
 
         const embed = new EmbedBuilder()

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { kickMember } = require('../../services/moderation');
 
 module.exports = {
@@ -22,7 +22,7 @@ module.exports = {
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
         if (!targetMember) {
-            return interaction.reply({ content: 'Hráč sa nenachádza na serveri.', ephemeral: true });
+            return interaction.reply({ content: 'Hráč sa nenachádza na serveri.', flags: MessageFlags.Ephemeral });
         }
 
         const res = await kickMember({
@@ -35,7 +35,7 @@ module.exports = {
         });
 
         if (!res.ok) {
-            return interaction.reply({ content: res.error, ephemeral: true });
+            return interaction.reply({ content: res.error, flags: MessageFlags.Ephemeral });
         }
 
         const embed = new EmbedBuilder()

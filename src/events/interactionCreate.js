@@ -1,11 +1,11 @@
-const { Events } = require('discord.js');
+const { Events, MessageFlags } = require('discord.js');
 const { handleTempVoiceInteraction } = require('../services/tempVoicePanel');
 const { handleTicketInteraction } = require('../services/tickets');
 const { isModerationCommandEnabled, hasModerationAccess } = require('../services/moderation');
 const { loadSettings } = require('../storage/settingsStore');
 
 async function sendInteractionError(interaction, message) {
-    const errorPayload = { content: message, ephemeral: true };
+    const errorPayload = { content: message, flags: MessageFlags.Ephemeral };
 
     if (interaction.deferred) {
         await interaction.editReply({ content: errorPayload.content }).catch(() => null);
@@ -47,13 +47,13 @@ module.exports = {
             if (!isModerationCommandEnabled(command.modModuleKey)) {
                 return interaction.reply({
                     content: 'Tento príkaz je vypnutý.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
             if (!hasModerationAccess(interaction.member)) {
                 return interaction.reply({
                     content: 'Na tento príkaz nemáš oprávnenie.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         } else {
@@ -68,7 +68,7 @@ module.exports = {
                 if (!hasBypassRole) {
                     return interaction.reply({
                         content: `Príkazy bota je možné používať iba v kanáli <#${allowedChannelId}>.`,
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             }

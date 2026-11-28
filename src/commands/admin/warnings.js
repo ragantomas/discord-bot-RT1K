@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { getUserWarnings } = require('../../storage/warningsStore');
 
 module.exports = {
@@ -20,7 +20,7 @@ module.exports = {
         if (list.length === 0) {
             return interaction.reply({
                 content: `<@${targetUser.id}> nemá žiadne varovania.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -37,6 +37,6 @@ module.exports = {
             .setFooter({ text: `Celkom: ${list.length}` })
             .setTimestamp();
 
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 };

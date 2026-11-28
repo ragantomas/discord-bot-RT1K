@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, MessageFlags } = require('discord.js');
 const { issueWarning } = require('../../services/moderation');
 
 module.exports = {
@@ -22,7 +22,7 @@ module.exports = {
         const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
         if (targetUser.bot) {
-            return interaction.reply({ content: 'Bota nie je možné varovať.', ephemeral: true });
+            return interaction.reply({ content: 'Bota nie je možné varovať.', flags: MessageFlags.Ephemeral });
         }
 
         const res = await issueWarning({
@@ -36,7 +36,7 @@ module.exports = {
         });
 
         if (!res.ok) {
-            return interaction.reply({ content: res.error, ephemeral: true });
+            return interaction.reply({ content: res.error, flags: MessageFlags.Ephemeral });
         }
 
         const embed = new EmbedBuilder()

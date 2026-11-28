@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
 const { addActivityLog } = require('../../services/activityLog');
 const { logModerationAction } = require('../../services/adminLog');
 
@@ -25,13 +25,13 @@ module.exports = {
         const reason = interaction.options.getString('dovod') || 'Kanál bol zamknutý.';
 
         if (!channel || !channel.isTextBased() || !channel.permissionOverwrites) {
-            return interaction.reply({ content: 'Tento kanál nie je možné zamknúť.', ephemeral: true });
+            return interaction.reply({ content: 'Tento kanál nie je možné zamknúť.', flags: MessageFlags.Ephemeral });
         }
 
         const me = interaction.guild.members.me;
         const perms = channel.permissionsFor(me);
         if (!perms?.has(PermissionFlagsBits.ManageChannels)) {
-            return interaction.reply({ content: 'Bot nemá právo Manage Channels v tomto kanáli.', ephemeral: true });
+            return interaction.reply({ content: 'Bot nemá právo Manage Channels v tomto kanáli.', flags: MessageFlags.Ephemeral });
         }
 
         await channel.permissionOverwrites.edit(
@@ -67,6 +67,6 @@ module.exports = {
         }
 
         await channel.send({ embeds: [embed] }).catch(() => null);
-        return interaction.reply({ content: `Kanál <#${channel.id}> bol zamknutý.`, ephemeral: true });
+        return interaction.reply({ content: `Kanál <#${channel.id}> bol zamknutý.`, flags: MessageFlags.Ephemeral });
     }
 };

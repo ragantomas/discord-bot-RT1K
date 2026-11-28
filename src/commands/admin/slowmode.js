@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags } = require('discord.js');
 const { addActivityLog } = require('../../services/activityLog');
 const { logModerationAction } = require('../../services/adminLog');
 
@@ -25,13 +25,13 @@ module.exports = {
         const channel = interaction.options.getChannel('kanal') || interaction.channel;
 
         if (!channel || typeof channel.setRateLimitPerUser !== 'function') {
-            return interaction.reply({ content: 'Tento kanál nepodporuje slowmode.', ephemeral: true });
+            return interaction.reply({ content: 'Tento kanál nepodporuje slowmode.', flags: MessageFlags.Ephemeral });
         }
 
         const me = interaction.guild.members.me;
         const perms = channel.permissionsFor(me);
         if (!perms?.has(PermissionFlagsBits.ManageChannels)) {
-            return interaction.reply({ content: 'Bot nemá právo Manage Channels v tomto kanáli.', ephemeral: true });
+            return interaction.reply({ content: 'Bot nemá právo Manage Channels v tomto kanáli.', flags: MessageFlags.Ephemeral });
         }
 
         await channel.setRateLimitPerUser(seconds, `Nastavil ${interaction.user.tag}`);

@@ -263,14 +263,14 @@ async function handleTicketInteraction(interaction) {
 
     if (interaction.isButton() && interaction.customId === 'ticket:open') {
         if (!config.enabled) {
-            return interaction.reply({ content: 'Ticket systém je momentálne vypnutý.', ephemeral: true });
+            return interaction.reply({ content: 'Ticket systém je momentálne vypnutý.', flags: MessageFlags.Ephemeral });
         }
 
         const existingChannel = await findExistingUserOpenTicket(guild, interaction.user.id);
         if (existingChannel) {
             return interaction.reply({
                 content: `Už máš otvorený ticket: <#${existingChannel.id}>`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -303,7 +303,7 @@ async function handleTicketInteraction(interaction) {
     }
 
     if (interaction.isModalSubmit() && interaction.customId === 'ticket:create_modal') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!config.enabled) {
             return interaction.editReply('Ticket systém je momentálne vypnutý.');
@@ -441,10 +441,10 @@ async function handleTicketInteraction(interaction) {
     if (interaction.isButton() && interaction.customId === 'ticket:claim') {
         const ticket = getOpenTicket(interaction.channelId);
         if (!ticket) {
-            return interaction.reply({ content: 'Tento kanál nie je evidovaný ako aktívny ticket.', ephemeral: true });
+            return interaction.reply({ content: 'Tento kanál nie je evidovaný ako aktívny ticket.', flags: MessageFlags.Ephemeral });
         }
         if (!isTicketStaff(interaction.member, config)) {
-            return interaction.reply({ content: 'Prevziať ticket môže iba support tím alebo administrátor.', ephemeral: true });
+            return interaction.reply({ content: 'Prevziať ticket môže iba support tím alebo administrátor.', flags: MessageFlags.Ephemeral });
         }
 
         ticket.claimedById = interaction.user.id;
@@ -470,13 +470,13 @@ async function handleTicketInteraction(interaction) {
     if (interaction.isButton() && interaction.customId === 'ticket:close') {
         const ticket = getOpenTicket(interaction.channelId);
         if (!ticket) {
-            return interaction.reply({ content: 'Tento kanál nie je evidovaný ako aktívny ticket.', ephemeral: true });
+            return interaction.reply({ content: 'Tento kanál nie je evidovaný ako aktívny ticket.', flags: MessageFlags.Ephemeral });
         }
         if (interaction.user.id !== ticket.userId && !isTicketStaff(interaction.member, config)) {
-            return interaction.reply({ content: 'Ticket môže zatvoriť iba jeho autor alebo support tím.', ephemeral: true });
+            return interaction.reply({ content: 'Ticket môže zatvoriť iba jeho autor alebo support tím.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         return closeTicketChannel(interaction.client, interaction.channelId, interaction.user.tag, interaction);
     }
 }

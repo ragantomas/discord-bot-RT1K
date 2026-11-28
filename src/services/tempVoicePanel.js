@@ -6,7 +6,8 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    UserSelectMenuBuilder
+    UserSelectMenuBuilder,
+    MessageFlags
 } = require('discord.js');
 const { getTempRoom, setTempRoom } = require('../storage/settingsStore');
 
@@ -78,7 +79,7 @@ function buildUserSelectReply(customId, placeholder, content) {
             .setMinValues(1)
             .setMaxValues(1)
     );
-    return { content, components: [row], ephemeral: true };
+    return { content, components: [row], flags: MessageFlags.Ephemeral };
 }
 
 async function handleButtonAction(interaction, action, channel, room) {
@@ -120,7 +121,7 @@ async function handleButtonAction(interaction, action, channel, room) {
     }
 
     if (action === 'lock') {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         room.locked = !room.locked;
 
         await channel.permissionOverwrites.edit(room.ownerId, {
@@ -178,11 +179,11 @@ async function handleModalAction(interaction, action, channel, room) {
         if (!newName || newName.length > 100) {
             return interaction.reply({
                 content: 'Názov miestnosti musí mať 1 až 100 znakov.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
             await channel.setName(newName);
         } catch (err) {
@@ -199,7 +200,7 @@ async function handleModalAction(interaction, action, channel, room) {
         if (!/^\d+$/.test(rawValue)) {
             return interaction.reply({
                 content: 'Zadaj celé číslo od `0` do `99`.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -207,11 +208,11 @@ async function handleModalAction(interaction, action, channel, room) {
         if (newLimit < 0 || newLimit > 99) {
             return interaction.reply({
                 content: 'Limit musí byť v rozsahu `0` až `99` (`0` = bez limitu).',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await channel.setUserLimit(newLimit);
         await refreshControlPanel(channel, room);
 
@@ -293,13 +294,13 @@ async function handleTempVoiceInteraction(interaction) {
         if (interaction.isUserSelectMenu()) {
             return interaction.update({ content: 'Táto dočasná miestnosť už neexistuje.', components: [] });
         }
-        return interaction.reply({ content: 'Táto dočasná miestnosť už neexistuje.', ephemeral: true });
+        return interaction.reply({ content: 'Táto dočasná miestnosť už neexistuje.', flags: MessageFlags.Ephemeral });
     }
 
     if (room.ownerId !== interaction.user.id) {
         return interaction.reply({
             content: 'Toto ovládanie môže používať len aktuálny majiteľ miestnosti.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 

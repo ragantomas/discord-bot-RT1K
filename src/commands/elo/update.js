@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { loadUsers } = require('../../storage/usersStore');
 const { updateMemberRank } = require('../../services/ranks');
 
@@ -11,10 +11,10 @@ module.exports = {
         const users = loadUsers();
         const entry = users[interaction.user.id];
         if (!entry) {
-            return interaction.reply({ content: 'Najprv si prepoj účet cez `/link`.', ephemeral: true });
+            return interaction.reply({ content: 'Najprv si prepoj účet cez `/link`.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const result = await updateMemberRank(interaction.member, entry.steamId, users);
         if (result.error) return interaction.editReply(result.error);
         if (result.elo === null) {

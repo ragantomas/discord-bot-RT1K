@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const { addActivityLog } = require('../../services/activityLog');
 const { logModerationAction, suppressNextAdminLogEvent } = require('../../services/adminLog');
 
@@ -27,16 +27,16 @@ module.exports = {
         const channel = interaction.channel;
 
         if (!channel || !channel.isTextBased() || typeof channel.bulkDelete !== 'function') {
-            return interaction.reply({ content: 'Tento kanál nepodporuje hromadné mazanie.', ephemeral: true });
+            return interaction.reply({ content: 'Tento kanál nepodporuje hromadné mazanie.', flags: MessageFlags.Ephemeral });
         }
 
         const me = interaction.guild.members.me;
         const perms = channel.permissionsFor(me);
         if (!perms?.has([PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory])) {
-            return interaction.reply({ content: 'Bot nemá právo Manage Messages alebo Read Message History.', ephemeral: true });
+            return interaction.reply({ content: 'Bot nemá právo Manage Messages alebo Read Message History.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const fetchLimit = filterUser ? 100 : count;
         const fetched = await channel.messages.fetch({ limit: fetchLimit }).catch(() => null);

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { loadUsers, saveUsers, appendEloHistory } = require('../../storage/usersStore');
 const { fetchLeetifyProfile } = require('../../services/leetify');
 const { getRankForElo, updateMemberRank } = require('../../services/ranks');
@@ -22,7 +22,7 @@ module.exports = {
                 content: targetUser.id === interaction.user.id
                     ? 'Najprv si prepoj účet cez `/link`.'
                     : `<@${targetUser.id}> ešte nemá prepojený Steam účet.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 

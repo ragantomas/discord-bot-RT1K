@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { loadUsers, saveUsers, appendEloHistory } = require('../../storage/usersStore');
 const { resolveSteam64Id } = require('../../services/steam');
 const { updateMemberRank } = require('../../services/ranks');
@@ -18,7 +18,7 @@ module.exports = {
 
     async execute(interaction) {
         const input = interaction.options.getString('profil');
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const steamId = await resolveSteam64Id(input);
         if (!steamId) {
