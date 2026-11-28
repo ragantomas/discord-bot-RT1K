@@ -92,6 +92,7 @@ const { sendTestAdminLogMessage } = require('../src/services/adminLog');
 const { sendTestWelcome } = require('../src/services/welcome');
 const { sendOrUpdateTicketPanel, closeTicketChannel } = require('../src/services/tickets');
 const { registerCommands, syncAdminCommandPermissions } = require('../src/handlers/commandHandler');
+const { cancelResponseBody } = require('../src/services/http');
 const {
     issueWarning,
     removeWarning,
@@ -802,6 +803,7 @@ function startWebServer(client) {
             });
 
             if (!tokenRes.ok) {
+                await cancelResponseBody(tokenRes);
                 console.error('Discord OAuth2 token exchange zlyhal:', tokenRes.status);
                 return res.redirect('/?error=oauth_failed');
             }
@@ -812,6 +814,7 @@ function startWebServer(client) {
             });
 
             if (!userRes.ok) {
+                await cancelResponseBody(userRes);
                 console.error('Discord /users/@me zlyhal:', userRes.status);
                 return res.redirect('/?error=oauth_failed');
             }

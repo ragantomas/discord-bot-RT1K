@@ -564,6 +564,17 @@ function buildMigratedSettings() {
     return normalizeSettings(migrated);
 }
 
+let cachedSettings = null;
+let cachedSettingsMtimeMs = null;
+
+function getFileMtimeMs(filePath) {
+    try {
+        return fs.statSync(filePath).mtimeMs;
+    } catch {
+        return null;
+    }
+}
+
 function settingsFileExists() {
     return fs.existsSync(SETTINGS_FILE);
 }
@@ -571,22 +582,33 @@ function settingsFileExists() {
 function saveSettings(settings) {
     const normalized = normalizeSettings(settings);
     writeJsonAtomic(SETTINGS_FILE, normalized);
+    cachedSettings = normalized;
+    cachedSettingsMtimeMs = getFileMtimeMs(SETTINGS_FILE);
     return normalized;
 }
 
 function loadSettings() {
-    if (!fs.existsSync(SETTINGS_FILE)) {
+    const mtimeMs = getFileMtimeMs(SETTINGS_FILE);
+    if (mtimeMs === null) {
+        cachedSettings = null;
+        cachedSettingsMtimeMs = null;
         const initial = buildMigratedSettings();
-        saveSettings(initial);
-        return initial;
+        return saveSettings(initial);
+    }
+
+    if (cachedSettings && cachedSettingsMtimeMs === mtimeMs) {
+        return cachedSettings;
     }
 
     const raw = readJsonSafe(SETTINGS_FILE);
-    return normalizeSettings(raw);
+    const normalized = normalizeSettings(raw);
+    cachedSettings = normalized;
+    cachedSettingsMtimeMs = mtimeMs;
+    return normalized;
 }
 
 function updateSettings(mutator) {
-    const current = loadSettings();
+    const current = structuredClone(loadSettings());
     const updated = typeof mutator === 'function' ? (mutator(current) || current) : { ...current, ...mutator };
     return saveSettings(updated);
 }

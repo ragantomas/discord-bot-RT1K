@@ -3,6 +3,7 @@ const path = require('path');
 const { Collection } = require('discord.js');
 const { OWNER_ID } = require('../config');
 const { getModerationSettings } = require('../storage/settingsStore');
+const { fetchWithTimeout, cancelResponseBody } = require('../services/http');
 
 function getCommandFiles(dir) {
     if (!fs.existsSync(dir)) return [];
@@ -88,15 +89,18 @@ async function syncAdminCommandPermissions(client, guild, registeredCommands, us
 
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                const res = await fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        Authorization: `Bearer ${userAccessToken}`,
-                        'Content-Type': 'application/json'
+                const res = await fetchWithTimeout(
+                    url,
+                    {
+                        method: 'PUT',
+                        headers: {
+                            Authorization: `Bearer ${userAccessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ permissions })
                     },
-                    body: JSON.stringify({ permissions }),
-                    signal: AbortSignal.timeout(10000)
-                });
+                    10000
+                );
 
                 if (res.status === 429) {
                     const rlData = await res.json().catch(() => ({}));
@@ -117,6 +121,7 @@ async function syncAdminCommandPermissions(client, guild, registeredCommands, us
                 }
 
                 if (res.ok) {
+                    await cancelResponseBody(res);
                     syncedCount++;
                     const remaining = res.headers.get('x-ratelimit-remaining');
                     if (remaining === '0' && i < adminCmds.length - 1) {

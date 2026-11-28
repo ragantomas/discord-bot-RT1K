@@ -10,29 +10,31 @@ const {
     updateCsStatusSettings
 } = require('../storage/settingsStore');
 const { addThrottledErrorLog } = require('./activityLog');
+const { fetchWithTimeout, cancelResponseBody } = require('./http');
 
 const REQUEST_TIMEOUT_MS = 8000;
 
 const EU_DATACENTER_REGEX = /^(EU\b|Poland|Spain|Austria|Germany|Sweden|Netherlands|Finland|France|UK|United Kingdom|Frankfurt|Vienna|Warsaw|Stockholm|Amsterdam|Madrid|London|Helsinki)/i;
 
-async function fetchWithTimeout(url) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-        return await fetch(url, {
-            headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' },
-            signal: controller.signal
-        });
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
-
 async function probeEndpoint(url) {
     const start = Date.now();
     try {
-        const res = await fetchWithTimeout(url);
+        let res = await fetchWithTimeout(
+            url,
+            { method: 'HEAD', headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            REQUEST_TIMEOUT_MS
+        );
+        await cancelResponseBody(res);
+
+        if (res.status === 405 || res.status === 501) {
+            res = await fetchWithTimeout(
+                url,
+                { method: 'GET', headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+                REQUEST_TIMEOUT_MS
+            );
+            await cancelResponseBody(res);
+        }
+
         return {
             ok: res.ok,
             status: res.status,
@@ -50,9 +52,14 @@ async function probeEndpoint(url) {
 async function fetchCs2PlayerCount() {
     try {
         const res = await fetchWithTimeout(
-            `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${CS2_APP_ID}`
+            `https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=${CS2_APP_ID}`,
+            { headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            REQUEST_TIMEOUT_MS
         );
-        if (!res.ok) return null;
+        if (!res.ok) {
+            await cancelResponseBody(res);
+            return null;
+        }
         const data = await res.json();
         return typeof data?.response?.player_count === 'number'
             ? data.response.player_count
@@ -65,12 +72,16 @@ async function fetchCs2PlayerCount() {
 async function fetchCs2GameServersStatus(apiKey) {
     try {
         const res = await fetchWithTimeout(
-            `https://api.steampowered.com/ICSGOServers_730/GetGameServersStatus/v1/?key=${encodeURIComponent(apiKey)}`
+            `https://api.steampowered.com/ICSGOServers_730/GetGameServersStatus/v1/?key=${encodeURIComponent(apiKey)}`,
+            { headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            REQUEST_TIMEOUT_MS
         );
         if (res.status === 401 || res.status === 403) {
+            await cancelResponseBody(res);
             return { result: null, error: 'invalid_key' };
         }
         if (!res.ok) {
+            await cancelResponseBody(res);
             return { result: null, error: 'http_error' };
         }
         const data = await res.json();

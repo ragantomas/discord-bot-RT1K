@@ -1,4 +1,5 @@
 const { CS2_APP_ID } = require('../config');
+const { fetchWithTimeout, cancelResponseBody } = require('./http');
 
 const STEAM_API_TIMEOUT_MS = 10000;
 const STEAM_SUMMARIES_CHUNK_SIZE = 100;
@@ -18,11 +19,15 @@ async function resolveSteam64Id(input) {
     if (!vanity) return null;
 
     try {
-        const res = await fetch(`https://steamcommunity.com/id/${encodeURIComponent(vanity)}/?xml=1`, {
-            headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' },
-            signal: AbortSignal.timeout(STEAM_API_TIMEOUT_MS)
-        });
-        if (!res.ok) return null;
+        const res = await fetchWithTimeout(
+            `https://steamcommunity.com/id/${encodeURIComponent(vanity)}/?xml=1`,
+            { headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            STEAM_API_TIMEOUT_MS
+        );
+        if (!res.ok) {
+            await cancelResponseBody(res);
+            return null;
+        }
         const xml = await res.text();
         const idMatch = xml.match(/<steamID64>(\d{17})<\/steamID64>/);
         return idMatch ? idMatch[1] : null;
@@ -61,16 +66,19 @@ async function fetchSteamCs2PlayingIds(steamIds) {
         const url = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${encodeURIComponent(apiKey)}&steamids=${chunk.join(',')}`;
 
         try {
-            const res = await fetch(url, {
-                headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' },
-                signal: AbortSignal.timeout(STEAM_API_TIMEOUT_MS)
-            });
+            const res = await fetchWithTimeout(
+                url,
+                { headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+                STEAM_API_TIMEOUT_MS
+            );
 
             if (res.status === 429) {
+                await cancelResponseBody(res);
                 return { ok: false, missingKey: false, rateLimited: true, checked, playingIds };
             }
 
             if (!res.ok) {
+                await cancelResponseBody(res);
                 return { ok: false, missingKey: false, rateLimited: false, status: res.status, checked, playingIds };
             }
 

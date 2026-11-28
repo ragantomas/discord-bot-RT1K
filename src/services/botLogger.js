@@ -8,6 +8,8 @@ const MAX_LOG_BYTES = 1024 * 1024;
 let initialized = false;
 let handlersRegistered = false;
 let shuttingDown = false;
+let memoryMonitorInitialTimer = null;
+let memoryMonitorIntervalTimer = null;
 
 function formatTimestamp(date = new Date()) {
     const y = date.getFullYear();
@@ -131,7 +133,66 @@ function registerProcessHandlers(client) {
     process.on('SIGTERM', () => handleShutdown('SIGTERM'));
 }
 
+function toMb(bytes) {
+    return (Number(bytes || 0) / (1024 * 1024)).toFixed(1);
+}
+
+function formatMemoryLine(client) {
+    const mem = process.memoryUsage();
+    let members = 0;
+    let presences = 0;
+    let cachedMsgs = 0;
+
+    if (client?.guilds?.cache) {
+        for (const guild of client.guilds.cache.values()) {
+            members += guild?.members?.cache?.size || 0;
+            presences += guild?.presences?.cache?.size || 0;
+        }
+    }
+    if (client?.channels?.cache) {
+        for (const channel of client.channels.cache.values()) {
+            cachedMsgs += channel?.messages?.cache?.size || 0;
+        }
+    }
+    const users = client?.users?.cache?.size || 0;
+
+    return `[Memory] RSS: ${toMb(mem.rss)} MB | Heap: ${toMb(mem.heapUsed)} / ${toMb(mem.heapTotal)} MB | Ext: ${toMb(mem.external)} MB | Members: ${members} | Users: ${users} | Presences: ${presences} | CachedMsgs: ${cachedMsgs}`;
+}
+
+function startMemoryMonitor(client, { intervalMs = 30 * 60 * 1000, initialDelayMs = 60 * 1000 } = {}) {
+    if (memoryMonitorInitialTimer) {
+        clearTimeout(memoryMonitorInitialTimer);
+        memoryMonitorInitialTimer = null;
+    }
+    if (memoryMonitorIntervalTimer) {
+        clearInterval(memoryMonitorIntervalTimer);
+        memoryMonitorIntervalTimer = null;
+    }
+
+    memoryMonitorInitialTimer = setTimeout(() => {
+        memoryMonitorInitialTimer = null;
+        console.log(formatMemoryLine(client));
+    }, initialDelayMs);
+    if (typeof memoryMonitorInitialTimer.unref === 'function') {
+        memoryMonitorInitialTimer.unref();
+    }
+
+    memoryMonitorIntervalTimer = setInterval(() => {
+        console.log(formatMemoryLine(client));
+    }, intervalMs);
+    if (typeof memoryMonitorIntervalTimer.unref === 'function') {
+        memoryMonitorIntervalTimer.unref();
+    }
+
+    return {
+        initialTimer: memoryMonitorInitialTimer,
+        intervalTimer: memoryMonitorIntervalTimer
+    };
+}
+
 module.exports = {
     initBotLogger,
-    registerProcessHandlers
+    registerProcessHandlers,
+    formatMemoryLine,
+    startMemoryMonitor
 };

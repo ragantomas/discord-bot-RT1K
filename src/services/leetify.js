@@ -1,3 +1,5 @@
+const { fetchWithTimeout, cancelResponseBody } = require('./http');
+
 const LEETIFY_TIMEOUT_MS = 10000;
 
 function parseRetryAfterMs(headerVal) {
@@ -17,23 +19,27 @@ function parseRetryAfterMs(headerVal) {
 
 async function fetchLeetifyProfileDetailed(steam64Id) {
     try {
-        const res = await fetch(`https://api-public.cs-prod.leetify.com/v3/profile?steam64_id=${encodeURIComponent(steam64Id)}`, {
-            headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' },
-            signal: AbortSignal.timeout(LEETIFY_TIMEOUT_MS)
-        });
+        const res = await fetchWithTimeout(
+            `https://api-public.cs-prod.leetify.com/v3/profile?steam64_id=${encodeURIComponent(steam64Id)}`,
+            { headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            LEETIFY_TIMEOUT_MS
+        );
 
         if (res.status === 429) {
+            const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'));
+            await cancelResponseBody(res);
             return {
                 ok: false,
                 status: 429,
                 notFound: false,
                 rateLimited: true,
-                retryAfterMs: parseRetryAfterMs(res.headers.get('retry-after')),
+                retryAfterMs,
                 data: null
             };
         }
 
         if (res.status === 404) {
+            await cancelResponseBody(res);
             return {
                 ok: false,
                 status: 404,
@@ -45,6 +51,7 @@ async function fetchLeetifyProfileDetailed(steam64Id) {
         }
 
         if (!res.ok) {
+            await cancelResponseBody(res);
             return {
                 ok: false,
                 status: res.status,

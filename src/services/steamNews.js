@@ -1,4 +1,5 @@
 const { CS2_APP_ID } = require('../config');
+const { fetchWithTimeout, cancelResponseBody } = require('./http');
 
 const STEAM_NEWS_URL = 'https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/';
 const STEAM_CLAN_IMAGE_BASE = 'https://clan.fastly.steamstatic.com/images';
@@ -20,16 +21,15 @@ async function fetchCs2News({ mode = 'all', count = 10 } = {}) {
         params.set('tags', 'patchnotes');
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
     try {
-        const res = await fetch(`${STEAM_NEWS_URL}?${params.toString()}`, {
-            headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' },
-            signal: controller.signal
-        });
+        const res = await fetchWithTimeout(
+            `${STEAM_NEWS_URL}?${params.toString()}`,
+            { headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            REQUEST_TIMEOUT_MS
+        );
 
         if (!res.ok) {
+            await cancelResponseBody(res);
             console.error(`Steam News API vrátilo status ${res.status} (mode=${mode}).`);
             return null;
         }
@@ -39,8 +39,6 @@ async function fetchCs2News({ mode = 'all', count = 10 } = {}) {
     } catch (err) {
         console.error(`Chyba pri sťahovaní Steam CS2 noviniek (mode=${mode}):`, err);
         return null;
-    } finally {
-        clearTimeout(timeoutId);
     }
 }
 
