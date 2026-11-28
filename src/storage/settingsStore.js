@@ -30,6 +30,11 @@ const ADMIN_LOG_EVENT_KEYS = [
     'voiceActivity'
 ];
 
+function normalizeEpochMs(val) {
+    if (typeof val !== 'number' || !Number.isFinite(val) || val <= 0) return null;
+    return val < 1e12 ? Math.round(val * 1000) : Math.round(val);
+}
+
 function uniqueStringIds(list) {
     if (!Array.isArray(list)) return [];
     const seen = new Set();
@@ -336,7 +341,7 @@ function normalizeSettings(raw) {
                 ? pb.postedGids.map(String).slice(-MAX_POSTED_GIDS)
                 : [],
             lastPostedTitle: pb.lastPostedTitle || null,
-            lastPostedAt: typeof pb.lastPostedAt === 'number' ? pb.lastPostedAt : null
+            lastPostedAt: normalizeEpochMs(pb.lastPostedAt)
         },
         joinRoles: {
             enabled: typeof jr.enabled === 'boolean'
@@ -693,7 +698,7 @@ function markPatchGidsPosted(gids, latestItem = null) {
             s.patchBot.lastPostedTitle = latestItem.title;
         }
         if (typeof latestItem?.date === 'number') {
-            s.patchBot.lastPostedAt = latestItem.date;
+            s.patchBot.lastPostedAt = normalizeEpochMs(latestItem.date);
         }
     }).patchBot;
 }
