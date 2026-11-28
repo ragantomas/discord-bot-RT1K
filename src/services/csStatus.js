@@ -21,7 +21,7 @@ async function probeEndpoint(url) {
     try {
         let res = await fetchWithTimeout(
             url,
-            { method: 'HEAD', headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+            { method: 'HEAD', headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' }, discardBody: true },
             REQUEST_TIMEOUT_MS
         );
         await cancelResponseBody(res);
@@ -29,7 +29,7 @@ async function probeEndpoint(url) {
         if (res.status === 405 || res.status === 501) {
             res = await fetchWithTimeout(
                 url,
-                { method: 'GET', headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' } },
+                { method: 'GET', headers: { 'User-Agent': 'CS2-Discord-Bot/1.0' }, discardBody: true },
                 REQUEST_TIMEOUT_MS
             );
             await cancelResponseBody(res);
@@ -292,9 +292,16 @@ async function updateGuildStatusMessage(client, { snapshot = null, forceNewMessa
     let message = null;
     try {
         if (!forceNewMessage && config.messageId) {
-            const existingMessage = await channel.messages.fetch(config.messageId).catch(() => null);
+            const existingMessage = channel.messages.cache.get(config.messageId)
+                || await channel.messages.fetch(config.messageId).catch(() => null);
             if (existingMessage) {
-                message = await existingMessage.edit(payload);
+                try {
+                    message = await existingMessage.edit(payload);
+                } catch (editErr) {
+                    if (editErr?.code !== 10008) {
+                        throw editErr;
+                    }
+                }
             }
         }
 

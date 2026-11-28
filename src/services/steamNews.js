@@ -3,7 +3,7 @@ const { fetchWithTimeout, cancelResponseBody } = require('./http');
 
 const STEAM_NEWS_URL = 'https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/';
 const STEAM_CLAN_IMAGE_BASE = 'https://clan.fastly.steamstatic.com/images';
-const REQUEST_TIMEOUT_MS = 10000;
+const REQUEST_TIMEOUT_MS = 15000;
 
 /**
  * Stiahne CS2 novinky z verejného Steam News API.
@@ -37,7 +37,11 @@ async function fetchCs2News({ mode = 'all', count = 10 } = {}) {
         const data = await res.json();
         return Array.isArray(data?.appnews?.newsitems) ? data.appnews.newsitems : [];
     } catch (err) {
-        console.error(`Chyba pri sťahovaní Steam CS2 noviniek (mode=${mode}):`, err);
+        if (err?.name === 'AbortError') {
+            console.warn(`Steam News API timeout po ${REQUEST_TIMEOUT_MS / 1000} s (mode=${mode}).`);
+        } else {
+            console.error(`Chyba pri sťahovaní Steam CS2 noviniek (mode=${mode}):`, err);
+        }
         return null;
     }
 }

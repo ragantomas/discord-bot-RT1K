@@ -184,7 +184,7 @@ async function logBanAdd(ban) {
         .setFooter({ text: `ID: ${ban.user.id}` })
         .setTimestamp();
 
-    await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
+    await sendAdminLogEmbed(ctx.channel, embed, 'bans');
     addActivityLog({
         level: 'warn',
         category: 'adminlog',
@@ -211,7 +211,7 @@ async function logBanRemove(ban) {
         .setFooter({ text: `ID: ${ban.user.id}` })
         .setTimestamp();
 
-    await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
+    await sendAdminLogEmbed(ctx.channel, embed, 'bans');
     addActivityLog({
         level: 'info',
         category: 'adminlog',
@@ -341,6 +341,16 @@ async function logMemberUpdate(oldMember, newMember) {
     }
 }
 
+function formatVoiceChannelLabel(state) {
+    const channelId = state?.channelId;
+    if (!channelId) return '*Neznámy kanál*';
+    if (getTempRoom(channelId)) {
+        const name = state.channel?.name || 'TempVoice';
+        return `🔊 **${name}**`;
+    }
+    return `<#${channelId}>`;
+}
+
 async function logVoiceState(oldState, newState) {
     const member = newState.member || oldState.member;
     const guild = newState.guild || oldState.guild;
@@ -360,15 +370,15 @@ async function logVoiceState(oldState, newState) {
     if (!oldState.channelId && newState.channelId) {
         title = '🔊 Pripojenie do voice kanála';
         color = 0x57F287;
-        desc = `<@${member.id}> sa pripojil do <#${newState.channelId}>`;
+        desc = `<@${member.id}> sa pripojil do ${formatVoiceChannelLabel(newState)}`;
     } else if (oldState.channelId && !newState.channelId) {
         title = '🔇 Odpojenie z voice kanála';
         color = 0xED4245;
-        desc = `<@${member.id}> sa odpojil z <#${oldState.channelId}>`;
+        desc = `<@${member.id}> sa odpojil z ${formatVoiceChannelLabel(oldState)}`;
     } else {
         title = '🔀 Presun medzi voice kanálmi';
         color = 0xF5A623;
-        desc = `<@${member.id}>: <#${oldState.channelId}> → <#${newState.channelId}>`;
+        desc = `<@${member.id}>: ${formatVoiceChannelLabel(oldState)} → ${formatVoiceChannelLabel(newState)}`;
     }
 
     const embed = new EmbedBuilder()
@@ -378,7 +388,7 @@ async function logVoiceState(oldState, newState) {
         .setFooter({ text: `ID: ${member.id}` })
         .setTimestamp();
 
-    await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
+    await sendAdminLogEmbed(ctx.channel, embed, 'voiceActivity');
 
     let logMessage = '';
     if (!oldState.channelId && newState.channelId) {
@@ -467,7 +477,7 @@ async function logModerationAction(guild, {
         embed.addFields(...extraFields.slice(0, 10));
     }
 
-    await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
+    await sendAdminLogEmbed(ctx.channel, embed, eventKey || 'moderation');
     return true;
 }
 
@@ -537,7 +547,7 @@ async function logMessageDelete(message) {
         embed.addFields({ name: 'Prílohy', value: truncateText(attachmentLines, 1000), inline: false });
     }
 
-    await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
+    await sendAdminLogEmbed(ctx.channel, embed, 'messageDelete');
 
     const channelName = message.channel?.name || message.channelId;
     const authorTag = message.author?.tag || 'unknown user';
@@ -566,7 +576,7 @@ async function logMessageBulkDelete(messages, channel) {
         )
         .setTimestamp();
 
-    await sendAdminLogEmbed(ctx.channel, embed, 'memberLeave');
+    await sendAdminLogEmbed(ctx.channel, embed, 'messageBulkDelete');
 
     addActivityLog({
         level: 'info',

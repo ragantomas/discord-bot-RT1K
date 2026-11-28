@@ -116,16 +116,6 @@ async function createTempRoom(member, guildConfig) {
         return null;
     }
 
-    suppressNextAdminLogEvent(guild.id, 'channelCreate', newChannel.id);
-
-    try {
-        await member.voice.setChannel(newChannel);
-    } catch (err) {
-        suppressNextAdminLogEvent(guild.id, 'channelDelete', newChannel.id);
-        await newChannel.delete('Nepodarilo sa presunúť používateľa do dočasnej miestnosti').catch(() => null);
-        return null;
-    }
-
     const room = {
         guildId: guild.id,
         channelId: newChannel.id,
@@ -134,7 +124,19 @@ async function createTempRoom(member, guildConfig) {
         locked: false
     };
 
+    // Zápis do zoznamu ešte pred presunom, aby voiceStateUpdate hneď rozpoznal dočasný kanál
     setTempRoom(newChannel.id, room);
+    suppressNextAdminLogEvent(guild.id, 'channelCreate', newChannel.id);
+
+    try {
+        await member.voice.setChannel(newChannel);
+    } catch (err) {
+        deleteTempRoom(newChannel.id);
+        suppressNextAdminLogEvent(guild.id, 'channelDelete', newChannel.id);
+        await newChannel.delete('Nepodarilo sa presunúť používateľa do dočasnej miestnosti').catch(() => null);
+        return null;
+    }
+
     updateBotStatus(guild.client);
 
     addActivityLog({

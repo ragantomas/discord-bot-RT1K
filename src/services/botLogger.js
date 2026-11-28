@@ -156,7 +156,7 @@ function formatMemoryLine(client) {
     }
     const users = client?.users?.cache?.size || 0;
 
-    return `[Memory] RSS: ${toMb(mem.rss)} MB | Heap: ${toMb(mem.heapUsed)} / ${toMb(mem.heapTotal)} MB | Ext: ${toMb(mem.external)} MB | Members: ${members} | Users: ${users} | Presences: ${presences} | CachedMsgs: ${cachedMsgs}`;
+    return `[Memory] RSS: ${toMb(mem.rss)} MB | Heap: ${toMb(mem.heapUsed)} / ${toMb(mem.heapTotal)} MB | Ext: ${toMb(mem.external)} MB | ArrBuf: ${toMb(mem.arrayBuffers)} MB | Members: ${members} | Users: ${users} | Presences: ${presences} | CachedMsgs: ${cachedMsgs}`;
 }
 
 function startMemoryMonitor(client, { intervalMs = 30 * 60 * 1000, initialDelayMs = 60 * 1000 } = {}) {

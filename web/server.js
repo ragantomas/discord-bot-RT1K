@@ -92,7 +92,7 @@ const { sendTestAdminLogMessage } = require('../src/services/adminLog');
 const { sendTestWelcome } = require('../src/services/welcome');
 const { sendOrUpdateTicketPanel, closeTicketChannel } = require('../src/services/tickets');
 const { registerCommands, syncAdminCommandPermissions } = require('../src/handlers/commandHandler');
-const { cancelResponseBody } = require('../src/services/http');
+const { fetchWithTimeout, cancelResponseBody } = require('../src/services/http');
 const {
     issueWarning,
     removeWarning,
@@ -790,17 +790,21 @@ function startWebServer(client) {
         }
 
         try {
-            const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    client_id: oauth.clientId,
-                    client_secret: oauth.clientSecret,
-                    grant_type: 'authorization_code',
-                    code,
-                    redirect_uri: oauth.redirectUri
-                })
-            });
+            const tokenRes = await fetchWithTimeout(
+                'https://discord.com/api/v10/oauth2/token',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        client_id: oauth.clientId,
+                        client_secret: oauth.clientSecret,
+                        grant_type: 'authorization_code',
+                        code,
+                        redirect_uri: oauth.redirectUri
+                    })
+                },
+                10000
+            );
 
             if (!tokenRes.ok) {
                 await cancelResponseBody(tokenRes);
@@ -809,9 +813,11 @@ function startWebServer(client) {
             }
 
             const tokenData = await tokenRes.json();
-            const userRes = await fetch('https://discord.com/api/v10/users/@me', {
-                headers: { Authorization: `Bearer ${tokenData.access_token}` }
-            });
+            const userRes = await fetchWithTimeout(
+                'https://discord.com/api/v10/users/@me',
+                { headers: { Authorization: `Bearer ${tokenData.access_token}` } },
+                10000
+            );
 
             if (!userRes.ok) {
                 await cancelResponseBody(userRes);
